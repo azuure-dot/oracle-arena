@@ -1,4 +1,5 @@
 import { COLORS } from '../config';
+import type { Hero } from '../heroes/Hero';
 import type { Team } from './Team';
 
 export type ProjectileStyle = 'bullet' | 'sonic' | 'fire' | 'enemy';
@@ -10,6 +11,8 @@ export interface ProjectileSpec {
   speed: number;
   damage: number;
   team: Team;
+  /** Héros qui a tiré (crédit des éliminations). Absent pour une tourelle. */
+  owner?: Hero;
   range: number;
   radius?: number;
   /** Traverse les cibles (chacune n'est touchée qu'une fois). S'arrête quand même sur les murs. */
@@ -24,6 +27,7 @@ export class Projectile {
   readonly vy: number;
   readonly damage: number;
   readonly team: Team;
+  readonly owner: Hero | null;
   readonly maxRange: number;
   readonly radius: number;
   readonly pierce: boolean;
@@ -40,6 +44,7 @@ export class Projectile {
     this.vy = Math.sin(spec.angle) * spec.speed;
     this.damage = spec.damage;
     this.team = spec.team;
+    this.owner = spec.owner ?? null;
     this.maxRange = spec.range;
     this.radius = spec.radius ?? 2;
     this.pierce = spec.pierce ?? false;

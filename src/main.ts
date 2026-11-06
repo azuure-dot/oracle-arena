@@ -1,10 +1,8 @@
 import './style.css';
 import { Game } from './Game';
-import { onLangChange, t } from './i18n';
+import { t } from './i18n';
 
-const updateTitle = () => (document.title = `Hero Shooter — ${t('select.title')}`);
-updateTitle();
-onLangChange(updateTitle);
+document.title = t('menu.title');
 
 const canvas = document.getElementById('game');
 const overlay = document.getElementById('overlay');

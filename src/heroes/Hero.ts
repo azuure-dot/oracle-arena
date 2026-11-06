@@ -1,13 +1,12 @@
-import { COLORS, PLAYER_SPAWN, ZONES, teamColor } from '../config';
+import { BOT, COLORS, PLAYER_SPAWN, ZONES } from '../config';
+import { NO_CONTROLS, type HeroControls } from '../core/Controls';
 import type { GameContext } from '../core/GameContext';
 import { boxExtent, boxInCone, distToBox, type Box } from '../core/geometry';
-import type { Input } from '../core/Input';
-import { damp, degToRad, normalize, type Vec2 } from '../core/math';
-import type { Bot } from '../entities/Bot';
+import { damp, degToRad, type Vec2 } from '../core/math';
+import { hostile, type Combatant } from '../entities/Combatant';
 import type { Projectile } from '../entities/Projectile';
-import { lineOfSight } from '../world/Visibility';
-import type { Team } from '../entities/Team';
-import { t, type TKey } from '../i18n';
+import { ALLY, type Team } from '../entities/Team';
+import type { TKey } from '../i18n';
 import type { CharacterSprite } from '../sprites/library';
 import {
   characterHalfSize,
@@ -19,13 +18,7 @@ import {
   type SpriteLayout,
 } from '../sprites/SpriteRenderer';
 import { drawBuffIndicator, drawHealthBar, type BuffKind } from '../ui/healthBar';
-
-/** Touches communes à tous les héros (codes physiques : OK en AZERTY et QWERTY). */
-export const KEYS = {
-  ability1: ['Space'],
-  ability2: ['ShiftLeft', 'ShiftRight'],
-  reload: ['KeyR'],
-} as const;
+import { lineOfSight } from '../world/Visibility';
 
 /** Emplacement de touche : le libellé affiché est traduit par le HUD (Clic D / RMB...). */
 export type InputSlot = 'primary' | 'secondary' | 'ability1' | 'ability2' | 'melee';
@@ -37,6 +30,9 @@ export const INPUT_LABEL_KEYS: Record<InputSlot, TKey> = {
   ability2: 'key.ability2',
   melee: 'key.melee',
 };
+
+/** Délai de réapparition après une mort (champ de tir et Deathmatch). */
+export const RESPAWN_TIME = 3;
 
 /**
  * Mêlée rapide (clic molette), commune à tous les héros sauf ceux qui se battent
@@ -88,19 +84,34 @@ export interface HeroStats {
   px: number;
   speed: number; // px/s
   acceleration?: number;
+  /** Résistance au recul (2 = reculs deux fois plus courts). */
+  mass?: number;
   color: string;
 }
 
 /**
- * Classe parente de tous les héros.
- * Elle gère : PV, mort/réapparition, déplacement fluide, visée, zones.
+ * Classe parente de tous les héros, joués par un humain OU par un bot :
+ * le héros lit ses `controls` (clavier ou IA) et ne sait pas qui le pilote.
+ * Elle gère : PV, mort/réapparition, déplacement fluide, recul, visée, zones.
  * Les sous-classes branchent leurs compétences via les "hooks" protégés.
  *
  * Ordre d'une frame :
- *   tick() → [isLocked() ? updateLocked() : move() + handleInput()] → zones → lateUpdate()
+ *   tick() → [épinglé ? rien : isLocked() ? updateLocked() : move() + handleInput()] → zones → lateUpdate()
  */
-export abstract class Hero {
-  readonly team: Team = 'ally';
+export abstract class Hero implements Combatant {
+  /** Équipe : 'ally' au champ de tir, une équipe par participant en Deathmatch. */
+  team: Team = ALLY;
+  /** Qui pilote ce héros (clavier du joueur ou IA). */
+  controls: HeroControls = NO_CONTROLS;
+  /** true pour le héros du joueur : aperçus réservés au joueur, couleur de la barre de vie. */
+  isLocalPlayer = false;
+  /** Contour du sprite vu par le joueur : bleu = lui / allié, rouge = adversaire. */
+  outline: string = COLORS.ally;
+  /** Nom affiché au-dessus de la barre de vie (bots du Deathmatch). */
+  label: string | null = null;
+  /** Visible par le joueur (calculé par le monde). */
+  visible = true;
+
   x: number = PLAYER_SPAWN.x;
   y: number = PLAYER_SPAWN.y;
   vx = 0;
@@ -110,15 +121,20 @@ export abstract class Hero {
   dead = false;
   respawnTimer = 0;
   hurtTimer = 0;
+  pinned = false;
   /** Buff d'aura reçu cette frame (indicateur au-dessus de la tête). */
   buff: BuffKind | null = null;
-  /** Direction de déplacement demandée au clavier (normalisée, ou 0). */
+  auraSpeedMul = 1;
+  /** Direction de déplacement demandée (normalisée, ou 0). */
   protected moveDir: Vec2 = { x: 0, y: 0 };
   /** Temps d'animation de marche (0 = immobile). */
   protected animTime = 0;
   /** Mêlée rapide : temps de recharge restant / durée restante du coup en cours. */
   meleeCooldown = 0;
   private meleeAnim = 0;
+  /** Recul (Onde de choc, marteau...) : vitesse qui s'amortit. */
+  private kvx = 0;
+  private kvy = 0;
 
   /** Hitbox rectangulaire = le dessin du sprite (demi-largeur / demi-hauteur). */
   readonly hw: number;
@@ -143,6 +159,9 @@ export abstract class Hero {
   get maxHp(): number {
     return this.stats.maxHp;
   }
+  get alive(): boolean {
+    return !this.dead;
+  }
   get invulnerable(): boolean {
     return this.dead;
   }
@@ -151,11 +170,17 @@ export abstract class Hero {
     return 0;
   }
 
+  /** Place le héros (début de partie). */
+  placeAt(p: Vec2): void {
+    this.x = p.x;
+    this.y = p.y;
+    this.vx = this.vy = 0;
+  }
+
   // ---------------------------------------------------------------- boucle
 
   update(dt: number, ctx: GameContext): void {
     this.hurtTimer = Math.max(0, this.hurtTimer - dt);
-    this.buff = null;
 
     if (this.dead) {
       this.respawnTimer -= dt;
@@ -163,17 +188,22 @@ export abstract class Hero {
       return;
     }
 
-    this.aim = Math.atan2(ctx.aimY - this.y, ctx.aimX - this.x);
-    this.moveDir = readMoveDir(ctx.input);
+    const c = this.controls;
+    this.aim = Math.atan2(c.aimY - this.y, c.aimX - this.x);
+    this.moveDir = c.move;
     this.meleeCooldown = Math.max(0, this.meleeCooldown - dt);
     this.meleeAnim = Math.max(0, this.meleeAnim - dt);
 
     this.tick(dt, ctx);
-    if (this.isLocked()) {
+    if (this.pinned) {
+      // Épinglé par une Charge : aucun contrôle, la position est imposée.
+      this.vx = this.vy = this.kvx = this.kvy = 0;
+    } else if (this.isLocked()) {
+      this.kvx = this.kvy = 0;
       this.updateLocked(dt, ctx);
     } else {
       this.move(dt, ctx);
-      if (this.hasQuickMelee() && ctx.input.wasMousePressed(1) && this.meleeCooldown <= 0) this.quickMelee(ctx);
+      if (this.hasQuickMelee() && c.pressed('melee') && this.meleeCooldown <= 0) this.quickMelee(ctx);
       this.handleInput(dt, ctx);
     }
     if (!this.dead) this.applyZones(dt, ctx);
@@ -183,7 +213,7 @@ export abstract class Hero {
 
   /** Le sprite doit-il jouer l'animation de marche ? */
   protected isWalking(): boolean {
-    return Math.hypot(this.vx, this.vy) > 30;
+    return Math.hypot(this.vx, this.vy) > 30 || this.pinned;
   }
   /** Vitesse de l'animation de marche (1 = normale). */
   protected animRate(): number {
@@ -232,55 +262,77 @@ export abstract class Hero {
     ctx.effects.wedge(this.x, this.y, this.aim, QUICK_MELEE.halfArc, reach + 6, '#ffffff', 0.15, reach * 0.55);
 
     // Un seul ennemi touché : le plus proche dans le cône, sans mur entre les deux.
-    let target: Bot | null = null;
+    let target: Combatant | null = null;
     let best = Infinity;
-    for (const bot of ctx.bots) {
-      if (!bot.alive || !bot.isEnemy) continue;
-      if (!boxInCone(this.x, this.y, this.aim, QUICK_MELEE.halfArc, reach, bot.box())) continue;
-      if (!lineOfSight(ctx.arena, this.x, this.y, bot.x, bot.y)) continue;
-      const d = distToBox(this.x, this.y, bot.box());
+    for (const c of ctx.targets) {
+      if (!c.alive || !hostile(this, c)) continue;
+      if (!boxInCone(this.x, this.y, this.aim, QUICK_MELEE.halfArc, reach, c.box())) continue;
+      if (!lineOfSight(ctx.arena, this.x, this.y, c.x, c.y)) continue;
+      const d = distToBox(this.x, this.y, c.box());
       if (d < best) {
         best = d;
-        target = bot;
+        target = c;
       }
     }
     if (!target) return;
-    ctx.damageBot(target, QUICK_MELEE.damage);
+    ctx.damage(target, QUICK_MELEE.damage, this);
     target.applyImpulse(dx * QUICK_MELEE.knockback, dy * QUICK_MELEE.knockback);
     ctx.effects.sparks(target.x - dx * target.hw, target.y - dy * target.hh, '#ffffff', 8, 200);
-    ctx.shake(2);
+    ctx.shake(2, this);
   }
 
   protected move(dt: number, ctx: GameContext): void {
-    const speed = this.stats.speed * this.speedMultiplier();
+    const speed = this.stats.speed * this.speedMultiplier() * this.auraSpeedMul;
     const accel = this.stats.acceleration ?? 16;
     this.vx = damp(this.vx, this.moveDir.x * speed, accel, dt);
     this.vy = damp(this.vy, this.moveDir.y * speed, accel, dt);
     this.x += this.vx * dt;
     this.y += this.vy * dt;
+
+    // Recul subi : s'ajoute au déplacement et s'amortit (comme pour les bots).
+    if (Math.hypot(this.kvx, this.kvy) > 1) {
+      this.x += this.kvx * dt;
+      this.y += this.kvy * dt;
+      const decay = Math.exp(-BOT.knockbackDamping * dt);
+      this.kvx *= decay;
+      this.kvy *= decay;
+    } else {
+      this.kvx = this.kvy = 0;
+    }
     ctx.arena.resolveBox(this, this.hw, this.hh);
+  }
+
+  applyImpulse(ix: number, iy: number): void {
+    if (this.dead || this.pinned || this.isLocked()) return;
+    const mass = this.stats.mass ?? 1;
+    this.kvx += ix / mass;
+    this.kvy += iy / mass;
   }
 
   private applyZones(dt: number, ctx: GameContext): void {
     const zone = ctx.arena.zoneAt(this.x, this.y);
     if (!zone) return;
-    if (zone.kind === 'hazard') this.takeDamage(ZONES.hazardDps * dt, ctx);
+    if (zone.kind === 'hazard') ctx.damage(this, ZONES.hazardDps * dt, null);
     else this.heal(ZONES.healHps * dt);
   }
 
   // ------------------------------------------------------------------- PV
 
-  takeDamage(amount: number, ctx: GameContext): void {
-    if (this.invulnerable || amount <= 0) return;
-    this.hp -= amount;
+  /** Retourne les dégâts réellement subis (0 si invulnérable). */
+  takeDamage(amount: number, ctx: GameContext): number {
+    if (this.invulnerable || amount <= 0) return 0;
+    const dealt = Math.min(this.hp, amount);
+    this.hp -= dealt;
     this.hurtTimer = 0.3;
     if (this.hp <= 0) {
       this.hp = 0;
       this.dead = true;
-      this.respawnTimer = 3;
+      this.pinned = false;
+      this.respawnTimer = RESPAWN_TIME;
       ctx.effects.sparks(this.x, this.y, this.stats.color, 24, 320);
       this.onDeath(ctx);
     }
+    return dealt;
   }
 
   heal(amount: number): void {
@@ -293,13 +345,14 @@ export abstract class Hero {
     return false;
   }
 
+  /** Réapparition : PV au max et compétences réinitialisées (onRespawn). */
   private respawn(ctx: GameContext): void {
     this.dead = false;
     this.hp = this.maxHp;
-    this.x = PLAYER_SPAWN.x;
-    this.y = PLAYER_SPAWN.y;
-    this.vx = 0;
-    this.vy = 0;
+    this.placeAt(ctx.respawnPoint(this));
+    this.kvx = this.kvy = 0;
+    this.pinned = false;
+    this.hurtTimer = 0;
     this.meleeCooldown = 0;
     this.meleeAnim = 0;
     this.onRespawn(ctx);
@@ -336,7 +389,7 @@ export abstract class Hero {
     if (this.dead) return;
     const def = this.stats.sprite;
     const layout = characterLayout(def, this.x, this.y, this.stats.px);
-    drawGroundRing(ctx, this.x, layout.feetY, this.hw, teamColor(this.team), this.aim);
+    drawGroundRing(ctx, this.x, layout.feetY, this.hw, this.outline, this.aim);
     this.drawSpriteExtras(ctx, layout, false);
     drawCharacter(ctx, def, {
       x: this.x,
@@ -344,40 +397,40 @@ export abstract class Hero {
       px: this.stats.px,
       facing: facingFromAngle(this.spriteFacingAngle()),
       frame: walkFrame(this.animTime),
-      outline: teamColor(this.team),
+      outline: this.outline,
       overrides: this.spriteOverrides(),
       flash: this.hurtTimer > 0.2,
       tint: this.spriteTint(),
     });
     this.drawSpriteExtras(ctx, layout, true);
+    if (this.pinned) {
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(this.x - this.hw - 4, this.y - this.hh - 4, this.hw * 2 + 8, this.hh * 2 + 8);
+      ctx.setLineDash([]);
+    }
   }
 
   /** Au-dessus des entités (bouclier...). */
   drawOver(_ctx: CanvasRenderingContext2D): void {}
 
-  /** Barre de vie au-dessus du héros. */
+  /** Barre de vie (+ nom pour les bots) au-dessus du héros. */
   drawOverlay(ctx: CanvasRenderingContext2D): void {
-    if (this.dead) {
-      ctx.fillStyle = COLORS.hud;
-      ctx.font = 'bold 16px system-ui, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(t('hud.respawn', { s: this.respawnTimer.toFixed(1) }), PLAYER_SPAWN.x, PLAYER_SPAWN.y - 50);
-      return;
-    }
+    if (this.dead) return;
     const low = this.hp / this.maxHp < 0.35;
     const width = this.maxHp > 300 ? 84 : 60;
     const barBottom = this.y - this.hh - this.stats.px - 4;
-    drawHealthBar(ctx, this.x, barBottom, this.hp, this.maxHp, low ? COLORS.hpLow : COLORS.hpPlayer, width);
+    let color: string;
+    if (this.isLocalPlayer) color = low ? COLORS.hpLow : COLORS.hpPlayer;
+    else color = this.outline === COLORS.ally ? COLORS.hpAlly : COLORS.hpEnemy;
+    drawHealthBar(ctx, this.x, barBottom, this.hp, this.maxHp, color, width);
     if (this.buff) drawBuffIndicator(ctx, this.x + width / 2 + 12, barBottom - 3.5, this.buff);
+    if (this.label) {
+      ctx.fillStyle = this.outline;
+      ctx.font = 'bold 12px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(this.label, this.x, barBottom - 13);
+    }
   }
-}
-
-export function readMoveDir(input: Input): Vec2 {
-  let mx = 0;
-  let my = 0;
-  if (input.isDown('KeyW', 'ArrowUp')) my -= 1;
-  if (input.isDown('KeyS', 'ArrowDown')) my += 1;
-  if (input.isDown('KeyA', 'ArrowLeft')) mx -= 1;
-  if (input.isDown('KeyD', 'ArrowRight')) mx += 1;
-  return normalize(mx, my);
 }

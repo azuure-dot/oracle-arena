@@ -1,4 +1,4 @@
-.select-screen {
+.screen {
   position: fixed;
   inset: 0;
   display: none;
@@ -14,15 +14,15 @@
   cursor: default;
   z-index: 10;
 }
-.select-screen.visible {
+.screen.visible {
   display: flex;
 }
-.select-inner {
+.screen-inner {
   width: 100%;
   max-width: 1040px;
   text-align: center;
 }
-.select-inner h1 {
+.screen-inner h1 {
   margin: 0;
   font-size: 40px;
   font-weight: 900;
@@ -49,7 +49,7 @@ kbd {
   font: 700 12px system-ui, sans-serif;
   text-align: center;
 }
-.select-inner {
+.screen-inner {
   position: relative;
 }
 .lang-toggle {
@@ -212,4 +212,251 @@ kbd {
 }
 .hero-abilities small {
   color: rgba(233, 238, 245, 0.55);
+}
+
+/* ------------------------------------------------------------------ menus */
+
+.menu-title {
+  font-size: 52px !important;
+}
+.mode-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 22px;
+  max-width: 760px;
+  margin: 0 auto;
+}
+.mode-card {
+  --mode-color: #ffb347;
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 34px 24px 28px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-top: 4px solid var(--mode-color);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(30, 37, 48, 0.95), rgba(16, 20, 26, 0.95));
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.mode-card.mode-deathmatch {
+  --mode-color: #ff4d5e;
+}
+.mode-card:hover,
+.mode-card:focus-visible {
+  transform: translateY(-4px);
+  border-color: var(--mode-color);
+  box-shadow: 0 10px 30px -10px var(--mode-color);
+  outline: none;
+}
+.mode-card svg {
+  width: 54px;
+  height: 54px;
+  color: var(--mode-color);
+}
+.mode-name {
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.mode-desc {
+  max-width: 280px;
+  color: rgba(233, 238, 245, 0.7);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.mode-index {
+  position: absolute;
+  top: 12px;
+  left: 16px;
+  color: rgba(233, 238, 245, 0.35);
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.screen-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 26px;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 22px;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  border-radius: 8px;
+  background: rgba(16, 20, 26, 0.9);
+  color: #e9eef5;
+  font: 800 15px system-ui, sans-serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.btn:hover,
+.btn:focus-visible {
+  border-color: rgba(255, 255, 255, 0.45);
+  outline: none;
+}
+.btn-primary {
+  border-color: #ffb347;
+  background: #ffb347;
+  color: #10141a;
+}
+.btn-primary:hover,
+.btn-primary:focus-visible {
+  border-color: #ffd08a;
+  background: #ffc26b;
+}
+.btn-primary kbd {
+  background: rgba(16, 20, 26, 0.85);
+  color: #ffb347;
+}
+
+/* Configuration du Deathmatch */
+.setup-panel {
+  display: grid;
+  gap: 22px;
+  max-width: 620px;
+  margin: 0 auto;
+  padding: 26px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(16, 20, 26, 0.9);
+}
+.setup-row {
+  display: grid;
+  gap: 10px;
+  text-align: left;
+}
+.setup-label {
+  color: rgba(233, 238, 245, 0.7);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.segmented {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+}
+.segmented button {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: rgba(233, 238, 245, 0.75);
+  font: 800 16px system-ui, sans-serif;
+  cursor: pointer;
+}
+.segmented button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.segmented button[aria-pressed='true'] {
+  background: #ff4d5e;
+  color: #fff;
+}
+.segmented button:focus-visible {
+  outline: 2px solid #ffb347;
+  outline-offset: 1px;
+}
+.setup-summary {
+  margin: 0;
+  color: rgba(233, 238, 245, 0.55);
+  font-size: 14px;
+}
+
+/* Tableau des scores */
+.score-headline {
+  margin: 8px 0 22px;
+  font-size: 20px;
+  font-weight: 800;
+  color: #e9eef5;
+}
+.score-headline.win {
+  color: #ffd84d;
+  font-size: 26px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.score-table {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  border-collapse: collapse;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(16, 20, 26, 0.92);
+  font-size: 15px;
+}
+.score-table th {
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(233, 238, 245, 0.6);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+.score-table td {
+  padding: 11px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+.score-table .col-rank {
+  width: 56px;
+  font-weight: 900;
+  text-align: center;
+}
+.score-table .col-name,
+.score-table .col-hero {
+  text-align: left;
+}
+.score-table .col-name {
+  font-weight: 800;
+}
+.score-table .col-num {
+  width: 110px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.score-table tr.is-first .col-rank {
+  color: #ffd84d;
+}
+.score-table tr.is-you {
+  background: rgba(77, 163, 255, 0.16);
+}
+.score-table tr.is-you .col-name {
+  color: #4da3ff;
+}
+.hero-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--hero-color);
+  vertical-align: 0;
+}
+@media (max-width: 640px) {
+  .score-table .col-num {
+    width: auto;
+  }
+  .score-table th,
+  .score-table td {
+    padding: 9px 8px;
+  }
 }

@@ -2,16 +2,16 @@ import { COLORS } from '../config';
 import type { GameContext } from '../core/GameContext';
 import { boxExtent, boxInCone, boxesOverlap } from '../core/geometry';
 import { angleDiff, degToRad, rotateTowards } from '../core/math';
-import type { Bot } from '../entities/Bot';
+import { hostile, type Combatant } from '../entities/Combatant';
 import { Projectile } from '../entities/Projectile';
 import { t } from '../i18n';
 import { HAMMER as HAMMER_GRID, HAMMER_PALETTE, REMPART_SPRITE } from '../sprites/library';
 import { drawProp, facingFromAngle, propImage, type SpriteLayout } from '../sprites/SpriteRenderer';
 import { lineOfSight } from '../world/Visibility';
-import { Hero, KEYS, type AbilitySlot, type WeaponHud } from './Hero';
+import { Hero, type AbilitySlot, type WeaponHud } from './Hero';
 
-const HAMMER = { damage: 75, interval: 0.95, reach: 95, halfArc: degToRad(55), knockback: 160 };
-const SHIELD = {
+export const HAMMER = { damage: 75, interval: 0.95, reach: 95, halfArc: degToRad(55), knockback: 160 };
+export const SHIELD = {
   maxHp: 1200,
   radius: 82, // distance du centre de Rempart à l'arc du bouclier
   halfArc: degToRad(62),
@@ -21,8 +21,8 @@ const SHIELD = {
   brokenCooldown: 5,
   speedMul: 0.7,
 };
-const FIRE = { cooldown: 8, damage: 100, speed: 950, radius: 26, range: 1000 };
-const CHARGE = {
+export const FIRE = { cooldown: 8, damage: 100, speed: 950, radius: 26, range: 1000 };
+export const CHARGE = {
   cooldown: 7,
   windup: 0.6, // préparation : immobile et prévisible avant de foncer
   windupTurnRate: 3, // rad/s : on peut encore viser pendant la préparation
@@ -39,8 +39,8 @@ interface ChargeState {
   windup: number;
   t: number; // temps écoulé depuis le début de la course
   dir: number;
-  pinned: Bot | null;
-  bumped: Set<Bot>;
+  pinned: Combatant | null;
+  bumped: Set<Combatant>;
   trailTimer: number;
 }
 
@@ -72,12 +72,27 @@ export class Rempart extends Hero {
       px: 3, // très grande hitbox
       speed: 220, // très lent
       acceleration: 10,
+      mass: 2, // lourd : les reculs le déplacent deux fois moins
       color: '#a9b8c9',
     });
   }
 
   get isCharging(): boolean {
     return this.charge !== null;
+  }
+
+  // ---- état lu par l'IA ----
+  get fireReady(): boolean {
+    return this.fireCooldown <= 0;
+  }
+  get chargeReady(): boolean {
+    return this.chargeCooldown <= 0 && this.charge === null;
+  }
+  get hammerReady(): boolean {
+    return this.hammerTimer <= 0;
+  }
+  get shieldAvailable(): boolean {
+    return this.shieldBroken <= 0 && this.shieldHp > 1;
   }
 
   // ------------------------------------------------------------ boucle
@@ -116,18 +131,18 @@ export class Rempart extends Hero {
   }
 
   protected handleInput(dt: number, ctx: GameContext): void {
-    const input = ctx.input;
+    const input = this.controls;
 
     // Bouclier : maintenu tant que le clic droit est enfoncé.
-    const wantShield = input.isMouseDown(2) && this.shieldBroken <= 0 && this.shieldHp > 1;
+    const wantShield = input.held('secondary') && this.shieldBroken <= 0 && this.shieldHp > 1;
     if (wantShield !== this.shieldUp) this.setShield(wantShield);
     if (this.shieldUp) {
       this.shieldAngle += angleDiff(this.shieldAngle, this.aim) * (1 - Math.exp(-18 * dt));
     }
 
-    if (input.isMouseDown(0) && !this.shieldUp && this.hammerTimer <= 0) this.swing(ctx);
-    if (input.wasPressed(...KEYS.ability1) && this.fireCooldown <= 0) this.fireStrike(ctx);
-    if (input.wasPressed(...KEYS.ability2) && this.chargeCooldown <= 0) this.startCharge(ctx);
+    if (input.held('primary') && !this.shieldUp && this.hammerTimer <= 0) this.swing(ctx);
+    if (input.pressed('ability1') && this.fireCooldown <= 0) this.fireStrike(ctx);
+    if (input.pressed('ability2') && this.chargeCooldown <= 0) this.startCharge(ctx);
   }
 
   protected override onDeath(ctx: GameContext): void {
@@ -152,16 +167,16 @@ export class Rempart extends Hero {
     ctx.effects.wedge(this.x, this.y, this.aim, HAMMER.halfArc, reach, '#e8eef5', 0.2, this.radius);
 
     let hit = false;
-    for (const bot of ctx.bots) {
-      if (!bot.alive || !bot.isEnemy) continue;
+    for (const bot of ctx.targets) {
+      if (!bot.alive || !hostile(this, bot)) continue;
       if (!boxInCone(this.x, this.y, this.aim, HAMMER.halfArc, reach, bot.box())) continue;
       if (!lineOfSight(ctx.arena, this.x, this.y, bot.x, bot.y)) continue; // pas de coup à travers un mur
-      ctx.damageBot(bot, HAMMER.damage);
+      ctx.damage(bot, HAMMER.damage, this);
       const d = Math.hypot(bot.x - this.x, bot.y - this.y) || 1;
       bot.applyImpulse(((bot.x - this.x) / d) * HAMMER.knockback, ((bot.y - this.y) / d) * HAMMER.knockback);
       hit = true;
     }
-    if (hit) ctx.shake(3);
+    if (hit) ctx.shake(3, this);
   }
 
   // ------------------------------------------------------------ Bouclier
@@ -205,6 +220,7 @@ export class Rempart extends Hero {
         speed: FIRE.speed,
         damage: FIRE.damage,
         team: this.team,
+        owner: this,
         range: FIRE.range,
         radius: FIRE.radius,
         pierce: true, // traverse les ennemis, s'arrête sur les murs
@@ -238,13 +254,13 @@ export class Rempart extends Hero {
       this.vx = this.vy = 0;
       if (c.windup <= 0) {
         ctx.effects.ring(this.x, this.y, '#ffffff', 60, 0.25);
-        ctx.shake(3);
+        ctx.shake(3, this);
       }
       return;
     }
 
     // Maj à nouveau = annuler (petit délai pour ne pas annuler sur la même pression).
-    if (c.t > 0.15 && ctx.input.wasPressed(...KEYS.ability2)) {
+    if (c.t > 0.15 && this.controls.pressed('ability2')) {
       this.endCharge(ctx);
       return;
     }
@@ -294,8 +310,8 @@ export class Rempart extends Hero {
   /** Hitbox frontale : le 1er ennemi touché devant est épinglé, les autres sont bousculés. */
   private catchOrBump(ctx: GameContext, dx: number, dy: number): void {
     const c = this.charge!;
-    for (const bot of ctx.bots) {
-      if (!bot.alive || !bot.isEnemy || bot === c.pinned) continue;
+    for (const bot of ctx.targets) {
+      if (!bot.alive || !hostile(this, bot) || bot === c.pinned) continue;
       const ox = bot.x - this.x;
       const oy = bot.y - this.y;
       const d = Math.hypot(ox, oy);
@@ -306,10 +322,10 @@ export class Rempart extends Hero {
         c.pinned = bot;
         bot.pinned = true;
         ctx.effects.ring(bot.x, bot.y, '#ffffff', 40, 0.25);
-        ctx.shake(4);
+        ctx.shake(4, this);
       } else if (!c.bumped.has(bot)) {
         c.bumped.add(bot);
-        ctx.damageBot(bot, CHARGE.bumpDamage);
+        ctx.damage(bot, CHARGE.bumpDamage, this);
         // Éjecté sur le côté (gauche ou droite selon sa position)
         const side = dx * oy - dy * ox >= 0 ? 1 : -1;
         bot.applyImpulse(-dy * side * CHARGE.bumpImpulse, dx * side * CHARGE.bumpImpulse);
@@ -321,13 +337,13 @@ export class Rempart extends Hero {
     const c = this.charge!;
     if (c.pinned && c.pinned.alive) {
       const bot = c.pinned;
-      ctx.damageBot(bot, CHARGE.wallDamage);
+      ctx.damage(bot, CHARGE.wallDamage, this);
       ctx.effects.ring(bot.x, bot.y, '#ffffff', 80, 0.4);
       ctx.effects.sparks(bot.x, bot.y, '#ffffff', 30, 380);
-      ctx.shake(14);
+      ctx.shake(14, this);
     } else {
       ctx.effects.sparks(this.x + Math.cos(c.dir) * this.radius, this.y + Math.sin(c.dir) * this.radius, '#cfd8e3', 16, 260);
-      ctx.shake(6);
+      ctx.shake(6, this);
     }
     this.endCharge(ctx);
   }

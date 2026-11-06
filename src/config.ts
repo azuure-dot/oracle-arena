@@ -90,4 +90,4 @@ export const COLORS = {
 } as const;
 
 /** Contour d'équipe : bleu pour les alliés (et le joueur), rouge pour les ennemis. */
-export const teamColor = (team: 'ally' | 'enemy'): string => (team === 'ally' ? COLORS.ally : COLORS.enemy);
+export const teamColor = (team: string): string => (team === 'ally' ? COLORS.ally : COLORS.enemy);

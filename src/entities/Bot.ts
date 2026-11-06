@@ -18,8 +18,9 @@ import {
   propImage,
   walkFrame,
 } from '../sprites/SpriteRenderer';
+import type { Combatant } from './Combatant';
 import { Projectile } from './Projectile';
-import type { Team } from './Team';
+import { ENEMY, type Team } from './Team';
 
 export interface PatrolPath {
   ax: number;
@@ -54,7 +55,7 @@ export interface BotContext {
  * Peut subir un recul (Onde de choc) ou être épinglé (Charge).
  * Les alliés sont invulnérables aux tirs du joueur.
  */
-export class Bot {
+export class Bot implements Combatant {
   x: number;
   y: number;
   /** Taille d'un pixel de sprite → fixe la hitbox rectangulaire (hw, hh). */
@@ -96,7 +97,7 @@ export class Bot {
     this.x = this.spawnX = opts.x;
     this.y = this.spawnY = opts.y;
     this.facing = this.spawnFacing = opts.facing ?? Math.PI;
-    this.maxHp = this.team === 'enemy' ? BOT.enemyHp : BOT.allyHp;
+    this.maxHp = this.team === ENEMY ? BOT.enemyHp : BOT.allyHp;
     this.hp = this.wounded ? this.maxHp * 0.5 : this.maxHp;
     if (this.kind === 'turret') {
       this.px = BOT.turretPx;
@@ -119,7 +120,7 @@ export class Bot {
   }
 
   get isEnemy(): boolean {
-    return this.team === 'enemy';
+    return this.team === ENEMY;
   }
 
   resetBuffs(): void {
@@ -254,7 +255,7 @@ export class Bot {
           angle: this.facing,
           speed: TURRET.bulletSpeed,
           damage: TURRET.damage,
-          team: 'enemy',
+          team: ENEMY,
           range: TURRET.range + 100,
           radius: 5,
           style: 'enemy',

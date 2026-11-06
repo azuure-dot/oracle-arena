@@ -6,10 +6,10 @@ import { Projectile } from '../entities/Projectile';
 import { t } from '../i18n';
 import { FLUX_SPRITE } from '../sprites/library';
 import type { SpriteLayout } from '../sprites/SpriteRenderer';
-import { Hero, KEYS, type AbilitySlot, type WeaponHud } from './Hero';
+import { Hero, type AbilitySlot, type WeaponHud } from './Hero';
 import { Magazine } from './Magazine';
 
-const WEAPON = {
+export const WEAPON = {
   magSize: 40,
   fireRate: 20, // 40 balles vidées en 2 s
   damage: 6,
@@ -18,8 +18,8 @@ const WEAPON = {
   range: 720,
   reloadTime: 1.15,
 };
-const BLINK = { maxCharges: 3, rechargeTime: 3, distance: 170 }; // 3 s par charge
-const RECALL = { cooldown: 12, rewindSeconds: 3, animDuration: 0.5 };
+export const BLINK = { maxCharges: 3, rechargeTime: 3, distance: 170 }; // 3 s par charge
+export const RECALL = { cooldown: 12, rewindSeconds: 3, animDuration: 0.5 };
 
 /** Un instantané enregistré à chaque frame pour le Rappel. */
 interface HistorySample {
@@ -69,6 +69,17 @@ export class Flux extends Hero {
     return WEAPON.spreadDeg;
   }
 
+  // ---- état lu par l'IA ----
+  get blinks(): number {
+    return this.blinkCharges;
+  }
+  get recallReady(): boolean {
+    return this.recallCooldown <= 0 && this.recall === null && this.history.size > 0;
+  }
+  get isRecalling(): boolean {
+    return this.recall !== null;
+  }
+
   // ------------------------------------------------------------ boucle
 
   protected override tick(dt: number): void {
@@ -92,8 +103,8 @@ export class Flux extends Hero {
   }
 
   protected handleInput(dt: number, ctx: GameContext): void {
-    if (ctx.input.wasMousePressed(2)) this.tryBlink(ctx);
-    if (ctx.input.wasPressed(...KEYS.ability1)) this.tryRecall(ctx);
+    if (this.controls.pressed('secondary')) this.tryBlink(ctx);
+    if (this.controls.pressed('ability1')) this.tryRecall(ctx);
     if (this.recall) return;
     this.updateWeapon(dt, ctx);
   }
@@ -120,10 +131,10 @@ export class Flux extends Hero {
 
   private updateWeapon(dt: number, ctx: GameContext): void {
     this.mag.update(dt);
-    if (ctx.input.wasPressed(...KEYS.reload)) this.mag.startReload();
+    if (this.controls.pressed('reload')) this.mag.startReload();
 
     this.fireTimer -= dt;
-    if (ctx.input.isMouseDown(0) && !this.isMeleeing) {
+    if (this.controls.held('primary') && !this.isMeleeing) {
       // Boucle "while" : même à bas FPS on tire bien 20 balles/s.
       while (this.fireTimer <= 0 && this.mag.consume()) {
         this.fire(ctx);
@@ -152,6 +163,7 @@ export class Flux extends Hero {
         speed: WEAPON.bulletSpeed,
         damage: WEAPON.damage,
         team: this.team,
+        owner: this,
         range: WEAPON.range,
       }),
     );
@@ -308,7 +320,8 @@ export class Flux extends Hero {
 
   /** Aperçu du Rappel : chemin des 3 dernières secondes + fantôme à destination. */
   override drawUnder(ctx: CanvasRenderingContext2D, time: number): void {
-    if (this.dead || this.recall || this.history.size < 2) return;
+    // Aperçu réservé au joueur (ne pas révéler la destination du Rappel d'un bot).
+    if (!this.isLocalPlayer || this.dead || this.recall || this.history.size < 2) return;
     ctx.strokeStyle = COLORS.recall;
     ctx.lineWidth = 2;
     ctx.globalAlpha = this.recallCooldown > 0 ? 0.08 : 0.22;

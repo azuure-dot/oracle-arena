@@ -13,10 +13,16 @@ export interface HudFrame {
   mouseY: number;
   aimDistance: number;
   hero: Hero;
-  stats: Stats;
   time: number;
   fps: number;
-  turretsEnabled: boolean;
+  /** Champ de tir uniquement : panneau DPS / dégâts / tourelles. */
+  stats?: Stats;
+  turretsEnabled?: boolean;
+  /** Aide (touche H) : titre et lignes propres au mode. */
+  helpTitle: string;
+  helpFooter: string[];
+  /** Sous le compte à rebours de réapparition (ex. « Éliminé par Vex »). */
+  deathMessage?: string;
 }
 
 /** Interface en espace écran, générique : elle lit abilitySlots()/weaponHud() du héros. */
@@ -41,7 +47,24 @@ export class HUD {
     this.drawWeapon(ctx, f);
     this.drawStats(ctx, f);
     if (this.showHelp) this.drawHelp(ctx, f);
+    if (f.hero.dead) this.drawRespawn(ctx, f);
     this.drawCrosshair(ctx, f);
+  }
+
+  /** Mort : compte à rebours de réapparition au centre de l'écran. */
+  private drawRespawn(ctx: CanvasRenderingContext2D, f: HudFrame): void {
+    const cy = f.height * 0.38;
+    ctx.fillStyle = 'rgba(10,14,20,0.6)';
+    ctx.fillRect(f.width / 2 - 190, cy - 44, 380, f.deathMessage ? 96 : 70);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = COLORS.hud;
+    ctx.font = `800 26px ${FONT}`;
+    ctx.fillText(t('hud.respawn', { s: Math.max(0, f.hero.respawnTimer).toFixed(1) }), f.width / 2, cy);
+    if (f.deathMessage) {
+      ctx.fillStyle = COLORS.enemy;
+      ctx.font = `700 15px ${FONT}`;
+      ctx.fillText(f.deathMessage, f.width / 2, cy + 32);
+    }
   }
 
   // ---------------------------------------------------------------- PV
@@ -373,6 +396,7 @@ export class HUD {
   // ---------------------------------------------------------- stats / aide
 
   private drawStats(ctx: CanvasRenderingContext2D, f: HudFrame): void {
+    if (!f.stats) return;
     const x = f.width - 24;
     let y = 30;
     ctx.textAlign = 'right';
@@ -397,14 +421,12 @@ export class HUD {
 
   private drawHelp(ctx: CanvasRenderingContext2D, f: HudFrame): void {
     const lines = [
-      t('help.title', { hero: f.hero.name.toUpperCase() }),
+      f.helpTitle,
       t('help.move'),
       t('help.line', { key: t('key.primary'), name: f.hero.weaponHud().name }),
       ...f.hero.abilitySlots().map((s) => t('help.line', { key: t(INPUT_LABEL_KEYS[s.input]), name: s.name })),
       ...(f.hero.hasQuickMelee() ? [t('help.line', { key: t('key.melee'), name: t('melee.name') })] : []),
-      t('help.misc1'),
-      t('help.misc2'),
-      t('help.hitbox'),
+      ...f.helpFooter,
     ];
     const x = 24;
     let y = 30;

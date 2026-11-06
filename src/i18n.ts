@@ -23,6 +23,7 @@ const fr = {
   'key.ability2': 'Maj',
   'key.escape': 'Échap',
   'key.melee': 'Molette',
+  'key.enter': 'Entrée',
 
   // Mêlée rapide (tous les héros sauf Rempart)
   'melee.name': 'Mêlée rapide',
@@ -89,6 +90,45 @@ const fr = {
   'tag.turret': 'TOURELLE',
   'zone.hazard': 'DÉGÂTS  {n} PV/s',
   'zone.heal': 'SOIN  {n} PV/s',
+
+  // Menu principal
+  'menu.title': 'Hero Shooter',
+  'menu.subtitle': 'Prototype 2D · choisis un mode de jeu',
+  'menu.practice': 'Champ de tir',
+  'menu.practice.desc': 'Cibles, tourelles et alliés pour t’entraîner sans pression.',
+  'menu.deathmatch': 'Deathmatch',
+  'menu.deathmatch.desc': 'Chacun pour soi contre des bots qui jouent les héros.',
+  'ui.back': 'Retour',
+  'ui.next': 'Suivant',
+  'ui.mainMenu': 'Menu principal',
+  'ui.replay': 'Rejouer',
+
+  // Configuration du Deathmatch
+  'dm.subtitle': 'Chacun pour soi · chaque élimination rapporte 1 point',
+  'dm.bots': 'Nombre de bots',
+  'dm.duration': 'Durée du match',
+  'dm.minutes': '{n} min',
+  'dm.summary': '{bots} bots aux héros tirés au hasard · {min} min',
+  'select.title.dm': 'Deathmatch',
+  'select.footer.dm': 'En jeu : {key} pour quitter la partie',
+
+  // HUD du Deathmatch
+  'hud.dm.kills': 'ÉLIMINATIONS',
+  'hud.dm.position': 'POSITION',
+  'hud.dm.killedBy': 'Éliminé par {name}',
+  'hud.dm.elimination': 'ÉLIMINATION',
+  'help.title.dm': '{hero} — DEATHMATCH',
+  'help.dm.misc': 'H : aide · Échap : quitter la partie',
+
+  // Tableau des scores
+  'score.title': 'Fin du match',
+  'score.victory': 'Victoire !',
+  'score.place': 'Tu termines {rank} sur {n}',
+  'score.player': 'Joueur',
+  'score.hero': 'Héros',
+  'score.kills': 'Éliminations',
+  'score.deaths': 'Morts',
+  'score.you': 'Toi',
 };
 
 export type TKey = keyof typeof fr;
@@ -109,6 +149,7 @@ const en: Record<TKey, string> = {
   'key.ability2': 'Shift',
   'key.escape': 'Esc',
   'key.melee': 'MMB',
+  'key.enter': 'Enter',
 
   'melee.name': 'Quick melee',
   'melee.desc': 'Point-blank hit, 40 damage · 1 s',
@@ -168,6 +209,41 @@ const en: Record<TKey, string> = {
   'tag.turret': 'TURRET',
   'zone.hazard': 'DAMAGE  {n} HP/s',
   'zone.heal': 'HEALING  {n} HP/s',
+
+  'menu.title': 'Hero Shooter',
+  'menu.subtitle': '2D prototype · pick a game mode',
+  'menu.practice': 'Practice Range',
+  'menu.practice.desc': 'Targets, turrets and allies to train without pressure.',
+  'menu.deathmatch': 'Deathmatch',
+  'menu.deathmatch.desc': 'Free-for-all against bots playing the heroes.',
+  'ui.back': 'Back',
+  'ui.next': 'Next',
+  'ui.mainMenu': 'Main menu',
+  'ui.replay': 'Play again',
+
+  'dm.subtitle': 'Free-for-all · every elimination scores 1 point',
+  'dm.bots': 'Number of bots',
+  'dm.duration': 'Match length',
+  'dm.minutes': '{n} min',
+  'dm.summary': '{bots} bots with random heroes · {min} min',
+  'select.title.dm': 'Deathmatch',
+  'select.footer.dm': 'In game: {key} to leave the match',
+
+  'hud.dm.kills': 'ELIMINATIONS',
+  'hud.dm.position': 'POSITION',
+  'hud.dm.killedBy': 'Eliminated by {name}',
+  'hud.dm.elimination': 'ELIMINATION',
+  'help.title.dm': '{hero} — DEATHMATCH',
+  'help.dm.misc': 'H: help · Esc: leave the match',
+
+  'score.title': 'Match over',
+  'score.victory': 'Victory!',
+  'score.place': 'You finished {rank} of {n}',
+  'score.player': 'Player',
+  'score.hero': 'Hero',
+  'score.kills': 'Eliminations',
+  'score.deaths': 'Deaths',
+  'score.you': 'You',
 };
 
 export type Lang = 'fr' | 'en';
@@ -218,3 +294,11 @@ export function t(key: TKey, params?: Record<string, string | number>): string {
 }
 
 document.documentElement.lang = current;
+
+/** Rang ordinal : 1er, 2e... / 1st, 2nd, 3rd... */
+export function ordinal(n: number): string {
+  if (current === 'fr') return n === 1 ? '1er' : `${n}e`;
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 13) return `${n}th`;
+  return `${n}${['th', 'st', 'nd', 'rd'][n % 10] ?? 'th'}`;
+}

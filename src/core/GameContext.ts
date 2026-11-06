@@ -1,20 +1,25 @@
 import type { Effects } from '../effects/Effects';
-import type { Bot } from '../entities/Bot';
+import type { Combatant } from '../entities/Combatant';
 import type { Projectile } from '../entities/Projectile';
+import type { Hero } from '../heroes/Hero';
 import type { Arena } from '../world/Arena';
-import type { Input } from './Input';
+import type { Vec2 } from './math';
 
-/** Ce qu'un héros peut lire / déclencher dans le monde pendant sa mise à jour. */
+/**
+ * Ce qu'un héros peut lire / déclencher dans le monde pendant sa mise à jour.
+ * Les commandes (clavier ou IA) ne sont PAS ici : chaque héros a les siennes.
+ */
 export interface GameContext {
-  input: Input;
-  aimX: number; // curseur en coordonnées monde
-  aimY: number;
   arena: Arena;
   effects: Effects;
   time: number; // temps de jeu écoulé (s)
-  bots: readonly Bot[];
+  /** Tout ce qui peut être touché (héros + bots), y compris le héros lui-même. */
+  targets: readonly Combatant[];
   spawnProjectile(p: Projectile): void;
-  /** Inflige des dégâts à un bot et gère stats, hitmarker et chiffres. Retourne les dégâts réels. */
-  damageBot(bot: Bot, amount: number): number;
-  shake(magnitude: number): void;
+  /** Inflige des dégâts (stats, hitmarker, score...). Retourne les dégâts réels. */
+  damage(target: Combatant, amount: number, source: Hero | null): number;
+  /** Où réapparaît ce héros après sa mort. */
+  respawnPoint(hero: Hero): Vec2;
+  /** Tremblement d'écran, atténué avec la distance au joueur (un combat lointain ne secoue pas). */
+  shake(magnitude: number, at: Vec2): void;
 }

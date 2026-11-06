@@ -2,14 +2,15 @@ import { COLORS } from '../config';
 import type { GameContext } from '../core/GameContext';
 import { boxInCone, distToBox } from '../core/geometry';
 import { degToRad, randRange } from '../core/math';
+import { hostile } from '../entities/Combatant';
 import { Projectile } from '../entities/Projectile';
 import { t } from '../i18n';
 import { TEMPO_SPRITE } from '../sprites/library';
 import { lineOfSight } from '../world/Visibility';
-import { Hero, KEYS, type AbilitySlot, type WeaponHud } from './Hero';
+import { Hero, type AbilitySlot, type WeaponHud } from './Hero';
 import { Magazine } from './Magazine';
 
-const SONIC = {
+export const SONIC = {
   magSize: 20,
   reloadTime: 1.25,
   burst: 4,
@@ -21,8 +22,8 @@ const SONIC = {
   range: 650,
   spreadDeg: 2,
 };
-const BOOP = { cooldown: 4, range: 130, halfArc: degToRad(45), damage: 25, impulse: 1100 };
-const AURA = {
+export const BOOP = { cooldown: 4, range: 130, halfArc: degToRad(45), damage: 25, impulse: 1100 };
+export const AURA = {
   radius: 170,
   heal: 16, // PV/s
   ampHeal: 70,
@@ -74,6 +75,14 @@ export class Tempo extends Hero {
     return SONIC.spreadDeg;
   }
 
+  // ---- état lu par l'IA ----
+  get boopReady(): boolean {
+    return this.boopCooldown <= 0;
+  }
+  get ampReady(): boolean {
+    return this.ampCooldown <= 0 && !this.amped;
+  }
+
   // ------------------------------------------------------------ boucle
 
   protected override tick(dt: number, ctx: GameContext): void {
@@ -88,12 +97,12 @@ export class Tempo extends Hero {
     this.applyAura(dt, ctx);
   }
 
-  /** L'aura affecte Tempo et tous les bots alliés dans son rayon. */
+  /** L'aura affecte Tempo et tous ses alliés dans son rayon (aucun en chacun pour soi). */
   private applyAura(dt: number, ctx: GameContext): void {
     const heal = (this.amped ? AURA.ampHeal : AURA.heal) * dt;
     const speedMul = 1 + (this.amped ? AURA.ampSpeedBonus : AURA.speedBonus);
-    for (const bot of ctx.bots) {
-      if (!bot.alive || bot.isEnemy) continue;
+    for (const bot of ctx.targets) {
+      if (bot === this || !bot.alive || hostile(this, bot)) continue;
       if (distToBox(this.x, this.y, bot.box()) > AURA.radius) continue;
       bot.buff = this.mode; // indicateur "+" ou ">>" au-dessus de la tête
       if (this.mode === 'heal') bot.heal(heal);
@@ -109,9 +118,9 @@ export class Tempo extends Hero {
   }
 
   protected handleInput(dt: number, ctx: GameContext): void {
-    const input = ctx.input;
+    const input = this.controls;
 
-    if (input.wasPressed(...KEYS.reload) && this.mag.ammo < SONIC.magSize) {
+    if (input.pressed('reload') && this.mag.ammo < SONIC.magSize) {
       this.mag.startReload();
       this.burstLeft = 0;
     }
@@ -119,7 +128,7 @@ export class Tempo extends Hero {
     // Rafale : une pression lance 4 tirs successifs, même si on relâche.
     this.nextBurst = Math.max(0, this.nextBurst - dt);
     if (
-      input.isMouseDown(0) &&
+      input.held('primary') &&
       !this.isMeleeing &&
       this.burstLeft === 0 &&
       this.nextBurst <= 0 &&
@@ -144,9 +153,9 @@ export class Tempo extends Hero {
     }
     if (this.mag.ammo === 0) this.mag.startReload();
 
-    if (input.wasMousePressed(2) && this.boopCooldown <= 0) this.boop(ctx);
-    if (input.wasPressed(...KEYS.ability1) && this.swapCooldown <= 0) this.swapAura(ctx);
-    if (input.wasPressed(...KEYS.ability2) && this.ampCooldown <= 0) this.ampItUp(ctx);
+    if (input.pressed('secondary') && this.boopCooldown <= 0) this.boop(ctx);
+    if (input.pressed('ability1') && this.swapCooldown <= 0) this.swapAura(ctx);
+    if (input.pressed('ability2') && this.ampCooldown <= 0) this.ampItUp(ctx);
   }
 
   /** La mêlée interrompt la rafale en cours et le rechargement. */
@@ -178,6 +187,7 @@ export class Tempo extends Hero {
         speed: SONIC.speed,
         damage: SONIC.damage,
         team: this.team,
+        owner: this,
         range: SONIC.range,
         radius: SONIC.radius,
         style: 'sonic',
@@ -191,11 +201,11 @@ export class Tempo extends Hero {
     const reach = this.radius + BOOP.range;
     ctx.effects.wedge(this.x, this.y, this.aim, BOOP.halfArc, reach, this.auraColor, 0.25, this.radius);
 
-    for (const bot of ctx.bots) {
-      if (!bot.alive || !bot.isEnemy || bot.pinned) continue;
+    for (const bot of ctx.targets) {
+      if (!bot.alive || !hostile(this, bot) || bot.pinned) continue;
       if (!boxInCone(this.x, this.y, this.aim, BOOP.halfArc, reach, bot.box())) continue;
       if (!lineOfSight(ctx.arena, this.x, this.y, bot.x, bot.y)) continue;
-      ctx.damageBot(bot, BOOP.damage);
+      ctx.damage(bot, BOOP.damage, this);
       const d = Math.hypot(bot.x - this.x, bot.y - this.y) || 1;
       bot.applyImpulse(((bot.x - this.x) / d) * BOOP.impulse, ((bot.y - this.y) / d) * BOOP.impulse);
     }
