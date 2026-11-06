@@ -1,0 +1,12 @@
+node_modules
+dist
+*.log
+
+# Éditeurs / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Réglages locaux de Claude Code
+.claude/settings.local.json

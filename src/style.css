@@ -1,0 +1,215 @@
+.select-screen {
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  box-sizing: border-box;
+  overflow-y: auto;
+  background: radial-gradient(ellipse at center, rgba(13, 17, 23, 0.55), rgba(5, 7, 10, 0.92));
+  backdrop-filter: blur(3px);
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: #e9eef5;
+  cursor: default;
+  z-index: 10;
+}
+.select-screen.visible {
+  display: flex;
+}
+.select-inner {
+  width: 100%;
+  max-width: 1040px;
+  text-align: center;
+}
+.select-inner h1 {
+  margin: 0;
+  font-size: 40px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #ffb347;
+}
+.select-sub,
+.select-foot {
+  margin: 8px 0 28px;
+  color: rgba(233, 238, 245, 0.65);
+}
+.select-foot {
+  margin: 24px 0 0;
+  font-size: 14px;
+}
+kbd {
+  display: inline-block;
+  min-width: 1.4em;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(233, 238, 245, 0.9);
+  color: #10141a;
+  font: 700 12px system-ui, sans-serif;
+  text-align: center;
+}
+.select-inner {
+  position: relative;
+}
+.lang-toggle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  display: flex;
+  padding: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  background: rgba(10, 14, 20, 0.6);
+}
+.lang-toggle button {
+  padding: 6px 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(233, 238, 245, 0.6);
+  font: 800 13px system-ui, sans-serif;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+}
+.lang-toggle button[aria-pressed='true'] {
+  background: #ffb347;
+  color: #10141a;
+}
+.lang-toggle button:focus-visible {
+  outline: 2px solid #ffb347;
+  outline-offset: 2px;
+}
+.role-columns {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 22px;
+  align-items: start;
+}
+.role-col {
+  display: grid;
+  gap: 14px;
+}
+.role-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding-bottom: 10px;
+  border-bottom: 2px solid rgba(255, 255, 255, 0.12);
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  text-align: left;
+}
+.role-header svg {
+  width: 22px;
+  height: 22px;
+}
+.role-tank .role-header {
+  color: #8fb8ff;
+}
+.role-damage .role-header {
+  color: #ff8a8a;
+}
+.role-support .role-header {
+  color: #ffd84d;
+}
+@media (max-width: 640px) {
+  .lang-toggle {
+    position: static;
+    justify-content: center;
+    width: max-content;
+    margin: 0 auto 16px;
+  }
+}
+.hero-card {
+  --hero-color: #ffb347;
+  position: relative;
+  padding: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-top: 4px solid var(--hero-color);
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(30, 37, 48, 0.95), rgba(16, 20, 26, 0.95));
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.hero-card:hover,
+.hero-card:focus-visible {
+  transform: translateY(-4px);
+  border-color: var(--hero-color);
+  box-shadow: 0 10px 30px -10px var(--hero-color);
+  outline: none;
+}
+.hero-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.hero-avatar {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  background: var(--hero-color);
+  color: #10141a;
+  font-size: 26px;
+  font-weight: 900;
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, 0.25);
+}
+.hero-name {
+  font-size: 24px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.hero-role {
+  color: var(--hero-color);
+  font-size: 13px;
+  font-weight: 700;
+}
+.hero-index {
+  margin-left: auto;
+  align-self: flex-start;
+  color: rgba(233, 238, 245, 0.35);
+  font-size: 22px;
+  font-weight: 900;
+}
+.hero-tagline {
+  margin: 14px 0;
+  color: rgba(233, 238, 245, 0.75);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.hero-abilities {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.hero-abilities li {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 13px;
+}
+.hero-abilities kbd {
+  flex: 0 0 auto;
+  min-width: 52px;
+  margin-top: 1px;
+}
+.hero-abilities b {
+  display: block;
+}
+.hero-abilities small {
+  color: rgba(233, 238, 245, 0.55);
+}
