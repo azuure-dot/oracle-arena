@@ -11,7 +11,7 @@ import type { MatchResult } from '../ui/screens/Scoreboard';
 import { Arena } from '../world/Arena';
 import type { MapDef } from '../world/maps';
 
-export type ModeKind = 'practice' | 'deathmatch' | 'control';
+export type ModeKind = 'practice' | 'deathmatch' | 'control' | 'escort';
 
 /** Ce que le jeu fournit au mode pour dessiner son HUD. */
 export interface ScreenInfo {

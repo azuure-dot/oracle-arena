@@ -38,8 +38,13 @@ export class Arena {
   readonly width: number;
   readonly height: number;
   readonly walls: Rect[];
+  /** Eau : bloque les déplacements, pas la vue ni les tirs. */
+  readonly water: Rect[];
   readonly zones: Zone[];
-  readonly safeZones: SafeZone[];
+  /** Zones de spawn protégées (peuvent changer en cours de partie : Escorte). */
+  safeZones: SafeZone[];
+  /** Obstacles mobiles (le convoi) : bloquent déplacements et projectiles, pas la vue. */
+  dynamicRects: Rect[] = [];
 
   /** Segments opaques (arêtes des murs + bords de la map) pour le raycasting. */
   readonly segments: Segment[];
@@ -53,6 +58,7 @@ export class Arena {
     this.width = map.width;
     this.height = map.height;
     this.walls = map.walls;
+    this.water = map.water ?? [];
     this.zones = map.zones;
     this.safeZones = map.safeZones;
 
@@ -80,8 +86,16 @@ export class Arena {
    * Sans équipe (bots du champ de tir), seulement les murs.
    */
   private blockers(team?: Team): Rect[] {
-    if (team === undefined || this.safeZones.length === 0) return this.walls;
-    return [...this.walls, ...this.safeZones.filter((z) => z.team !== team).map((z) => z.rect)];
+    const base =
+      this.water.length || this.dynamicRects.length ? [...this.walls, ...this.water, ...this.dynamicRects] : this.walls;
+    if (team === undefined || this.safeZones.length === 0) return base;
+    return [...base, ...this.safeZones.filter((z) => z.team !== team).map((z) => z.rect)];
+  }
+
+  /** Change les zones de spawn protégées (Escorte : au passage du checkpoint). */
+  setSafeZones(zones: SafeZone[]): void {
+    this.safeZones = zones;
+    this.floorCache = null; // le sol teinté des spawns est dans le cache
   }
 
   /** La boîte (centre x,y, demi-dimensions hw,hh) chevauche-t-elle un obstacle ou sort-elle de la map ? */
@@ -90,9 +104,10 @@ export class Arena {
     return this.blockers(team).some((w) => boxHitsRect(x, y, hw, hh, w));
   }
 
+  /** Arrête les projectiles : murs et obstacles mobiles (pas l'eau). */
   pointInWall(x: number, y: number): boolean {
     if (x < 0 || y < 0 || x > this.width || y > this.height) return true;
-    return this.walls.some((w) => pointInRect(x, y, w));
+    return this.walls.some((w) => pointInRect(x, y, w)) || this.dynamicRects.some((w) => pointInRect(x, y, w));
   }
 
   /**
@@ -179,6 +194,28 @@ export class Arena {
       g.moveTo(0, y + 0.5);
       g.lineTo(this.width, y + 0.5);
       g.stroke();
+    }
+
+    // eau (hachures bleues) et ses berges
+    for (const w of this.water) {
+      g.fillStyle = '#123a52';
+      g.fillRect(w.x, w.y, w.w, w.h);
+      g.save();
+      g.beginPath();
+      g.rect(w.x, w.y, w.w, w.h);
+      g.clip();
+      g.strokeStyle = 'rgba(120,200,240,0.18)';
+      g.lineWidth = 6;
+      for (let i = -w.h; i < w.w + w.h; i += 22) {
+        g.beginPath();
+        g.moveTo(w.x + i, w.y);
+        g.lineTo(w.x + i - w.h, w.y + w.h);
+        g.stroke();
+      }
+      g.restore();
+      g.strokeStyle = 'rgba(160,220,250,0.55)';
+      g.lineWidth = 3;
+      g.strokeRect(w.x + 1.5, w.y + 1.5, w.w - 3, w.h - 3);
     }
 
     // zones spéciales

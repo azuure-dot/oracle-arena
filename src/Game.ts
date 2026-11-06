@@ -4,8 +4,9 @@ import { Input } from './core/Input';
 import { damp } from './core/math';
 import { World } from './game/World';
 import { HEROES, type HeroEntry } from './heroes/registry';
-import { t } from './i18n';
 import { ControlMode } from './modes/ControlMode';
+import { EscortMode } from './modes/EscortMode';
+import { TeamMatchMode } from './modes/TeamMatchMode';
 import { DeathmatchMode, type DeathmatchConfig } from './modes/DeathmatchMode';
 import type { GameMode, ModeKind } from './modes/GameMode';
 import { PracticeMode, createRangeBots } from './modes/PracticeMode';
@@ -26,6 +27,7 @@ const MAX_DT = 1 / 20;
  * Enchaînement des scènes :
  *
  *   Menu ─┬─ Partie rapide ─▶ Carte ───────▶ Sélection ─▶ En jeu ─▶ Victoire / défaite
+ *         │   (la carte décide du mode : Sanctuaire → Contrôle, Route 66 → Escorte)
  *         ├─ Champ de tir ───────────────▶ Sélection ─▶ En jeu (Échap → Sélection)
  *         └─ Deathmatch ─▶ Configuration ─▶ Sélection ─▶ En jeu ─▶ Scores
  */
@@ -84,9 +86,9 @@ export class Game {
       overlay,
       QUICKPLAY_MAPS,
       (map) => {
-        // La carte détermine le mode : Sanctuaire → Contrôle.
+        // La carte détermine le mode : Sanctuaire → Contrôle, Route 66 → Escorte.
         this.pendingMap = map;
-        this.pendingKind = 'control';
+        this.pendingKind = map.escort ? 'escort' : 'control';
         this.goTo('select');
       },
       () => this.goTo('menu'),
@@ -105,7 +107,10 @@ export class Game {
       overlay,
       HEROES,
       (entry) => this.startMode(entry),
-      () => this.goTo(this.pendingKind === 'deathmatch' ? 'dmSetup' : this.pendingKind === 'control' ? 'mapSelect' : 'menu'),
+      () =>
+        this.goTo(
+          this.pendingKind === 'deathmatch' ? 'dmSetup' : this.pendingKind === 'practice' ? 'menu' : 'mapSelect',
+        ),
     );
     this.scoreboard = new Scoreboard(
       overlay,
@@ -152,7 +157,7 @@ export class Game {
       case 'select':
         this.mode = null;
         this.selectScreen.mode = this.pendingKind;
-        this.selectScreen.mapName = t(this.pendingMap.nameKey);
+        this.selectScreen.map = this.pendingMap;
         this.selectScreen.show();
         break;
       case 'scoreboard': {
@@ -171,6 +176,9 @@ export class Game {
       case 'control':
         this.mode = new ControlMode(this.pendingMap, this.camera, this.input, entry);
         break;
+      case 'escort':
+        this.mode = new EscortMode(this.pendingMap, this.camera, this.input, entry);
+        break;
       case 'deathmatch':
         this.mode = new DeathmatchMode(this.camera, this.input, entry, this.dmConfig);
         break;
@@ -182,8 +190,8 @@ export class Game {
     this.goTo('playing');
   }
 
-  /** Contrôle : changement de héros dans le spawn (la partie continue derrière). */
-  private openHeroSwap(mode: ControlMode): void {
+  /** Modes en équipe : changement de héros dans le spawn (la partie continue derrière). */
+  private openHeroSwap(mode: TeamMatchMode): void {
     mode.swapRequested = false;
     mode.uiOpen = true;
     const close = () => {
@@ -239,10 +247,10 @@ export class Game {
       }
       if (mode.finished) {
         this.goTo('scoreboard'); // la partie se fige derrière les scores
-      } else if (mode instanceof ControlMode) {
+      } else if (mode instanceof TeamMatchMode) {
         if (mode.swapRequested && !mode.uiOpen) this.openHeroSwap(mode);
         // Le joueur a quitté son spawn ou la manche s'est terminée : on ferme le menu.
-        if (mode.uiOpen && (!mode.player.safe || mode.phase !== 'playing')) this.selectScreen.swap?.onClose();
+        if (mode.uiOpen && (!mode.player.safe || !mode.canSwap())) this.selectScreen.swap?.onClose();
       }
       this.camera.centerOn(mode.player.x, mode.player.y); // caméra verrouillée sur le joueur
     } else if (!mode) {

@@ -1,13 +1,11 @@
 import type { BrainWorld } from '../ai/HeroBrain';
-import { NavGraph } from '../ai/nav';
 import { COLORS } from '../config';
 import type { Camera } from '../core/Camera';
 import type { Input } from '../core/Input';
 import { randRange, type Vec2 } from '../core/math';
 import { ALLY, ENEMY, type Team } from '../entities/Team';
-import { HealthPacks } from '../game/HealthPacks';
 import type { Hero } from '../heroes/Hero';
-import { HEROES, type HeroEntry } from '../heroes/registry';
+import type { HeroEntry } from '../heroes/registry';
 import { t } from '../i18n';
 import {
   drawControlBar,
@@ -20,7 +18,7 @@ import {
 import type { MatchResult } from '../ui/screens/Scoreboard';
 import type { ControlPointDef, MapDef } from '../world/maps';
 import type { ScreenInfo } from './GameMode';
-import { BOT_NAMES, MatchMode, shuffle, type Participant } from './MatchMode';
+import { TeamMatchMode } from './TeamMatchMode';
 
 export const CONTROL = {
   /** Temps de capture pour un joueur seul sur le point (s). */
@@ -48,7 +46,7 @@ const side = (team: Team | null): Side | null => (team === ALLY ? 'blue' : team 
  * Contrôle (2 contre 2) — capture et tenue d'un point central, en 2 manches gagnantes.
  * Équipe bleue : le joueur + 1 bot · Équipe rouge : 2 bots. Aucun héros en double dans une équipe.
  */
-export class ControlMode extends MatchMode {
+export class ControlMode extends TeamMatchMode {
   readonly kind = 'control';
   readonly point: ControlPointDef;
   owner: Team | null = null;
@@ -65,40 +63,16 @@ export class ControlMode extends MatchMode {
   private roundWinner: Team | null = null;
   private introTimer = CONTROL.roundIntro;
   private captureFlash: { team: Team; age: number } | null = null;
-  /** Le joueur a demandé à changer de héros (touche C dans son spawn). */
-  swapRequested = false;
-
-  private readonly packs: HealthPacks;
-  readonly nav: NavGraph;
 
   constructor(map: MapDef, camera: Camera, input: Input, entry: HeroEntry) {
     super(map, camera, input, entry);
     if (!map.control) throw new Error(`La carte ${map.id} n'a pas de point de contrôle`);
     this.point = map.control;
-
-    // Équipes sans doublon : l'allié prend un autre héros que le joueur, les deux ennemis sont différents.
-    this.registerPlayer(ALLY);
-    const names = shuffle(BOT_NAMES);
-    const allyEntry = shuffle(HEROES.filter((h) => h.id !== entry.id))[0];
-    const [red1, red2] = shuffle(HEROES);
-    this.addBot(allyEntry, ALLY, names[0], COLORS.ally);
-    this.addBot(red1, ENEMY, names[1], COLORS.enemy);
-    this.addBot(red2, ENEMY, names[2], COLORS.enemy);
-
-    this.world.player = this.player;
-    this.world.heroes = this.participants.map((p) => p.hero);
-    this.nav = new NavGraph(this.arena, map.nav);
-    this.packs = new HealthPacks(map.healthPacks);
     this.startRound();
   }
 
   override get finished(): boolean {
     return this.phase === 'over';
-  }
-
-  /** Héros déjà pris par les coéquipiers du joueur (interdits au changement de héros). */
-  takenByAllies(): string[] {
-    return this.participants.filter((p) => !p.isPlayer && p.hero.team === this.player.team).map((p) => p.hero.name);
   }
 
   // ------------------------------------------------------------ manches
@@ -149,8 +123,8 @@ export class ControlMode extends MatchMode {
 
   // ------------------------------------------------------------ boucle
 
-  protected override handleKeys(): void {
-    if (this.input.wasPressed('KeyC') && this.player.safe && this.phase === 'playing') this.swapRequested = true;
+  override canSwap(): boolean {
+    return this.phase === 'playing';
   }
 
   protected override brainWorld(): BrainWorld {
@@ -162,16 +136,6 @@ export class ControlMode extends MatchMode {
       nav: this.nav,
       healthPacks: this.packs.available(),
     };
-  }
-
-  protected override beforeWorld(dt: number): void {
-    // Zone de spawn de son équipe : invincible et soigné à 100 %.
-    for (const p of this.participants) {
-      const h = p.hero;
-      h.safe = h.alive && this.arena.safeZoneAt(h.x, h.y)?.team === h.team;
-      if (h.safe) h.heal(h.maxHp);
-    }
-    super.beforeWorld(dt);
   }
 
   protected override afterWorld(dt: number): void {
@@ -273,42 +237,10 @@ export class ControlMode extends MatchMode {
     return { x: p.x + randRange(-10, 10), y: p.y + randRange(-10, 10) };
   }
 
-  protected nameColor(p: Participant): string {
-    return p.hero.team === ALLY ? COLORS.ally : COLORS.enemy;
-  }
-
-  /** Changement de héros dans le spawn : nouveau héros au même endroit, PV au max. */
-  swapPlayerHero(entry: HeroEntry): void {
-    this.swapRequested = false;
-    const old = this.player;
-    if (entry.name === old.name || this.takenByAllies().includes(entry.name)) return;
-    const hero = entry.create();
-    hero.team = old.team;
-    hero.isLocalPlayer = true;
-    hero.outline = old.outline;
-    hero.controls = this.playerControls;
-    hero.placeAt(old);
-    hero.aim = old.aim;
-    old.dead = true; // l'ancien héros disparaît (les bots qui le visaient l'oublient)
-    this.playerEntry.hero = hero;
-    this.player = hero;
-    this.world.player = hero;
-    this.world.heroes = this.participants.map((p) => p.hero);
-    this.world.effects.ring(hero.x, hero.y, hero.stats.color, 50, 0.4);
-  }
-
   override result(): MatchResult {
-    const row = (p: Participant) => ({
-      name: p.isPlayer ? null : p.name,
-      hero: p.hero.name,
-      heroColor: p.hero.stats.color,
-      kills: p.kills,
-      deaths: p.deaths,
-      team: side(p.hero.team) ?? 'red',
-    });
     return {
       kind: 'control',
-      rows: this.participants.map(row),
+      rows: this.scoreRows(),
       won: this.roundsWon[ALLY] >= CONTROL.roundsToWin,
       rounds: { blue: this.roundsWon[ALLY], red: this.roundsWon[ENEMY] },
     };

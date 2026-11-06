@@ -12,6 +12,29 @@ export interface SafeZone {
   doors: Segment[];
 }
 
+/** Salle de spawn : zone protégée, portes et points d'apparition. */
+export interface SpawnRoom {
+  rect: Rect;
+  doors: Segment[];
+  points: Vec2[];
+}
+
+/** Escorte : parcours du convoi et salles de spawn qui changent avec la progression. */
+export interface EscortDef {
+  /** Points de passage du convoi, du départ (A) à l'arrivée (B). */
+  path: Vec2[];
+  /** Indice du point de passage qui sert de checkpoint. */
+  checkpoint: number;
+  rooms: {
+    /** Départ (attaque, phase 1). */
+    start: SpawnRoom;
+    /** Milieu (défense en phase 1, attaque en phase 2). */
+    mid: SpawnRoom;
+    /** Arrivée (défense, phase 2). */
+    end: SpawnRoom;
+  };
+}
+
 /** Point de contrôle (cercle). */
 export interface ControlPointDef {
   x: number;
@@ -22,14 +45,20 @@ export interface ControlPointDef {
 export interface MapDef {
   id: string;
   nameKey: TKey;
+  /** Mode de jeu de la carte et courte description (sélection de carte). */
+  modeKey: TKey;
+  descKey: TKey;
   width: number;
   height: number;
   walls: Rect[];
+  /** Eau : infranchissable, mais on voit et on tire par-dessus. */
+  water?: Rect[];
   zones: Zone[];
   safeZones: SafeZone[];
   /** Points d'apparition par équipe. */
   spawns: Record<Team, Vec2[]>;
   control?: ControlPointDef;
+  escort?: EscortDef;
   /** Packs de soin (+200 PV). */
   healthPacks: Vec2[];
   /** Points de passage pour l'IA (couloirs, portes...). Les liaisons sont calculées automatiquement. */
@@ -43,6 +72,8 @@ export interface MapDef {
 export const PRACTICE_MAP: MapDef = {
   id: 'practice',
   nameKey: 'menu.practice',
+  modeKey: 'menu.practice',
+  descKey: 'menu.practice.desc',
   width: WORLD.width,
   height: WORLD.height,
   walls: [
@@ -172,6 +203,8 @@ const mirrorSeg = (s: Segment): Segment => {
 export const SANCTUARY_MAP: MapDef = {
   id: 'sanctuary',
   nameKey: 'map.sanctuary',
+  modeKey: 'mode.control',
+  descKey: 'map.sanctuary.desc',
   width: SW,
   height: SH,
   walls: withMirror(HALF_WALLS, mirrorRect),
@@ -193,5 +226,195 @@ export const SANCTUARY_MAP: MapDef = {
   nav: [...withMirror(HALF_NAV, mirrorPt), { x: SW / 2, y: SH / 2 }],
 };
 
-/** Cartes jouables en Partie rapide. */
-export const QUICKPLAY_MAPS: MapDef[] = [SANCTUARY_MAP];
+// ------------------------------------------------------------------ Route 66
+
+/**
+ * ROUTE 66 (Escorte) — carte originale.
+ * - Le convoi part du sud-ouest (A), longe une place, traverse le canal par le pont
+ *   (passage obligé), passe le checkpoint, tourne dans les rues et finit au nord-est (B).
+ * - Contournements : passerelle à l'ouest du pont, rue et passage étroit à l'est.
+ * - Le spawn du milieu est caché derrière le virage : ses portes donnent au nord,
+ *   à l'opposé du pont par lequel arrivent les attaquants.
+ * - L'eau bloque les déplacements mais pas la vue ni les tirs : on se couvre d'une rive à l'autre.
+ */
+const R66_ROOMS: EscortDef['rooms'] = {
+  start: {
+    rect: { x: 0, y: 1950, w: 300, h: 400 },
+    doors: [
+      { ax: 320, ay: 2000, bx: 320, by: 2120 },
+      { ax: 320, ay: 2190, bx: 320, by: 2310 },
+    ],
+    points: [
+      { x: 140, y: 2060 },
+      { x: 140, y: 2250 },
+      { x: 220, y: 2150 },
+    ],
+  },
+  mid: {
+    rect: { x: 900, y: 560, w: 340, h: 300 },
+    doors: [
+      { ax: 940, ay: 540, bx: 1050, by: 540 },
+      { ax: 1090, ay: 540, bx: 1200, by: 540 },
+    ],
+    points: [
+      { x: 980, y: 700 },
+      { x: 1160, y: 700 },
+      { x: 1070, y: 800 },
+    ],
+  },
+  end: {
+    rect: { x: 2990, y: 200, w: 210, h: 400 },
+    doors: [
+      { ax: 2970, ay: 230, bx: 2970, by: 340 },
+      { ax: 2970, ay: 400, bx: 2970, by: 510 },
+    ],
+    points: [
+      { x: 3090, y: 285 },
+      { x: 3090, y: 455 },
+      { x: 3140, y: 370 },
+    ],
+  },
+};
+
+export const ROUTE66_MAP: MapDef = {
+  id: 'route66',
+  nameKey: 'map.route66',
+  modeKey: 'mode.escort',
+  descKey: 'map.route66.desc',
+  width: 3200,
+  height: 2400,
+  walls: [
+    // Spawn A (départ) : sud-ouest, deux portes vers le convoi
+    { x: 0, y: 1910, w: 340, h: 40 },
+    { x: 0, y: 2350, w: 340, h: 50 },
+    { x: 300, y: 1950, w: 40, h: 50 },
+    { x: 300, y: 2120, w: 40, h: 70 },
+    { x: 300, y: 2310, w: 40, h: 40 },
+    // Blocs du sud
+    { x: 0, y: 1300, w: 340, h: 610 },
+    { x: 640, y: 1900, w: 420, h: 500 },
+    { x: 1060, y: 1600, w: 2140, h: 800 },
+    // Couverts : place sud, rue est
+    { x: 520, y: 1400, w: 80, h: 80 },
+    { x: 2000, y: 1320, w: 120, h: 60 },
+    { x: 2400, y: 1500, w: 60, h: 100 },
+    // Passage est (étroit, au bout du canal)
+    { x: 2900, y: 1050, w: 300, h: 250 },
+    // Blocs du nord
+    { x: 0, y: 0, w: 1960, h: 300 },
+    { x: 0, y: 300, w: 500, h: 100 },
+    { x: 1970, y: 0, w: 1230, h: 200 },
+    // Place nord-ouest
+    { x: 200, y: 600, w: 300, h: 200 },
+    { x: 650, y: 700, w: 80, h: 80 },
+    // Spawn du milieu : murs pleins côté pont, portes au nord
+    { x: 860, y: 520, w: 40, h: 380 },
+    { x: 860, y: 860, w: 420, h: 40 },
+    { x: 1240, y: 520, w: 40, h: 340 },
+    { x: 900, y: 520, w: 40, h: 40 },
+    { x: 1050, y: 520, w: 40, h: 40 },
+    { x: 1200, y: 520, w: 40, h: 40 },
+    // Bâtiments le long du parcours nord
+    { x: 1660, y: 820, w: 560, h: 230 },
+    { x: 1640, y: 300, w: 330, h: 220 },
+    // Place finale : couvert
+    { x: 2300, y: 560, w: 200, h: 160 },
+    // Spawn B (arrivée) : deux portes vers le point final
+    { x: 2950, y: 600, w: 250, h: 40 },
+    { x: 2950, y: 200, w: 40, h: 30 },
+    { x: 2950, y: 340, w: 40, h: 60 },
+    { x: 2950, y: 510, w: 40, h: 90 },
+  ],
+  water: [
+    { x: 0, y: 1050, w: 500, h: 250 },
+    { x: 650, y: 1050, w: 730, h: 250 }, // passerelle ouest : x 500-650
+    { x: 1620, y: 1050, w: 1080, h: 250 }, // pont : x 1380-1620
+  ],
+  zones: [],
+  safeZones: [],
+  spawns: {},
+  escort: {
+    path: [
+      { x: 480, y: 2150 }, // A
+      { x: 480, y: 1750 },
+      { x: 900, y: 1750 },
+      { x: 900, y: 1450 },
+      { x: 1500, y: 1450 },
+      { x: 1500, y: 850 }, // checkpoint, juste après le pont
+      { x: 1500, y: 650 },
+      { x: 2100, y: 650 },
+      { x: 2100, y: 350 },
+      { x: 2850, y: 350 }, // B
+    ],
+    checkpoint: 5,
+    rooms: R66_ROOMS,
+  },
+  healthPacks: [
+    { x: 420, y: 1380 },
+    { x: 980, y: 980 },
+    { x: 2300, y: 1450 },
+    { x: 720, y: 480 },
+    { x: 2450, y: 950 },
+    { x: 2800, y: 700 },
+  ],
+  nav: [
+    // spawn A
+    { x: 150, y: 2060 },
+    { x: 150, y: 2250 },
+    { x: 400, y: 2060 },
+    { x: 400, y: 2250 },
+    // parcours
+    { x: 480, y: 1980 },
+    { x: 480, y: 1750 },
+    { x: 700, y: 1750 },
+    { x: 900, y: 1750 },
+    { x: 900, y: 1450 },
+    { x: 1200, y: 1450 },
+    { x: 1500, y: 1450 },
+    { x: 1500, y: 1180 },
+    { x: 1500, y: 950 },
+    { x: 1500, y: 700 },
+    { x: 1500, y: 420 },
+    { x: 1800, y: 650 },
+    { x: 2100, y: 650 },
+    { x: 2100, y: 350 },
+    { x: 2450, y: 350 },
+    { x: 2850, y: 350 },
+    // place sud, passerelle ouest, place nord-ouest
+    { x: 430, y: 1520 },
+    { x: 700, y: 1400 },
+    { x: 575, y: 1180 },
+    { x: 575, y: 950 },
+    { x: 430, y: 900 },
+    { x: 700, y: 600 },
+    { x: 720, y: 450 },
+    // autour du spawn du milieu
+    { x: 995, y: 420 },
+    { x: 1145, y: 420 },
+    { x: 1320, y: 420 },
+    { x: 995, y: 620 },
+    { x: 1145, y: 620 },
+    { x: 1070, y: 780 },
+    { x: 1100, y: 975 },
+    { x: 800, y: 975 },
+    { x: 1330, y: 700 },
+    // spawn B et place finale
+    { x: 2900, y: 285 },
+    { x: 2900, y: 455 },
+    { x: 3090, y: 285 },
+    { x: 3090, y: 455 },
+    { x: 2600, y: 700 },
+    { x: 2900, y: 800 },
+    // contournement est
+    { x: 2450, y: 900 },
+    { x: 2800, y: 950 },
+    { x: 2800, y: 1180 },
+    { x: 2800, y: 1450 },
+    { x: 2300, y: 1450 },
+    { x: 1900, y: 1450 },
+    { x: 1700, y: 1450 },
+  ],
+};
+
+/** Cartes jouables en Partie rapide (la carte détermine le mode). */
+export const QUICKPLAY_MAPS: MapDef[] = [SANCTUARY_MAP, ROUTE66_MAP];

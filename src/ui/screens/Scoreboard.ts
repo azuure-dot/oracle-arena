@@ -16,7 +16,8 @@ export interface ScoreRow {
 
 export type MatchResult =
   | { kind: 'deathmatch'; rows: ScoreRow[]; playerRank: number; playerWon: boolean }
-  | { kind: 'control'; rows: ScoreRow[]; won: boolean; rounds: { blue: number; red: number } };
+  | { kind: 'control'; rows: ScoreRow[]; won: boolean; rounds: { blue: number; red: number } }
+  | { kind: 'escort'; rows: ScoreRow[]; won: boolean; attack: boolean; progress: number; delivered: boolean };
 
 /** Tableau des scores de fin de match (Deathmatch : classement · Contrôle : victoire / défaite). */
 export class Scoreboard extends Screen {
@@ -49,9 +50,14 @@ export class Scoreboard extends Screen {
         }`;
       rows = r.rows.map((row) => this.rowHtml(row, ordinal(row.rank ?? 0))).join('');
     } else {
+      const detail =
+        r.kind === 'control'
+          ? t('score.rounds', { a: r.rounds.blue, b: r.rounds.red })
+          : `${r.delivered ? t('escort.delivered') : t('escort.held', { p: Math.floor(r.progress * 100) })}
+             <small class="score-role">${t(r.attack ? 'escort.youAttack' : 'escort.youDefend')}</small>`;
       head = `
         <h1 class="result-title ${r.won ? 'win' : 'lose'}">${t(r.won ? 'control.victory' : 'control.defeat')}</h1>
-        <p class="score-headline">${t('score.rounds', { a: r.rounds.blue, b: r.rounds.red })}</p>`;
+        <p class="score-headline">${detail}</p>`;
       const team = (tm: 'blue' | 'red') =>
         `<tr class="team-head team-${tm}"><td colspan="4">${t(tm === 'blue' ? 'score.teamBlue' : 'score.teamRed')}</td></tr>` +
         r.rows
@@ -63,7 +69,7 @@ export class Scoreboard extends Screen {
 
     return `
       ${head}
-      <table class="score-table${r.kind === 'control' ? ' by-team' : ''}">
+      <table class="score-table${r.kind !== 'deathmatch' ? ' by-team' : ''}">
         <thead>
           <tr>
             <th class="col-rank">${r.kind === 'deathmatch' ? '#' : ''}</th>

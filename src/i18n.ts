@@ -167,6 +167,29 @@ const fr = {
   'score.rounds': 'Manches {a} – {b}',
   'score.teamBlue': 'Équipe bleue',
   'score.teamRed': 'Équipe rouge',
+
+  // Escorte
+  'map.route66': 'Route 66',
+  'map.route66.desc': 'Une équipe escorte le convoi jusqu’au bout du parcours, l’autre doit l’arrêter avant la fin du temps.',
+  'mode.escort': 'Escorte',
+  'mode.teams.escort': '2 contre 2 · attaque / défense',
+  'select.title.map': '{map} · {mode}',
+  'escort.attack': 'ATTAQUE',
+  'escort.defense': 'DÉFENSE',
+  'escort.goalAttack': 'Escortez le convoi',
+  'escort.goalDefense': 'Arrêtez le convoi',
+  'escort.pushing': 'POUSSÉE',
+  'escort.contested': 'CONTESTÉ',
+  'escort.stopped': 'ARRÊTÉ',
+  'escort.reversing': 'RECUL',
+  'escort.overtime': 'PROLONGATIONS',
+  'escort.checkpoint': 'Checkpoint atteint · +3:00',
+  'escort.phase': 'PHASE {n}/2',
+  'escort.delivered': 'Le convoi est arrivé à destination',
+  'escort.held': 'Convoi arrêté à {p} % du parcours',
+  'escort.youAttack': 'Tu étais en attaque',
+  'escort.youDefend': 'Tu étais en défense',
+  'help.title.escort': '{hero} — ESCORTE',
 };
 
 export type TKey = keyof typeof fr;
@@ -318,6 +341,28 @@ const en: Record<TKey, string> = {
   'score.rounds': 'Rounds {a} – {b}',
   'score.teamBlue': 'Blue team',
   'score.teamRed': 'Red team',
+
+  'map.route66': 'Route 66',
+  'map.route66.desc': 'One team escorts the payload to the end of the route, the other must stop it before time runs out.',
+  'mode.escort': 'Escort',
+  'mode.teams.escort': '2v2 · attack / defense',
+  'select.title.map': '{map} · {mode}',
+  'escort.attack': 'ATTACK',
+  'escort.defense': 'DEFENSE',
+  'escort.goalAttack': 'Escort the payload',
+  'escort.goalDefense': 'Stop the payload',
+  'escort.pushing': 'PUSHING',
+  'escort.contested': 'CONTESTED',
+  'escort.stopped': 'STOPPED',
+  'escort.reversing': 'REVERSING',
+  'escort.overtime': 'OVERTIME',
+  'escort.checkpoint': 'Checkpoint reached · +3:00',
+  'escort.phase': 'PHASE {n}/2',
+  'escort.delivered': 'The payload reached its destination',
+  'escort.held': 'Payload stopped at {p}% of the route',
+  'escort.youAttack': 'You were attacking',
+  'escort.youDefend': 'You were defending',
+  'help.title.escort': '{hero} — ESCORT',
 };
 
 export type Lang = 'fr' | 'en';

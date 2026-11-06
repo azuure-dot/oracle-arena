@@ -2,6 +2,7 @@ import { INPUT_LABEL_KEYS } from '../../heroes/Hero';
 import { ROLE_KEYS, ROLE_ORDER, type HeroEntry, type Role } from '../../heroes/registry';
 import { t } from '../../i18n';
 import type { ModeKind } from '../../modes/GameMode';
+import type { MapDef } from '../../world/maps';
 import { Screen, digitOf } from './Screen';
 
 const ROLE_ICONS: Record<Role, string> = {
@@ -27,8 +28,8 @@ export interface SwapContext {
 export class SelectScreen extends Screen {
   private readonly ordered: HeroEntry[];
   mode: ModeKind = 'practice';
-  /** Nom de la carte (mode Contrôle), affiché dans le titre. */
-  mapName = '';
+  /** Carte choisie en Partie rapide (titre « Carte · Mode »). */
+  map: MapDef | null = null;
   /** Défini pendant un changement de héros en jeu. */
   swap: SwapContext | null = null;
 
@@ -65,8 +66,8 @@ export class SelectScreen extends Screen {
     if (this.swap) {
       title = t('select.swap');
       footer = t('select.swap.footer', key);
-    } else if (this.mode === 'control') {
-      title = t('select.title.control', { map: this.mapName });
+    } else if ((this.mode === 'control' || this.mode === 'escort') && this.map) {
+      title = t('select.title.map', { map: t(this.map.nameKey), mode: t(this.map.modeKey) });
       footer = t('select.footer.dm', key);
     } else if (this.mode === 'deathmatch') {
       title = t('select.title.dm');

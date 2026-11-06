@@ -24,6 +24,8 @@ import { clearance, pathClear, randomFreePoint, steer } from './steering';
  * Au-dessus, une couche MACRO (modes à objectif) décide OÙ aller :
  * - point pas à nous → y aller (et combattre ceux qu'on croise en chemin ou dessus) ;
  * - point à nous → rester dessus ou tout près pour le défendre, sans partir en chasse ;
+ * - Escorte, attaque → rester dans la zone du convoi, à couvert derrière lui ;
+ * - Escorte, défense → plonger sur le convoi quand il est poussé, sinon l'attendre en avant ;
  * - peu de PV → détour par un pack de soin proche.
  * Les déplacements longs suivent un petit graphe de navigation (nav.ts).
  *
@@ -38,9 +40,28 @@ export interface ObjectiveInfo {
   x: number;
   y: number;
   r: number;
-  /** Équipe qui possède le point (null = neutre). */
+  /** Contrôle : équipe qui possède le point (null = neutre). */
   owner: Team | null;
+  /** Escorte : équipe qui attaque (absent en Contrôle). L'objectif suit alors le convoi. */
+  attackers?: Team;
+  /** Escorte : des attaquants sont sur le convoi (il avance ou est contesté). */
+  active?: boolean;
+  /** Escorte : direction d'avancée du convoi. */
+  forward?: Vec2;
+  /** Escorte : demi-taille du convoi (pour se mettre à couvert derrière). */
+  cover?: number;
+  /** Escorte : position de garde des défenseurs, en avant du convoi. */
+  holdPoint?: Vec2;
 }
+
+/**
+ * Rôle du bot vis-à-vis de l'objectif :
+ * - capture / hold : Contrôle (prendre le point / le garder) ;
+ * - escort : attaquant d'Escorte (rester dans la zone du convoi, à couvert derrière) ;
+ * - block : défenseur quand le convoi est poussé (plonger dans la zone pour le contester) ;
+ * - guard : défenseur quand le convoi est à l'arrêt (attendre en avant sur le parcours).
+ */
+type Stance = 'capture' | 'hold' | 'escort' | 'block' | 'guard';
 
 export interface BrainWorld {
   arena: Arena;
@@ -113,6 +134,9 @@ export abstract class HeroBrain<H extends Hero = Hero> {
   private route: Vec2[] = [];
   private routeGoal: Vec2 | null = null;
   private routeTimer = 0;
+  /** Décalage latéral derrière le convoi (pour ne pas tous se coller au même endroit). */
+  private coverJitter = 0;
+  private coverJitterTimer = 0;
 
   // --- visée
   protected aimAngle = Math.random() * TAU;
@@ -165,6 +189,11 @@ export abstract class HeroBrain<H extends Hero = Hero> {
 
     this.reaction = Math.max(0, this.reaction - dt);
     this.forcedMove = null;
+    this.coverJitterTimer -= dt;
+    if (this.coverJitterTimer <= 0) {
+      this.coverJitter = randRange(-35, 35);
+      this.coverJitterTimer = randRange(1.5, 3);
+    }
     this.perceive(dt, w);
     this.always(dt, w);
 
@@ -337,26 +366,84 @@ export abstract class HeroBrain<H extends Hero = Hero> {
       if (best) return best;
     }
 
-    const mine = o.owner === h.team;
-    const radius = mine ? o.r * 1.3 : o.r * 0.55;
+    // Où se tenir selon le rôle : autour de quel point, dans quel rayon.
+    const stance = this.stance(o);
+    let anchor: Vec2 = o;
+    let radius: number;
+    switch (stance) {
+      case 'hold':
+        radius = o.r * 1.3;
+        break;
+      case 'capture':
+        radius = o.r * 0.55;
+        break;
+      case 'escort':
+        // Les défenseurs arrivent par l'avant : on se met derrière le convoi.
+        return this.coverSpot(w, o, o.forward ?? { x: 0, y: -1 });
+      case 'block': {
+        const f = o.forward ?? { x: 0, y: 0 };
+        anchor = { x: o.x + f.x * 60, y: o.y + f.y * 60 };
+        radius = o.r * 0.45;
+        break;
+      }
+      case 'guard':
+        anchor = o.holdPoint ?? o;
+        radius = 90;
+        break;
+    }
+
     this.waypointTimer -= dt;
     const wp = this.waypoint;
     const invalid =
       !wp ||
       !this.waypointForObjective ||
       this.waypointTimer <= 0 ||
-      Math.hypot(wp.x - o.x, wp.y - o.y) > radius + 5 ||
+      Math.hypot(wp.x - anchor.x, wp.y - anchor.y) > radius + 5 ||
       Math.hypot(wp.x - h.x, wp.y - h.y) < 40;
     if (invalid) {
-      this.waypoint = this.pointNear(w, o, radius);
+      this.waypoint = this.pointNear(w, anchor, radius);
       this.waypointForObjective = true;
       this.waypointTimer = randRange(1.5, 3.5);
     }
     return this.waypoint!;
   }
 
-  /** Point libre au hasard dans un rayon autour de l'objectif. */
-  private pointNear(w: BrainWorld, o: ObjectiveInfo, radius: number): Vec2 {
+  private stance(o: ObjectiveInfo): Stance {
+    const team = this.hero.team;
+    if (o.attackers === undefined) return o.owner === team ? 'hold' : 'capture';
+    if (o.attackers === team) return 'escort';
+    return o.active ? 'block' : 'guard';
+  }
+
+  /**
+   * Position à couvert derrière le convoi : du côté opposé à la menace,
+   * juste assez loin pour ne pas toucher la caisse (et rester dans la zone de poussée).
+   */
+  private coverSpot(w: BrainWorld, o: ObjectiveInfo, threatDir: Vec2): Vec2 {
+    const h = this.hero;
+    const back = (o.cover ?? 30) + Math.max(h.hw, h.hh) + 22;
+    const perp = { x: -threatDir.y, y: threatDir.x };
+    const spot = {
+      x: o.x - threatDir.x * back + perp.x * this.coverJitter,
+      y: o.y - threatDir.y * back + perp.y * this.coverJitter,
+    };
+    if (!w.arena.boxCollides(spot.x, spot.y, h.hw, h.hh, h.team)) return spot;
+    const straight = { x: o.x - threatDir.x * back, y: o.y - threatDir.y * back };
+    if (!w.arena.boxCollides(straight.x, straight.y, h.hw, h.hh, h.team)) return straight;
+    return this.pointNear(w, o, o.r * 0.6);
+  }
+
+  /** Point libre collé au convoi, du côté `side` (devant pour un défenseur). */
+  private besidePayload(w: BrainWorld, o: ObjectiveInfo, side: Vec2): Vec2 {
+    const h = this.hero;
+    const off = (o.cover ?? 30) + Math.max(h.hw, h.hh) + 22;
+    const p = { x: o.x + side.x * off, y: o.y + side.y * off };
+    if (!w.arena.boxCollides(p.x, p.y, h.hw, h.hh, h.team)) return p;
+    return this.pointNear(w, o, o.r * 0.6);
+  }
+
+  /** Point libre au hasard dans un rayon autour d'un centre. */
+  private pointNear(w: BrainWorld, o: Vec2, radius: number): Vec2 {
     const h = this.hero;
     for (let i = 0; i < 16; i++) {
       const a = Math.random() * TAU;
@@ -367,11 +454,23 @@ export abstract class HeroBrain<H extends Hero = Hero> {
     return { x: o.x, y: o.y };
   }
 
-  /** Point à nous et cible partie loin : on ne la poursuit pas, on garde le point. */
+  /** Cible partie loin de l'objectif : on ne la poursuit pas, on reste sur l'objectif. */
   private tooFarFromObjective(w: BrainWorld, p: Vec2 | null): boolean {
     const o = w.objective;
-    if (!o || !p || o.owner !== this.hero.team) return false;
-    return Math.hypot(p.x - o.x, p.y - o.y) > o.r + 420;
+    if (!o || !p) return false;
+    switch (this.stance(o)) {
+      case 'hold':
+        return Math.hypot(p.x - o.x, p.y - o.y) > o.r + 420;
+      case 'escort':
+      case 'block':
+        return Math.hypot(p.x - o.x, p.y - o.y) > o.r + 450;
+      case 'guard': {
+        const g = o.holdPoint ?? o;
+        return Math.hypot(p.x - g.x, p.y - g.y) > 600;
+      }
+      default:
+        return false;
+    }
   }
 
   /**
@@ -435,17 +534,48 @@ export abstract class HeroBrain<H extends Hero = Hero> {
       y: dir.y * radial + perp.y * this.strafeWeight,
     };
 
-    // Objectif : le combat ne doit pas faire oublier le point.
+    // Objectif : le combat ne doit pas le faire oublier.
     const o = w.objective;
     if (o) {
       const d2 = Math.hypot(o.x - h.x, o.y - h.y);
-      const mine = o.owner === h.team;
-      // Point à nous : on se bat sans trop s'éloigner. Sinon : on avance vers le point en combattant.
-      const pull = mine ? Math.min(1.5, Math.max(0, (d2 - o.r - 120) / 200)) : d2 > o.r * 0.8 ? 0.45 : 0;
+      let goal: Vec2 = o;
+      let pull = 0;
+      switch (this.stance(o)) {
+        case 'hold': // point à nous : on se bat sans trop s'éloigner
+          pull = Math.min(1.5, Math.max(0, (d2 - o.r - 120) / 200));
+          break;
+        case 'capture': // on avance vers le point en combattant
+          pull = d2 > o.r * 0.8 ? 0.45 : 0;
+          break;
+        case 'escort': // dans la zone du convoi, à couvert derrière lui face à la cible
+          // (jamais vers le centre du convoi : c'est un obstacle, aucun chemin n'y mène)
+          if (d2 > o.r * 0.85) {
+            goal = this.coverSpot(w, o, o.forward ?? dir);
+            pull = 1;
+          } else {
+            goal = this.coverSpot(w, o, dir);
+            pull = Math.hypot(goal.x - h.x, goal.y - h.y) > 20 ? 0.9 : 0;
+          }
+          break;
+        case 'block': // plonger dans la zone (devant le convoi) pour contester
+          if (d2 > o.r * 0.75) {
+            goal = this.besidePayload(w, o, o.forward ?? dir);
+            pull = 1.3;
+          }
+          break;
+        case 'guard': {
+          const g = o.holdPoint ?? o;
+          if (Math.hypot(g.x - h.x, g.y - h.y) > 400) {
+            goal = g;
+            pull = 0.8;
+          }
+          break;
+        }
+      }
       if (pull > 0) {
-        const toPoint = this.navigate(o, dt, w);
-        desired.x += toPoint.x * pull;
-        desired.y += toPoint.y * pull;
+        const toGoal = this.navigate(goal, dt, w);
+        desired.x += toGoal.x * pull;
+        desired.y += toGoal.y * pull;
       }
     }
     return desired;

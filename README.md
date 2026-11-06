@@ -23,8 +23,23 @@ Galerie des sprites pixel art (pour travailler les designs) : http://localhost:5
 
 ## Modes de jeu
 
-Le menu principal propose trois modes :
+Le menu principal propose trois modes. En **Partie rapide**, c'est la carte qui décide du mode.
 
+- **Partie rapide → Route 66 (Escorte)**, en 2 contre 2 asymétrique.
+  - Rôles : bleus et rouges sont tirés au sort en **attaque** ou en **défense**.
+  - Le convoi :
+    - Il suit un parcours A → checkpoint → B. C'est un obstacle : on se cache derrière, il arrête les tirs.
+    - Au moins un attaquant dans sa zone et aucun défenseur : il avance (*Poussée*).
+    - Attaquants et défenseurs dans la zone : il s'arrête net (*Contesté*).
+    - Aucun attaquant : il s'arrête (*Arrêté*), puis recule à 1/4 de vitesse au bout de 3 s (*Recul*).
+      Il ne recule jamais sous le checkpoint.
+  - Le temps :
+    - 3:00 pour atteindre le checkpoint, puis le chrono repart à 3:00 pour atteindre B.
+    - À 0:00, si un attaquant touche le convoi : **prolongations** jusqu'à ce qu'il soit repoussé.
+  - Spawns qui avancent :
+    - Phase 1 : attaque au départ, défense au milieu.
+    - Phase 2 : attaque au milieu, défense à l'arrivée.
+    - Le spawn du milieu est caché derrière le virage, ses portes tournées à l'opposé du pont.
 - **Partie rapide → Sanctuaire (Contrôle)**, en 2 contre 2.
   - Équipes :
     - **Bleue** : toi + 1 bot. **Rouge** : 2 bots.
@@ -57,6 +72,14 @@ Commun aux deux modes :
 - **Ligne de vue** : les murs bloquent la vision (raycasting + brouillard de guerre).
 - **Zone de vision 16:9** identique pour tous les écrans ; caméra verrouillée sur le joueur.
 - **Interface bilingue** FR / EN.
+
+## Carte Route 66
+
+Carte originale :
+- Le convoi part du sud-ouest, longe une place et traverse le canal par un pont (passage obligé).
+- Il passe le checkpoint, puis tourne dans les rues jusqu'au nord-est.
+- On peut contourner par une passerelle à l'ouest, ou par une rue et un passage étroit à l'est.
+- L'eau bloque les déplacements mais pas la vue ni les tirs.
 
 ## Carte Sanctuaire
 
@@ -131,8 +154,8 @@ src/
   Game.ts          scènes (menu → carte / config → sélection → partie → scores) et boucle
   config.ts        valeurs globales (map, bots, vision, couleurs)
   i18n.ts          traductions FR / EN
-  game/            simulation commune (World) et packs de soin
-  modes/           règles : champ de tir, Deathmatch, Contrôle (base commune MatchMode)
+  game/            simulation commune (World), convoi (Payload), packs de soin
+  modes/           règles : champ de tir, Deathmatch, Contrôle, Escorte (bases MatchMode / TeamMatchMode)
   ai/              IA des bots héros (machine à états, objectif, navigation)
   core/            entrées, commandes joueur / IA, caméra, maths
   heroes/          classe Hero + un fichier par héros + registre

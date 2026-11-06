@@ -17,6 +17,10 @@
 .screen.visible {
   display: flex;
 }
+/* Contenu plus haut que la fenêtre : on défile au lieu de couper le haut. */
+.screen {
+  align-items: safe center;
+}
 .screen-inner {
   width: 100%;
   max-width: 1040px;
@@ -467,9 +471,10 @@ kbd {
 /* Sélection de la carte */
 .map-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 520px));
-  justify-content: center;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
   gap: 22px;
+  max-width: 1000px;
+  margin: 0 auto;
 }
 .map-card {
   display: grid;
@@ -584,4 +589,12 @@ kbd {
 }
 .score-table.by-team .col-name {
   padding-left: 22px;
+}
+
+.score-role {
+  display: block;
+  margin-top: 4px;
+  color: rgba(233, 238, 245, 0.55);
+  font-size: 14px;
+  font-weight: 700;
 }
