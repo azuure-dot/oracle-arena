@@ -23,7 +23,23 @@ Galerie des sprites pixel art (pour travailler les designs) : http://localhost:5
 
 ## Modes de jeu
 
-Le menu principal propose deux modes :
+Le menu principal propose trois modes :
+
+- **Partie rapide → Sanctuaire (Contrôle)**, en 2 contre 2.
+  - Équipes :
+    - **Bleue** : toi + 1 bot. **Rouge** : 2 bots.
+    - Aucun héros en double dans une même équipe.
+  - Le point :
+    - Une équipe seule sur le point le capture (8 s, plus vite à deux).
+    - Les deux équipes dessus : le point est **contesté**.
+    - L'équipe qui possède le point gagne 1 % par seconde. À 100 %, elle remporte la manche.
+    - **Prolongations** : impossible de gagner tant que l'adversaire conteste le point.
+  - Les manches :
+    - Match en 2 manches gagnantes, avec une transition de 3 s entre chaque.
+    - À chaque manche, tout le monde repart du spawn avec PV et compétences à neuf.
+  - **Spawn protégé** : dans le spawn de ton équipe, tu es invincible, soigné à 100 % et
+    tu peux changer de héros (touche **C**). L'équipe adverse ne peut pas y entrer.
+  - **Packs de soin** : +200 PV, réapparition au bout de 10 s.
 
 - **Champ de tir** : sélection du héros, puis entraînement sur des cibles, des patrouilles,
   des tourelles qui tirent quand elles voient le joueur et des alliés blessés (stats de DPS).
@@ -42,6 +58,20 @@ Commun aux deux modes :
 - **Zone de vision 16:9** identique pour tous les écrans ; caméra verrouillée sur le joueur.
 - **Interface bilingue** FR / EN.
 
+## Carte Sanctuaire
+
+Carte originale (`src/world/maps.ts`), symétrique par rotation de 180° pour que les deux
+équipes aient exactement le même terrain.
+
+- Les murs sont décrits pour une moitié, l'autre moitié est générée par symétrie.
+- Chaque spawn s'ouvre par deux portes (traits jaunes au sol).
+- Trois voies mènent à la salle centrale, qui abrite le point (cercle de 170 px de rayon).
+- Six packs de soin sont répartis sur la carte.
+
+Les cartes se décrivent avec des `MapDef` :
+- murs, spawns par équipe, zones protégées, point de contrôle, packs de soin ;
+- points de navigation pour l'IA (les liaisons entre eux sont calculées automatiquement).
+
 ## IA des bots héros
 
 Les héros ne lisent jamais le clavier directement : ils lisent des **commandes**
@@ -56,6 +86,16 @@ L'IA (`src/ai/`) est une machine à états simple :
   - Il garde la distance idéale de son héros et se déplace en latéral.
   - Il vise avec un temps de réaction et une rotation limitée.
   - S'il perd sa cible de vue, il va voir à sa dernière position, puis repasse en ROAM après 3 s.
+
+En mode Contrôle, une couche **macro** décide où aller, au-dessus de ce combat :
+
+- **Point pas à nous** : le bot y va et attaque les ennemis croisés en chemin ou sur le point.
+- **Point à nous** : il patrouille dans le point ou tout près, et ne poursuit pas un ennemi
+  qui s'éloigne trop.
+- **Moins de 50 % de PV** : il fait un détour par un pack de soin proche.
+
+Les longs trajets suivent un petit graphe de navigation (Dijkstra sur une cinquantaine de
+points), et le bot coupe les virages dès qu'il voit plus loin sur le chemin.
 
 Comportements par héros :
 
@@ -79,7 +119,8 @@ Comportements par héros :
 | H                 | Aide                                |
 | X                 | Afficher les hitbox                 |
 | B / T             | Tourelles on/off · reset des stats (champ de tir) |
-| Échap             | Champ de tir : sélection du héros · Deathmatch : quitter la partie |
+| C                 | Changer de héros (Contrôle, dans ton spawn) |
+| Échap             | Champ de tir : sélection du héros · autres modes : quitter la partie |
 
 Dans les menus : touches 1, 2, 3… pour choisir, Entrée pour valider, Échap pour revenir.
 
@@ -87,15 +128,15 @@ Dans les menus : touches 1, 2, 3… pour choisir, Entrée pour valider, Échap p
 
 ```
 src/
-  Game.ts          scènes (menu → config → sélection → partie → scores) et boucle
+  Game.ts          scènes (menu → carte / config → sélection → partie → scores) et boucle
   config.ts        valeurs globales (map, bots, vision, couleurs)
   i18n.ts          traductions FR / EN
-  game/World.ts    simulation commune : héros, bots, projectiles, dégâts, vision, rendu
-  modes/           règles : champ de tir, Deathmatch
-  ai/              IA des bots héros (machine à états, déplacement par raycasts)
+  game/            simulation commune (World) et packs de soin
+  modes/           règles : champ de tir, Deathmatch, Contrôle (base commune MatchMode)
+  ai/              IA des bots héros (machine à états, objectif, navigation)
   core/            entrées, commandes joueur / IA, caméra, maths
   heroes/          classe Hero + un fichier par héros + registre
   entities/        bots du champ de tir, projectiles, interface Combatant
-  world/           map, ligne de vue, brouillard
+  world/           cartes (maps.ts), arène, ligne de vue, brouillard
   ui/              HUD, HUD du Deathmatch, écrans HTML (menus, sélection, scores)
 ```

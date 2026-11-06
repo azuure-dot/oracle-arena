@@ -23,6 +23,8 @@ export interface DamageEvent {
 export interface WorldHooks {
   respawnPoint(hero: Hero): Vec2;
   onDamage?(e: DamageEvent): void;
+  /** Dessin au sol propre au mode (point de contrôle, packs de soin...), sous les entités. */
+  drawGround?(ctx: CanvasRenderingContext2D, time: number): void;
 }
 
 export interface ViewTransform {
@@ -102,6 +104,12 @@ export class World {
     this.updateProjectiles(dt);
     this.updateVisibility();
     this.effects.update(dt);
+  }
+
+  /** Vide projectiles et effets (début de manche). */
+  clearTransient(): void {
+    this.projectiles = [];
+    this.effects.clear();
   }
 
   damage(target: Combatant, amount: number, source: Hero | null): number {
@@ -196,7 +204,8 @@ export class World {
     const sees = (c: Combatant) =>
       inVisionRange(eye.x, eye.y, c.x, c.y, c.hw, c.hh) && canSeeBox(this.arena, eye.x, eye.y, c.box());
     for (const b of this.bots) b.visible = sees(b);
-    for (const h of this.heroes) h.visible = h === eye || (h.alive && sees(h));
+    // Les alliés restent toujours affichés (comme leurs contours dans un hero shooter).
+    for (const h of this.heroes) h.visible = h === eye || (h.alive && (!hostile(h, eye) || sees(h)));
   }
 
   // ------------------------------------------------------------------ rendu
@@ -218,6 +227,7 @@ export class World {
     // --- 1. Monde (sol, entités visibles, effets)
     toWorld();
     this.arena.drawFloor(ctx);
+    this.hooks.drawGround?.(ctx, this.time);
     this.effects.drawUnder(ctx);
     for (const h of shown) h.drawUnder(ctx, this.time);
     for (const b of this.bots) if (b.visible) b.draw(ctx);

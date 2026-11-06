@@ -151,6 +151,11 @@ export class Rempart extends Hero {
   }
 
   protected override onRespawn(): void {
+    // Nouvelle manche en pleine Charge : on relâche tout sans dégâts.
+    if (this.charge?.pinned) this.charge.pinned.pinned = false;
+    this.charge = null;
+    this.setShield(false);
+    this.hammerTimer = 0;
     this.shieldHp = SHIELD.maxHp;
     this.shieldBroken = 0;
     this.fireCooldown = 0;
@@ -277,7 +282,7 @@ export class Rempart extends Hero {
       const nx = this.x + (dx * dist) / steps;
       const ny = this.y + (dy * dist) / steps;
 
-      if (ctx.arena.boxCollides(nx, ny, this.hw - 0.5, this.hh - 0.5)) {
+      if (ctx.arena.boxCollides(nx, ny, this.hw - 0.5, this.hh - 0.5, this.team)) {
         this.impact(ctx);
         return;
       }
@@ -286,7 +291,7 @@ export class Rempart extends Hero {
         const off = boxExtent(this, dx, dy) + boxExtent(c.pinned, dx, dy) + 2;
         const px = nx + dx * off;
         const py = ny + dy * off;
-        if (ctx.arena.boxCollides(px, py, c.pinned.hw - 0.5, c.pinned.hh - 0.5)) {
+        if (ctx.arena.boxCollides(px, py, c.pinned.hw - 0.5, c.pinned.hh - 0.5, this.team)) {
           this.impact(ctx);
           return;
         }
@@ -353,12 +358,12 @@ export class Rempart extends Hero {
     if (!c) return;
     if (c.pinned) {
       c.pinned.pinned = false;
-      if (c.pinned.alive) ctx.arena.resolveBox(c.pinned, c.pinned.hw, c.pinned.hh);
+      if (c.pinned.alive) ctx.arena.resolveBox(c.pinned, c.pinned.hw, c.pinned.hh, c.pinned.team);
     }
     this.charge = null;
     this.chargeCooldown = CHARGE.cooldown;
     this.vx = this.vy = 0;
-    ctx.arena.resolveBox(this, this.hw, this.hh);
+    ctx.arena.resolveBox(this, this.hw, this.hh, this.team);
   }
 
   // ------------------------------------------------------------ sprite

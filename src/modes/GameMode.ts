@@ -1,15 +1,17 @@
 import { COLORS } from '../config';
 import type { Camera } from '../core/Camera';
-import { PlayerControls } from '../core/Controls';
+import { NO_CONTROLS, PlayerControls } from '../core/Controls';
 import type { Input } from '../core/Input';
 import type { Vec2 } from '../core/math';
 import { World, type DamageEvent } from '../game/World';
 import type { Hero } from '../heroes/Hero';
 import type { HeroEntry } from '../heroes/registry';
 import { HUD } from '../ui/HUD';
-import type { Arena } from '../world/Arena';
+import type { MatchResult } from '../ui/screens/Scoreboard';
+import { Arena } from '../world/Arena';
+import type { MapDef } from '../world/maps';
 
-export type ModeKind = 'practice' | 'deathmatch';
+export type ModeKind = 'practice' | 'deathmatch' | 'control';
 
 /** Ce que le jeu fournit au mode pour dessiner son HUD. */
 export interface ScreenInfo {
@@ -20,6 +22,8 @@ export interface ScreenInfo {
   /** Distance curseur ↔ héros à l'écran (px) : rayon de dispersion du viseur. */
   aimDistance: number;
   fps: number;
+  /** Transformation monde → écran (indicateurs hors écran). */
+  view: { scale: number; tx: number; ty: number };
 }
 
 /**
@@ -29,23 +33,29 @@ export interface ScreenInfo {
 export abstract class GameMode {
   abstract readonly kind: ModeKind;
   readonly world: World;
-  readonly player: Hero;
+  readonly arena: Arena;
+  /** Héros du joueur (peut changer en cours de partie : changement de héros au spawn). */
+  player: Hero;
   protected readonly hud = new HUD();
-  private readonly playerControls: PlayerControls;
+  protected readonly playerControls: PlayerControls;
+  /** Un menu est ouvert par-dessus la partie (changement de héros) : le joueur ne contrôle plus son héros. */
+  uiOpen = false;
   /** Touche X : affiche les hitbox. */
   showHitboxes = false;
   /** Échap pressé : le jeu quitte le mode. */
   exitRequested = false;
 
   constructor(
-    arena: Arena,
+    readonly map: MapDef,
     protected readonly camera: Camera,
     protected readonly input: Input,
     readonly entry: HeroEntry,
   ) {
-    this.world = new World(arena, camera, {
+    this.arena = new Arena(map);
+    this.world = new World(this.arena, camera, {
       respawnPoint: (hero) => this.respawnPoint(hero),
       onDamage: (e) => this.onDamage(e),
+      drawGround: (ctx, time) => this.drawGround(ctx, time),
     });
     this.playerControls = new PlayerControls(input);
     this.player = entry.create();
@@ -61,7 +71,12 @@ export abstract class GameMode {
 
   update(dt: number): void {
     const input = this.input;
-    if (input.wasPressed('Escape')) {
+    if (this.uiOpen) {
+      this.player.controls = NO_CONTROLS;
+    } else {
+      this.player.controls = this.playerControls;
+    }
+    if (!this.uiOpen && input.wasPressed('Escape')) {
       this.exitRequested = true;
       return;
     }
@@ -72,10 +87,23 @@ export abstract class GameMode {
     const aim = this.camera.screenToWorld(input.mouseX, input.mouseY);
     this.playerControls.sample(aim.x, aim.y);
 
-    this.beforeWorld(dt);
-    this.world.update(dt);
+    if (!this.simulationPaused()) {
+      this.beforeWorld(dt);
+      this.world.update(dt);
+    }
     this.afterWorld(dt);
     this.hud.update(dt);
+  }
+
+  /** true pendant une pause (transition entre deux manches) : le monde est figé. */
+  protected simulationPaused(): boolean {
+    return false;
+  }
+  /** Dessin au sol propre au mode. */
+  protected drawGround(_ctx: CanvasRenderingContext2D, _time: number): void {}
+  /** Résultat à afficher en fin de partie (null : pas de tableau des scores). */
+  result(): MatchResult | null {
+    return null;
   }
 
   /** Touches propres au mode. */

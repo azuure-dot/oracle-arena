@@ -21,6 +21,8 @@ export interface HudFrame {
   /** Aide (touche H) : titre et lignes propres au mode. */
   helpTitle: string;
   helpFooter: string[];
+  /** Hauteur du haut de l'aide (sous le bandeau des modes en ligne). */
+  helpTop?: number;
   /** Sous le compte à rebours de réapparition (ex. « Éliminé par Vex »). */
   deathMessage?: string;
 }
@@ -429,7 +431,7 @@ export class HUD {
       ...f.helpFooter,
     ];
     const x = 24;
-    let y = 30;
+    let y = f.helpTop ?? 30;
     ctx.fillStyle = 'rgba(10,14,20,0.55)';
     ctx.fillRect(x - 10, y - 20, 320, lines.length * 19 + 14);
     ctx.textAlign = 'left';

@@ -70,6 +70,11 @@ export class Input {
     return this.buttonsPressed[button];
   }
 
+  /** Oublie une pression de touche (déjà utilisée par un menu affiché par-dessus le jeu). */
+  forget(code: string): void {
+    this.keysPressed.delete(code);
+  }
+
   /** À appeler à la fin de chaque frame pour vider les événements "pressés". */
   endFrame(): void {
     this.keysPressed.clear();

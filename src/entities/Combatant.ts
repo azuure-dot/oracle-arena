@@ -17,6 +17,8 @@ export interface Combatant {
   readonly hp: number;
   readonly maxHp: number;
   readonly alive: boolean;
+  /** Protégé dans sa zone de spawn (les bots ne le prennent pas pour cible). */
+  readonly safe?: boolean;
   /** Tenu par une Charge : sa position est pilotée par le Rempart qui charge. */
   pinned: boolean;
   /** Buffs d'aura de Tempo : remis à zéro chaque frame par le monde. */

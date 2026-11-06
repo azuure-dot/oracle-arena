@@ -8,7 +8,7 @@ import type { DamageEvent } from '../game/World';
 import type { HeroEntry } from '../heroes/registry';
 import { t } from '../i18n';
 import { Stats } from '../ui/Stats';
-import type { Arena } from '../world/Arena';
+import { PRACTICE_MAP } from '../world/maps';
 import { GameMode, type ScreenInfo } from './GameMode';
 
 /** Les cibles, tourelles et alliés du champ de tir (aussi utilisés en fond des menus). */
@@ -46,8 +46,8 @@ export class PracticeMode extends GameMode {
   readonly kind = 'practice';
   private readonly stats = new Stats();
 
-  constructor(arena: Arena, camera: Camera, input: Input, entry: HeroEntry) {
-    super(arena, camera, input, entry);
+  constructor(camera: Camera, input: Input, entry: HeroEntry) {
+    super(PRACTICE_MAP, camera, input, entry);
     this.player.team = ALLY;
     this.player.placeAt(PLAYER_SPAWN);
     this.world.player = this.player;

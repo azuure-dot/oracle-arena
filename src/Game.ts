@@ -4,16 +4,20 @@ import { Input } from './core/Input';
 import { damp } from './core/math';
 import { World } from './game/World';
 import { HEROES, type HeroEntry } from './heroes/registry';
+import { t } from './i18n';
+import { ControlMode } from './modes/ControlMode';
 import { DeathmatchMode, type DeathmatchConfig } from './modes/DeathmatchMode';
 import type { GameMode, ModeKind } from './modes/GameMode';
 import { PracticeMode, createRangeBots } from './modes/PracticeMode';
 import { DeathmatchSetup } from './ui/screens/DeathmatchSetup';
 import { MainMenu } from './ui/screens/MainMenu';
+import { MapSelect } from './ui/screens/MapSelect';
 import type { Screen } from './ui/screens/Screen';
-import { Scoreboard, type MatchResult } from './ui/screens/Scoreboard';
+import { Scoreboard } from './ui/screens/Scoreboard';
 import { SelectScreen } from './ui/screens/SelectScreen';
 import { Arena } from './world/Arena';
 import { Fog } from './world/Fog';
+import { PRACTICE_MAP, QUICKPLAY_MAPS, type MapDef } from './world/maps';
 
 /** Delta max pour éviter les "téléportations" après un onglet en arrière-plan. */
 const MAX_DT = 1 / 20;
@@ -21,19 +25,20 @@ const MAX_DT = 1 / 20;
 /**
  * Enchaînement des scènes :
  *
- *   Menu ─┬─ Champ de tir ──────────────▶ Sélection ─▶ En jeu (Échap → Sélection)
- *         └─ Deathmatch ─▶ Configuration ─▶ Sélection ─▶ En jeu ─▶ Scores ─▶ Menu / Rejouer
+ *   Menu ─┬─ Partie rapide ─▶ Carte ───────▶ Sélection ─▶ En jeu ─▶ Victoire / défaite
+ *         ├─ Champ de tir ───────────────▶ Sélection ─▶ En jeu (Échap → Sélection)
+ *         └─ Deathmatch ─▶ Configuration ─▶ Sélection ─▶ En jeu ─▶ Scores
  */
-export type Scene = 'menu' | 'dmSetup' | 'select' | 'playing' | 'scoreboard';
+export type Scene = 'menu' | 'mapSelect' | 'dmSetup' | 'select' | 'playing' | 'scoreboard';
 
 export class Game {
   private readonly ctx: CanvasRenderingContext2D;
   private readonly input: Input;
-  private readonly arena = new Arena();
   private readonly camera = new Camera();
   private readonly fog = new Fog();
 
   private readonly mainMenu: MainMenu;
+  private readonly mapSelect: MapSelect;
   private readonly dmSetup: DeathmatchSetup;
   private readonly selectScreen: SelectScreen;
   private readonly scoreboard: Scoreboard;
@@ -45,6 +50,7 @@ export class Game {
   /** Monde animé derrière les menus (le champ de tir, sans joueur). */
   private readonly backdrop: World;
   private pendingKind: ModeKind = 'practice';
+  private pendingMap: MapDef = QUICKPLAY_MAPS[0];
   private dmConfig: DeathmatchConfig;
   private lastEntry: HeroEntry | null = null;
 
@@ -63,17 +69,28 @@ export class Game {
     this.ctx = ctx;
     this.input = new Input(canvas);
 
-    this.backdrop = new World(this.arena, this.camera, { respawnPoint: () => PLAYER_SPAWN });
+    this.backdrop = new World(new Arena(PRACTICE_MAP), this.camera, { respawnPoint: () => PLAYER_SPAWN });
     this.backdrop.bots = createRangeBots();
 
     this.mainMenu = new MainMenu(overlay, (choice) => {
-      if (choice === 'practice') {
+      if (choice === 'quickplay') this.goTo('mapSelect');
+      else if (choice === 'deathmatch') this.goTo('dmSetup');
+      else {
         this.pendingKind = 'practice';
         this.goTo('select');
-      } else {
-        this.goTo('dmSetup');
       }
     });
+    this.mapSelect = new MapSelect(
+      overlay,
+      QUICKPLAY_MAPS,
+      (map) => {
+        // La carte détermine le mode : Sanctuaire → Contrôle.
+        this.pendingMap = map;
+        this.pendingKind = 'control';
+        this.goTo('select');
+      },
+      () => this.goTo('menu'),
+    );
     this.dmSetup = new DeathmatchSetup(
       overlay,
       (config) => {
@@ -88,20 +105,23 @@ export class Game {
       overlay,
       HEROES,
       (entry) => this.startMode(entry),
-      () => this.goTo(this.pendingKind === 'deathmatch' ? 'dmSetup' : 'menu'),
+      () => this.goTo(this.pendingKind === 'deathmatch' ? 'dmSetup' : this.pendingKind === 'control' ? 'mapSelect' : 'menu'),
     );
     this.scoreboard = new Scoreboard(
       overlay,
       () => this.goTo('menu'),
       () => this.lastEntry && this.startMode(this.lastEntry),
     );
-    this.screens = [this.mainMenu, this.dmSetup, this.selectScreen, this.scoreboard];
+    this.screens = [this.mainMenu, this.mapSelect, this.dmSetup, this.selectScreen, this.scoreboard];
 
     // Le clavier des menus va à l'écran affiché (un seul à la fois).
     window.addEventListener('keydown', (e) => {
       if (e.repeat) return;
       const screen = this.screens.find((s) => s.visible);
-      if (screen?.handleKey(e)) e.preventDefault();
+      if (screen?.handleKey(e)) {
+        e.preventDefault();
+        this.input.forget(e.code); // ex. Échap qui ferme un menu ne quitte pas aussi la partie
+      }
     });
 
     this.resize();
@@ -121,23 +141,25 @@ export class Game {
   goTo(scene: Scene): void {
     this.scene = scene;
     for (const s of this.screens) s.hide();
+    this.selectScreen.swap = null;
     switch (scene) {
       case 'menu':
-        this.mode = null;
-        this.mainMenu.show();
-        break;
+      case 'mapSelect':
       case 'dmSetup':
         this.mode = null;
-        this.dmSetup.show();
+        (scene === 'menu' ? this.mainMenu : scene === 'mapSelect' ? this.mapSelect : this.dmSetup).show();
         break;
       case 'select':
         this.mode = null;
         this.selectScreen.mode = this.pendingKind;
+        this.selectScreen.mapName = t(this.pendingMap.nameKey);
         this.selectScreen.show();
         break;
-      case 'scoreboard':
-        if (this.mode instanceof DeathmatchMode) this.scoreboard.showResult(matchResult(this.mode));
+      case 'scoreboard': {
+        const result = this.mode?.result();
+        if (result) this.scoreboard.showResult(result);
         break;
+      }
       case 'playing':
         break;
     }
@@ -145,13 +167,41 @@ export class Game {
 
   private startMode(entry: HeroEntry): void {
     this.lastEntry = entry;
-    this.mode =
-      this.pendingKind === 'deathmatch'
-        ? new DeathmatchMode(this.arena, this.camera, this.input, entry, this.dmConfig)
-        : new PracticeMode(this.arena, this.camera, this.input, entry);
+    switch (this.pendingKind) {
+      case 'control':
+        this.mode = new ControlMode(this.pendingMap, this.camera, this.input, entry);
+        break;
+      case 'deathmatch':
+        this.mode = new DeathmatchMode(this.camera, this.input, entry, this.dmConfig);
+        break;
+      default:
+        this.mode = new PracticeMode(this.camera, this.input, entry);
+    }
     this.camera.centerOn(this.mode.player.x, this.mode.player.y);
     this.input.endFrame();
     this.goTo('playing');
+  }
+
+  /** Contrôle : changement de héros dans le spawn (la partie continue derrière). */
+  private openHeroSwap(mode: ControlMode): void {
+    mode.swapRequested = false;
+    mode.uiOpen = true;
+    const close = () => {
+      mode.uiOpen = false;
+      this.selectScreen.swap = null;
+      this.selectScreen.hide();
+    };
+    this.selectScreen.swap = {
+      taken: mode.takenByAllies(),
+      current: mode.player.name,
+      onPick: (entry) => {
+        mode.swapPlayerHero(entry);
+        this.lastEntry = entry; // « Rejouer » reprend le dernier héros joué
+        close();
+      },
+      onClose: close,
+    };
+    this.selectScreen.show();
   }
 
   // ------------------------------------------------------------ boucle
@@ -183,15 +233,21 @@ export class Game {
     if (this.scene === 'playing' && mode) {
       mode.update(dt);
       if (mode.exitRequested) {
-        // Champ de tir : retour à la sélection · Deathmatch : abandon, retour au menu.
+        // Champ de tir : retour à la sélection · autres modes : abandon, retour au menu.
         this.goTo(mode.kind === 'practice' ? 'select' : 'menu');
         return;
       }
-      if (mode.finished) this.goTo('scoreboard'); // la partie se fige derrière les scores
+      if (mode.finished) {
+        this.goTo('scoreboard'); // la partie se fige derrière les scores
+      } else if (mode instanceof ControlMode) {
+        if (mode.swapRequested && !mode.uiOpen) this.openHeroSwap(mode);
+        // Le joueur a quitté son spawn ou la manche s'est terminée : on ferme le menu.
+        if (mode.uiOpen && (!mode.player.safe || mode.phase !== 'playing')) this.selectScreen.swap?.onClose();
+      }
       this.camera.centerOn(mode.player.x, mode.player.y); // caméra verrouillée sur le joueur
     } else if (!mode) {
       this.backdrop.update(dt);
-      this.camera.centerOn(this.arena.width / 2, this.arena.height / 2);
+      this.camera.centerOn(this.backdrop.arena.width / 2, this.backdrop.arena.height / 2);
     }
     this.camera.update(dt);
   }
@@ -210,7 +266,7 @@ export class Game {
       return;
     }
     mode.world.draw(ctx, dpr, view, this.viewW, this.viewH, this.fog, mode.showHitboxes);
-    if (this.scene !== 'playing') return;
+    if (this.scene !== 'playing' || mode.uiOpen) return;
 
     const aim = this.camera.screenToWorld(this.input.mouseX, this.input.mouseY);
     const p = mode.player;
@@ -222,24 +278,7 @@ export class Game {
       // distance à l'écran (px) : le cercle de dispersion du viseur suit le zoom
       aimDistance: Math.hypot(aim.x - p.x, aim.y - p.y) * view.scale,
       fps: this.fps,
+      view,
     });
   }
-}
-
-/** Classement final pour le tableau des scores. */
-function matchResult(dm: DeathmatchMode): MatchResult {
-  const you = dm.playerEntry;
-  const playerRank = dm.rankOf(you);
-  return {
-    rows: dm.ranking().map((p) => ({
-      rank: dm.rankOf(p),
-      name: p.isPlayer ? null : p.name,
-      hero: p.hero.name,
-      heroColor: p.hero.stats.color,
-      kills: p.kills,
-      deaths: p.deaths,
-    })),
-    playerRank,
-    playerWon: playerRank === 1 && dm.participants.every((p) => p === you || p.kills < you.kills),
-  };
 }

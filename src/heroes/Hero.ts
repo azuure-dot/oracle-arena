@@ -122,6 +122,8 @@ export abstract class Hero implements Combatant {
   respawnTimer = 0;
   hurtTimer = 0;
   pinned = false;
+  /** Dans la zone de spawn de son équipe : invincible (mis à jour par le mode). */
+  safe = false;
   /** Buff d'aura reçu cette frame (indicateur au-dessus de la tête). */
   buff: BuffKind | null = null;
   auraSpeedMul = 1;
@@ -163,7 +165,7 @@ export abstract class Hero implements Combatant {
     return !this.dead;
   }
   get invulnerable(): boolean {
-    return this.dead;
+    return this.dead || this.safe;
   }
   /** Dispersion de l'arme pour le viseur (0 = viseur simple). */
   get spreadDeg(): number {
@@ -299,7 +301,7 @@ export abstract class Hero implements Combatant {
     } else {
       this.kvx = this.kvy = 0;
     }
-    ctx.arena.resolveBox(this, this.hw, this.hh);
+    ctx.arena.resolveBox(this, this.hw, this.hh, this.team);
   }
 
   applyImpulse(ix: number, iy: number): void {
@@ -345,12 +347,20 @@ export abstract class Hero implements Combatant {
     return false;
   }
 
-  /** Réapparition : PV au max et compétences réinitialisées (onRespawn). */
   private respawn(ctx: GameContext): void {
+    this.revive(ctx, ctx.respawnPoint(this));
+  }
+
+  /**
+   * Remet le héros à neuf à cet endroit : PV au max, compétences réinitialisées (onRespawn).
+   * Sert à la réapparition et au début de chaque manche.
+   */
+  revive(ctx: GameContext, at: Vec2): void {
     this.dead = false;
     this.hp = this.maxHp;
-    this.placeAt(ctx.respawnPoint(this));
+    this.placeAt(at);
     this.kvx = this.kvy = 0;
+    this.buff = null;
     this.pinned = false;
     this.hurtTimer = 0;
     this.meleeCooldown = 0;

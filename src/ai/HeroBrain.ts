@@ -3,8 +3,10 @@ import { distToBox } from '../core/geometry';
 import { angleDiff, normalize, randRange, rotateTowards, TAU, type Vec2 } from '../core/math';
 import { hostile, type Combatant } from '../entities/Combatant';
 import type { Hero } from '../heroes/Hero';
+import type { Team } from '../entities/Team';
 import type { Arena } from '../world/Arena';
 import { canSeeBox, inVisionRange } from '../world/Visibility';
+import type { NavGraph } from './nav';
 import { clearance, pathClear, randomFreePoint, steer } from './steering';
 
 /**
@@ -19,16 +21,35 @@ import { clearance, pathClear, randomFreePoint, steer } from './steering';
  *   vise avec un temps de réaction et une vitesse de rotation limitée, et laisse
  *   la sous-classe décider des tirs et des compétences (combat()).
  *
+ * Au-dessus, une couche MACRO (modes à objectif) décide OÙ aller :
+ * - point pas à nous → y aller (et combattre ceux qu'on croise en chemin ou dessus) ;
+ * - point à nous → rester dessus ou tout près pour le défendre, sans partir en chasse ;
+ * - peu de PV → détour par un pack de soin proche.
+ * Les déplacements longs suivent un petit graphe de navigation (nav.ts).
+ *
  * L'IA ne touche jamais au héros directement : elle remplit ses BotControls,
  * exactement comme le clavier remplit ceux du joueur.
  */
 
 export type BotState = 'roam' | 'attack';
 
+/** Objectif du mode (point de contrôle) tel que le voit l'IA. */
+export interface ObjectiveInfo {
+  x: number;
+  y: number;
+  r: number;
+  /** Équipe qui possède le point (null = neutre). */
+  owner: Team | null;
+}
+
 export interface BrainWorld {
   arena: Arena;
   targets: readonly Combatant[];
   time: number;
+  objective?: ObjectiveInfo;
+  nav?: NavGraph;
+  /** Packs de soin disponibles. */
+  healthPacks?: readonly Vec2[];
 }
 
 /** Infos sur la cible, calculées chaque frame pour combat(). */
@@ -45,6 +66,7 @@ export interface TargetInfo {
 
 const PERCEPTION_INTERVAL = 0.15; // s entre deux "regards" autour de soi
 const LOSE_TARGET_AFTER = 3; // s sans voir la cible avant de repartir en patrouille
+const LOSE_TARGET_OBJECTIVE = 1.5; // plus court en mode objectif : on retourne vite au point
 
 export abstract class HeroBrain<H extends Hero = Hero> {
   state: BotState = 'roam';
@@ -85,6 +107,12 @@ export abstract class HeroBrain<H extends Hero = Hero> {
   private wantedMoveTime = 0;
   private unstickTimer = 0;
   private unstickDir: Vec2 = { x: 0, y: 0 };
+  /** Le point de patrouille actuel sert l'objectif (et non une balade aléatoire). */
+  private waypointForObjective = false;
+  // --- navigation (graphe)
+  private route: Vec2[] = [];
+  private routeGoal: Vec2 | null = null;
+  private routeTimer = 0;
 
   // --- visée
   protected aimAngle = Math.random() * TAU;
@@ -158,7 +186,10 @@ export abstract class HeroBrain<H extends Hero = Hero> {
     this.applyAim(dt, w);
   }
 
-  private reset(): void {
+  /** Oublie tout (mort, nouvelle manche). */
+  reset(): void {
+    this.route = [];
+    this.routeGoal = null;
     this.state = 'roam';
     this.target = null;
     this.targetVisible = false;
@@ -194,7 +225,7 @@ export abstract class HeroBrain<H extends Hero = Hero> {
       let best: Combatant | null = null;
       let bestScore = Infinity;
       for (const c of w.targets) {
-        if (!c.alive || !hostile(h, c)) continue;
+        if (!c.alive || !hostile(h, c) || c.safe) continue; // inutile de viser un ennemi protégé au spawn
         if (!inVisionRange(h.x, h.y, c.x, c.y, c.hw, c.hh)) continue;
         if (!canSeeBox(w.arena, h.x, h.y, c.box())) continue;
         // On garde sa cible actuelle sauf si une autre est nettement plus proche.
@@ -222,7 +253,8 @@ export abstract class HeroBrain<H extends Hero = Hero> {
     } else {
       this.lostTimer += dt;
       const reached = this.lastSeen && Math.hypot(this.lastSeen.x - h.x, this.lastSeen.y - h.y) < 50;
-      if (this.lostTimer > LOSE_TARGET_AFTER || reached) {
+      const giveUp = w.objective ? LOSE_TARGET_OBJECTIVE : LOSE_TARGET_AFTER;
+      if (this.lostTimer > giveUp || reached || this.tooFarFromObjective(w, this.lastSeen)) {
         this.state = 'roam';
         this.target = null;
         this.waypoint = null;
@@ -251,8 +283,11 @@ export abstract class HeroBrain<H extends Hero = Hero> {
   // ------------------------------------------------------------ déplacement
 
   private roamMove(dt: number, w: BrainWorld): Vec2 {
+    if (w.objective) return this.navigate(this.macroGoal(dt, w, w.objective), dt, w);
     const h = this.hero;
     this.waypointTimer -= dt;
+    if (this.waypointForObjective) this.waypoint = null;
+    this.waypointForObjective = false;
     if (!this.waypoint || this.waypointTimer <= 0 || Math.hypot(this.waypoint.x - h.x, this.waypoint.y - h.y) < 50) {
       this.pickWaypoint(w);
     }
@@ -279,6 +314,91 @@ export abstract class HeroBrain<H extends Hero = Hero> {
     this.waypointTimer = 6;
   }
 
+  // ------------------------------------------------------------ macro (objectif)
+
+  /**
+   * Où aller hors combat en mode objectif :
+   * - peu de PV et un pack de soin proche → le pack ;
+   * - point à nous → patrouille dans le point ou juste autour (défense) ;
+   * - sinon → dans le point, pour le capturer.
+   */
+  private macroGoal(dt: number, w: BrainWorld, o: ObjectiveInfo): Vec2 {
+    const h = this.hero;
+    if (h.hp / h.maxHp < 0.5 && w.healthPacks?.length) {
+      let best: Vec2 | null = null;
+      let bestD = 900;
+      for (const p of w.healthPacks) {
+        const d = Math.hypot(p.x - h.x, p.y - h.y);
+        if (d < bestD) {
+          bestD = d;
+          best = p;
+        }
+      }
+      if (best) return best;
+    }
+
+    const mine = o.owner === h.team;
+    const radius = mine ? o.r * 1.3 : o.r * 0.55;
+    this.waypointTimer -= dt;
+    const wp = this.waypoint;
+    const invalid =
+      !wp ||
+      !this.waypointForObjective ||
+      this.waypointTimer <= 0 ||
+      Math.hypot(wp.x - o.x, wp.y - o.y) > radius + 5 ||
+      Math.hypot(wp.x - h.x, wp.y - h.y) < 40;
+    if (invalid) {
+      this.waypoint = this.pointNear(w, o, radius);
+      this.waypointForObjective = true;
+      this.waypointTimer = randRange(1.5, 3.5);
+    }
+    return this.waypoint!;
+  }
+
+  /** Point libre au hasard dans un rayon autour de l'objectif. */
+  private pointNear(w: BrainWorld, o: ObjectiveInfo, radius: number): Vec2 {
+    const h = this.hero;
+    for (let i = 0; i < 16; i++) {
+      const a = Math.random() * TAU;
+      const r = Math.sqrt(Math.random()) * radius;
+      const p = { x: o.x + Math.cos(a) * r, y: o.y + Math.sin(a) * r };
+      if (!w.arena.boxCollides(p.x, p.y, h.hw + 6, h.hh + 6, h.team)) return p;
+    }
+    return { x: o.x, y: o.y };
+  }
+
+  /** Point à nous et cible partie loin : on ne la poursuit pas, on garde le point. */
+  private tooFarFromObjective(w: BrainWorld, p: Vec2 | null): boolean {
+    const o = w.objective;
+    if (!o || !p || o.owner !== this.hero.team) return false;
+    return Math.hypot(p.x - o.x, p.y - o.y) > o.r + 420;
+  }
+
+  /**
+   * Direction vers un but lointain : suit le graphe de navigation s'il y en a un,
+   * en "coupant" dès qu'un point plus loin du chemin est accessible en ligne droite.
+   */
+  protected navigate(goal: Vec2, dt: number, w: BrainWorld): Vec2 {
+    const h = this.hero;
+    if (!w.nav) return normalize(goal.x - h.x, goal.y - h.y);
+
+    this.routeTimer -= dt;
+    const moved = !this.routeGoal || Math.hypot(this.routeGoal.x - goal.x, this.routeGoal.y - goal.y) > 60;
+    if (moved || this.routeTimer <= 0) {
+      this.route = w.nav.route(h, goal) ?? [goal];
+      this.routeGoal = { x: goal.x, y: goal.y };
+      this.routeTimer = 1;
+    }
+    while (this.route.length > 1) {
+      const next = this.route[0];
+      const reached = Math.hypot(next.x - h.x, next.y - h.y) < 40;
+      if (!reached && !pathClear(w.arena, h, this.route[1].x, this.route[1].y)) break;
+      this.route.shift();
+    }
+    const next = this.route[0] ?? goal;
+    return normalize(next.x - h.x, next.y - h.y);
+  }
+
   private attackMove(dt: number, w: BrainWorld, t: Combatant): Vec2 {
     const h = this.hero;
     if (!this.targetVisible) {
@@ -286,7 +406,7 @@ export abstract class HeroBrain<H extends Hero = Hero> {
       const p = this.lastSeen ?? { x: t.x, y: t.y };
       this.desiredAim = Math.atan2(p.y - h.y, p.x - h.x);
       this.aimDist = 200;
-      return normalize(p.x - h.x, p.y - h.y);
+      return this.navigate(p, dt, w);
     }
 
     const aimPoint = this.predict(dt, t);
@@ -310,10 +430,25 @@ export abstract class HeroBrain<H extends Hero = Hero> {
       this.strafeDir *= -1;
       this.strafeTimer = randRange(0.6, 1.6);
     }
-    return {
+    const desired = {
       x: dir.x * radial + perp.x * this.strafeWeight,
       y: dir.y * radial + perp.y * this.strafeWeight,
     };
+
+    // Objectif : le combat ne doit pas faire oublier le point.
+    const o = w.objective;
+    if (o) {
+      const d2 = Math.hypot(o.x - h.x, o.y - h.y);
+      const mine = o.owner === h.team;
+      // Point à nous : on se bat sans trop s'éloigner. Sinon : on avance vers le point en combattant.
+      const pull = mine ? Math.min(1.5, Math.max(0, (d2 - o.r - 120) / 200)) : d2 > o.r * 0.8 ? 0.45 : 0;
+      if (pull > 0) {
+        const toPoint = this.navigate(o, dt, w);
+        desired.x += toPoint.x * pull;
+        desired.y += toPoint.y * pull;
+      }
+    }
+    return desired;
   }
 
   /** Visée anticipée : là où sera la cible quand le projectile arrivera. */

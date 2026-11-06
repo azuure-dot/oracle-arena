@@ -223,7 +223,7 @@ kbd {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 22px;
-  max-width: 760px;
+  max-width: 1000px;
   margin: 0 auto;
 }
 .mode-card {
@@ -247,6 +247,9 @@ kbd {
 }
 .mode-card.mode-deathmatch {
   --mode-color: #ff4d5e;
+}
+.mode-card.mode-quickplay {
+  --mode-color: #4da3ff;
 }
 .mode-card:hover,
 .mode-card:focus-visible {
@@ -459,4 +462,126 @@ kbd {
   .score-table td {
     padding: 9px 8px;
   }
+}
+
+/* Sélection de la carte */
+.map-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 520px));
+  justify-content: center;
+  gap: 22px;
+}
+.map-card {
+  display: grid;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  border-top: 4px solid #4da3ff;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(30, 37, 48, 0.95), rgba(16, 20, 26, 0.95));
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+.map-card:hover,
+.map-card:focus-visible {
+  transform: translateY(-4px);
+  border-color: #4da3ff;
+  box-shadow: 0 10px 30px -10px #4da3ff;
+  outline: none;
+}
+.map-preview {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #0d1117;
+}
+.map-info {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  padding: 16px 20px 20px 52px;
+}
+.map-info .mode-index {
+  top: 14px;
+}
+.map-name {
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.map-mode {
+  color: #4da3ff;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Changement de héros : héros déjà pris */
+.hero-card.is-taken {
+  opacity: 0.38;
+  cursor: not-allowed;
+  filter: grayscale(0.7);
+}
+.hero-card.is-taken:hover {
+  transform: none;
+  box-shadow: none;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+.hero-taken {
+  display: block;
+  margin-bottom: 8px;
+  color: #ff8a8a;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* Fin de match en équipe */
+.screen-inner h1.result-title {
+  font-size: 56px;
+}
+.screen-inner h1.result-title.win {
+  color: #ffd84d;
+}
+.screen-inner h1.result-title.lose {
+  color: #ff4d5e;
+}
+.score-table tr.team-head td {
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-align: left;
+  text-transform: uppercase;
+}
+.score-table tr.team-head.team-blue td {
+  background: rgba(77, 163, 255, 0.18);
+  color: #4da3ff;
+}
+.score-table tr.team-head.team-red td {
+  background: rgba(255, 77, 94, 0.16);
+  color: #ff4d5e;
+}
+.score-table tr.team-blue td:first-child {
+  box-shadow: inset 4px 0 0 #4da3ff;
+}
+.score-table tr.team-red td:first-child {
+  box-shadow: inset 4px 0 0 #ff4d5e;
+}
+
+.score-table.by-team .col-rank {
+  display: none;
+}
+.score-table.by-team .col-name {
+  padding-left: 22px;
 }

@@ -1,6 +1,8 @@
 import { clamp } from '../core/math';
-import { COLORS, PLAYER_SPAWN, WORLD, ZONES } from '../config';
-import { onLangChange, t } from '../i18n';
+import { COLORS, WORLD, ZONES, teamColor } from '../config';
+import type { Team } from '../entities/Team';
+import { getLang, t } from '../i18n';
+import type { MapDef, SafeZone } from './maps';
 
 export interface Rect {
   x: number;
@@ -25,27 +27,19 @@ export interface Zone extends Rect {
 export const pointInRect = (px: number, py: number, r: Rect): boolean =>
   px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
 
-/** La map : bords, murs, zones spéciales et rendu du sol. */
+const boxHitsRect = (x: number, y: number, hw: number, hh: number, r: Rect): boolean =>
+  x + hw > r.x && x - hw < r.x + r.w && y + hh > r.y && y - hh < r.y + r.h;
+
+/**
+ * La map : bords, murs, zones spéciales, zones de spawn protégées et rendu du sol.
+ * Le contenu vient d'une MapDef (src/world/maps.ts).
+ */
 export class Arena {
-  readonly width = WORLD.width;
-  readonly height = WORLD.height;
-
-  readonly walls: Rect[] = [
-    { x: 560, y: 200, w: 50, h: 360 }, // A : couvert gauche haut
-    { x: 560, y: 760, w: 50, h: 340 }, // B : couvert gauche bas (passage y 560-760 entre A et B)
-    { x: 880, y: 400, w: 280, h: 50 }, // C : salle centrale, mur haut
-    { x: 880, y: 850, w: 280, h: 50 }, // D : salle centrale, mur bas
-    { x: 1110, y: 450, w: 50, h: 140 }, // E : salle centrale, droite (haut)
-    { x: 1110, y: 710, w: 50, h: 140 }, // F : salle centrale, droite (bas) → porte y 590-710
-    { x: 1450, y: 170, w: 320, h: 50 }, // G : barre haute droite
-    { x: 1450, y: 1080, w: 320, h: 50 }, // H : barre basse droite
-    { x: 1760, y: 480, w: 50, h: 340 }, // I : mur du fond (idéal pour épingler à la Charge)
-  ];
-
-  readonly zones: Zone[] = [
-    { kind: 'hazard', x: 110, y: 110, w: 220, h: 170 },
-    { kind: 'heal', x: 110, y: 1020, w: 220, h: 170 },
-  ];
+  readonly width: number;
+  readonly height: number;
+  readonly walls: Rect[];
+  readonly zones: Zone[];
+  readonly safeZones: SafeZone[];
 
   /** Segments opaques (arêtes des murs + bords de la map) pour le raycasting. */
   readonly segments: Segment[];
@@ -53,8 +47,15 @@ export class Arena {
   readonly corners: { x: number; y: number }[];
 
   private floorCache: HTMLCanvasElement | null = null;
+  private floorLang = '';
 
-  constructor() {
+  constructor(readonly map: MapDef) {
+    this.width = map.width;
+    this.height = map.height;
+    this.walls = map.walls;
+    this.zones = map.zones;
+    this.safeZones = map.safeZones;
+
     const rects: Rect[] = [{ x: 0, y: 0, w: this.width, h: this.height }, ...this.walls];
     this.segments = [];
     this.corners = [];
@@ -72,17 +73,21 @@ export class Arena {
       }
       this.corners.push(...pts);
     }
-    // Les libellés des zones sont dessinés dans le sol mis en cache : on le régénère.
-    onLangChange(() => (this.floorCache = null));
   }
 
-  /** La boîte (centre x,y, demi-dimensions hw,hh) chevauche-t-elle un mur ou sort-elle de la map ? */
-  boxCollides(x: number, y: number, hw: number, hh: number): boolean {
+  /**
+   * Rectangles infranchissables pour une équipe : les murs + les zones de spawn adverses.
+   * Sans équipe (bots du champ de tir), seulement les murs.
+   */
+  private blockers(team?: Team): Rect[] {
+    if (team === undefined || this.safeZones.length === 0) return this.walls;
+    return [...this.walls, ...this.safeZones.filter((z) => z.team !== team).map((z) => z.rect)];
+  }
+
+  /** La boîte (centre x,y, demi-dimensions hw,hh) chevauche-t-elle un obstacle ou sort-elle de la map ? */
+  boxCollides(x: number, y: number, hw: number, hh: number, team?: Team): boolean {
     if (x - hw < 0 || y - hh < 0 || x + hw > this.width || y + hh > this.height) return true;
-    for (const w of this.walls) {
-      if (x + hw > w.x && x - hw < w.x + w.w && y + hh > w.y && y - hh < w.y + w.h) return true;
-    }
-    return false;
+    return this.blockers(team).some((w) => boxHitsRect(x, y, hw, hh, w));
   }
 
   pointInWall(x: number, y: number): boolean {
@@ -91,13 +96,14 @@ export class Arena {
   }
 
   /**
-   * Repousse une boîte hors des murs et des bords, sur l'axe de plus petite
+   * Repousse une boîte hors des obstacles et des bords, sur l'axe de plus petite
    * pénétration : le personnage "glisse" le long des murs.
    */
-  resolveBox(pos: { x: number; y: number }, hw: number, hh: number): void {
+  resolveBox(pos: { x: number; y: number }, hw: number, hh: number, team?: Team): void {
+    const blockers = this.blockers(team);
     for (let iter = 0; iter < 3; iter++) {
       let moved = false;
-      for (const w of this.walls) {
+      for (const w of blockers) {
         const ox = Math.min(pos.x + hw, w.x + w.w) - Math.max(pos.x - hw, w.x);
         const oy = Math.min(pos.y + hh, w.y + w.h) - Math.max(pos.y - hh, w.y);
         if (ox <= 0 || oy <= 0) continue;
@@ -115,10 +121,19 @@ export class Arena {
     return this.zones.find((z) => pointInRect(x, y, z));
   }
 
+  /** Zone de spawn qui contient ce point (s'il y en a une). */
+  safeZoneAt(x: number, y: number): SafeZone | undefined {
+    return this.safeZones.find((z) => pointInRect(x, y, z.rect));
+  }
+
   // ---------------------------------------------------------------- rendu
 
   drawFloor(ctx: CanvasRenderingContext2D): void {
-    if (!this.floorCache) this.floorCache = this.renderFloor();
+    // Le sol est mis en cache ; il contient des libellés traduits : on le refait si la langue change.
+    if (!this.floorCache || this.floorLang !== getLang()) {
+      this.floorCache = this.renderFloor();
+      this.floorLang = getLang();
+    }
     ctx.drawImage(this.floorCache, 0, 0);
   }
 
@@ -169,24 +184,7 @@ export class Arena {
     // zones spéciales
     for (const z of this.zones) {
       const color = z.kind === 'hazard' ? '255,77,94' : '90,220,140';
-      g.fillStyle = `rgba(${color},0.10)`;
-      g.fillRect(z.x, z.y, z.w, z.h);
-      g.save();
-      g.beginPath();
-      g.rect(z.x, z.y, z.w, z.h);
-      g.clip();
-      g.strokeStyle = `rgba(${color},0.18)`;
-      g.lineWidth = 10;
-      for (let i = -z.h; i < z.w + z.h; i += 28) {
-        g.beginPath();
-        g.moveTo(z.x + i, z.y);
-        g.lineTo(z.x + i - z.h, z.y + z.h);
-        g.stroke();
-      }
-      g.restore();
-      g.strokeStyle = `rgba(${color},0.7)`;
-      g.lineWidth = 2;
-      g.strokeRect(z.x + 1, z.y + 1, z.w - 2, z.h - 2);
+      this.hatch(g, z, color);
       g.fillStyle = `rgba(${color},0.95)`;
       g.font = 'bold 14px system-ui, sans-serif';
       g.textAlign = 'center';
@@ -195,14 +193,36 @@ export class Arena {
       g.fillText(label, z.x + z.w / 2, z.y + z.h / 2 + 5);
     }
 
-    // marqueur de spawn
-    g.strokeStyle = 'rgba(255,179,71,0.35)';
-    g.lineWidth = 3;
-    g.setLineDash([8, 8]);
-    g.beginPath();
-    g.arc(PLAYER_SPAWN.x, PLAYER_SPAWN.y, 40, 0, Math.PI * 2);
-    g.stroke();
-    g.setLineDash([]);
+    // zones de spawn protégées : sol teinté à la couleur de l'équipe + portes en jaune
+    for (const s of this.safeZones) {
+      const r = s.rect;
+      g.fillStyle = teamColor(s.team);
+      g.globalAlpha = 0.1;
+      g.fillRect(r.x, r.y, r.w, r.h);
+      g.globalAlpha = 1;
+      g.strokeStyle = '#f5d742';
+      g.lineWidth = 6;
+      g.lineCap = 'round';
+      for (const d of s.doors) {
+        g.beginPath();
+        g.moveTo(d.ax, d.ay);
+        g.lineTo(d.bx, d.by);
+        g.stroke();
+      }
+      g.lineCap = 'butt';
+    }
+
+    // marqueur de spawn (champ de tir)
+    const m = this.map.spawnMarker;
+    if (m) {
+      g.strokeStyle = 'rgba(255,179,71,0.35)';
+      g.lineWidth = 3;
+      g.setLineDash([8, 8]);
+      g.beginPath();
+      g.arc(m.x, m.y, 40, 0, Math.PI * 2);
+      g.stroke();
+      g.setLineDash([]);
+    }
 
     // bordure de map
     g.strokeStyle = 'rgba(255,255,255,0.25)';
@@ -210,5 +230,26 @@ export class Arena {
     g.strokeRect(3, 3, this.width - 6, this.height - 6);
 
     return c;
+  }
+
+  private hatch(g: CanvasRenderingContext2D, z: Rect, color: string): void {
+    g.fillStyle = `rgba(${color},0.10)`;
+    g.fillRect(z.x, z.y, z.w, z.h);
+    g.save();
+    g.beginPath();
+    g.rect(z.x, z.y, z.w, z.h);
+    g.clip();
+    g.strokeStyle = `rgba(${color},0.18)`;
+    g.lineWidth = 10;
+    for (let i = -z.h; i < z.w + z.h; i += 28) {
+      g.beginPath();
+      g.moveTo(z.x + i, z.y);
+      g.lineTo(z.x + i - z.h, z.y + z.h);
+      g.stroke();
+    }
+    g.restore();
+    g.strokeStyle = `rgba(${color},0.7)`;
+    g.lineWidth = 2;
+    g.strokeRect(z.x + 1, z.y + 1, z.w - 2, z.h - 2);
   }
 }

@@ -192,7 +192,7 @@ export class Flux extends Hero {
     for (let i = 1; i <= steps; i++) {
       const px = this.x + (dir.x * dist * i) / steps;
       const py = this.y + (dir.y * dist * i) / steps;
-      if (ctx.arena.boxCollides(px, py, this.hw - 0.5, this.hh - 0.5)) break;
+      if (ctx.arena.boxCollides(px, py, this.hw - 0.5, this.hh - 0.5, this.team)) break;
       nx = px;
       ny = py;
     }
