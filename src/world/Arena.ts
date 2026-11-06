@@ -27,6 +27,13 @@ export interface Zone extends Rect {
 export const pointInRect = (px: number, py: number, r: Rect): boolean =>
   px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h;
 
+/** Une porte (segment) devient un rectangle de l'épaisseur d'un mur. */
+function doorRect(s: Segment): Rect {
+  const half = 20;
+  if (Math.abs(s.ax - s.bx) < 1) return { x: s.ax - half, y: Math.min(s.ay, s.by), w: half * 2, h: Math.abs(s.by - s.ay) };
+  return { x: Math.min(s.ax, s.bx), y: s.ay - half, w: Math.abs(s.bx - s.ax), h: half * 2 };
+}
+
 const boxHitsRect = (x: number, y: number, hw: number, hh: number, r: Rect): boolean =>
   x + hw > r.x && x - hw < r.x + r.w && y + hh > r.y && y - hh < r.y + r.h;
 
@@ -45,6 +52,8 @@ export class Arena {
   safeZones: SafeZone[];
   /** Obstacles mobiles (le convoi) : bloquent déplacements et projectiles, pas la vue. */
   dynamicRects: Rect[] = [];
+  /** Portes de spawn fermées (compte à rebours de départ) : bloquent leur propre équipe. */
+  lockedDoors: { team: Team; rect: Rect }[] = [];
 
   /** Segments opaques (arêtes des murs + bords de la map) pour le raycasting. */
   readonly segments: Segment[];
@@ -89,7 +98,18 @@ export class Arena {
     const base =
       this.water.length || this.dynamicRects.length ? [...this.walls, ...this.water, ...this.dynamicRects] : this.walls;
     if (team === undefined || this.safeZones.length === 0) return base;
-    return [...base, ...this.safeZones.filter((z) => z.team !== team).map((z) => z.rect)];
+    return [
+      ...base,
+      ...this.safeZones.filter((z) => z.team !== team).map((z) => z.rect),
+      ...this.lockedDoors.filter((d) => d.team === team).map((d) => d.rect),
+    ];
+  }
+
+  /** Ferme les portes des spawns de ces équipes (les autres sont ouvertes). */
+  lockSpawnDoors(teams: readonly Team[]): void {
+    this.lockedDoors = this.safeZones
+      .filter((z) => teams.includes(z.team))
+      .flatMap((z) => z.doors.map((d) => ({ team: z.team, rect: doorRect(d) })));
   }
 
   /** Change les zones de spawn protégées (Escorte : au passage du checkpoint). */
@@ -153,6 +173,28 @@ export class Arena {
   }
 
   drawWalls(ctx: CanvasRenderingContext2D): void {
+    // Portes de spawn fermées : barrière hachurée à la couleur de l'équipe
+    for (const d of this.lockedDoors) {
+      const r = d.rect;
+      ctx.save();
+      ctx.fillStyle = 'rgba(10,14,20,0.85)';
+      ctx.fillRect(r.x, r.y, r.w, r.h);
+      ctx.beginPath();
+      ctx.rect(r.x, r.y, r.w, r.h);
+      ctx.clip();
+      ctx.strokeStyle = teamColor(d.team);
+      ctx.lineWidth = 6;
+      for (let i = -r.h - r.w; i < r.w + r.h; i += 16) {
+        ctx.beginPath();
+        ctx.moveTo(r.x + i, r.y);
+        ctx.lineTo(r.x + i + r.h, r.y + r.h);
+        ctx.stroke();
+      }
+      ctx.restore();
+      ctx.strokeStyle = teamColor(d.team);
+      ctx.lineWidth = 2;
+      ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
+    }
     for (const w of this.walls) {
       // ombre portée
       ctx.fillStyle = 'rgba(0,0,0,0.35)';

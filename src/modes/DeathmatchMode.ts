@@ -6,6 +6,7 @@ import type { Hero } from '../heroes/Hero';
 import { HEROES, type HeroEntry } from '../heroes/registry';
 import { t } from '../i18n';
 import { drawDeathmatchBar } from '../ui/DeathmatchHud';
+import { drawCountdown } from '../ui/matchHud';
 import type { MatchResult } from '../ui/screens/Scoreboard';
 import { PRACTICE_MAP } from '../world/maps';
 import { inVisionRange, lineOfSight } from '../world/Visibility';
@@ -81,8 +82,14 @@ export class DeathmatchMode extends MatchMode {
     return p.isPlayer ? COLORS.ally : COLORS.hud;
   }
 
+  /** Pas de salle de spawn : tout est figé pendant le compte à rebours. */
+  protected override simulationPaused(): boolean {
+    return this.countdown > 0;
+  }
+
   protected override afterWorld(dt: number): void {
     super.afterWorld(dt);
+    if (this.countdown > 0) return; // le chrono du match démarre après le compte à rebours
     this.remaining = Math.max(0, this.remaining - dt);
     if (this.finished) for (const p of this.participants) p.controls?.releaseAll();
   }
@@ -153,5 +160,6 @@ export class DeathmatchMode extends MatchMode {
       total: this.participants.length,
     });
     this.drawMatchOverlays(ctx, s);
+    if (this.countdown > 0) drawCountdown(ctx, s.width, s.height, t('start.countdown'), this.countdown);
   }
 }

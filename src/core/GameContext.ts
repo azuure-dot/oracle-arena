@@ -20,6 +20,8 @@ export interface GameContext {
   damage(target: Combatant, amount: number, source: Hero | null): number;
   /** Où réapparaît ce héros après sa mort. */
   respawnPoint(hero: Hero): Vec2;
+  /** Délai de réapparition (s) : 3 s par défaut, 8 s en Partie rapide. */
+  respawnDelay: number;
   /** Tremblement d'écran, atténué avec la distance au joueur (un combat lointain ne secoue pas). */
   shake(magnitude: number, at: Vec2): void;
 }

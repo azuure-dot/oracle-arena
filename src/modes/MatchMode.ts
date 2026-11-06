@@ -105,7 +105,16 @@ export abstract class MatchMode extends GameMode {
 
   protected override beforeWorld(dt: number): void {
     const bw = this.brainWorld();
-    for (const p of this.participants) p.brain?.update(dt, bw);
+    for (const p of this.participants) {
+      if (!p.brain) continue;
+      if (this.brainActive(p)) p.brain.update(dt, bw);
+      else p.controls?.releaseAll(); // bot en attente (porte de spawn fermée) : il ne bouge pas
+    }
+  }
+
+  /** Le bot joue-t-il cette frame ? (non tant que sa porte de spawn est fermée) */
+  protected brainActive(_p: Participant): boolean {
+    return true;
   }
 
   protected override afterWorld(dt: number): void {

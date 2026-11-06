@@ -6,6 +6,8 @@ import { ALLY, ENEMY, type Team } from '../entities/Team';
 import { HealthPacks } from '../game/HealthPacks';
 import { HEROES, type HeroEntry } from '../heroes/registry';
 import type { ScoreRow } from '../ui/screens/Scoreboard';
+import { drawCountdown } from '../ui/matchHud';
+import { t } from '../i18n';
 import type { MapDef } from '../world/maps';
 import { BOT_NAMES, MatchMode, shuffle, type Participant } from './MatchMode';
 
@@ -15,6 +17,9 @@ import { BOT_NAMES, MatchMode, shuffle, type Participant } from './MatchMode';
  * - Zones de spawn : invincible + soin à 100 % pour son équipe, changement de héros (C).
  * - Packs de soin et graphe de navigation de la carte.
  */
+/** Délai de réapparition en Partie rapide (s). */
+export const QUICKPLAY_RESPAWN = 8;
+
 export abstract class TeamMatchMode extends MatchMode {
   /** Le joueur a demandé à changer de héros (touche C dans son spawn). */
   swapRequested = false;
@@ -37,6 +42,21 @@ export abstract class TeamMatchMode extends MatchMode {
     this.world.heroes = this.participants.map((p) => p.hero);
     this.nav = new NavGraph(this.arena, map.nav);
     this.packs = new HealthPacks(map.healthPacks);
+    this.world.respawnDelay = QUICKPLAY_RESPAWN;
+  }
+
+  /** Équipes dont les portes de spawn sont fermées (compte à rebours de départ). */
+  protected lockedTeams(): Team[] {
+    return this.countdown > 0 ? [ALLY, ENEMY] : [];
+  }
+
+  protected override brainActive(p: Participant): boolean {
+    return !this.lockedTeams().includes(p.hero.team);
+  }
+
+  /** Compte à rebours de départ, en haut de l'écran. */
+  protected drawStartCountdown(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+    if (this.countdown > 0) drawCountdown(ctx, width, height, t('start.doors'), this.countdown);
   }
 
   /** Le changement de héros est-il possible maintenant ? (pas pendant une transition) */
@@ -62,6 +82,7 @@ export abstract class TeamMatchMode extends MatchMode {
   }
 
   protected override beforeWorld(dt: number): void {
+    this.arena.lockSpawnDoors(this.lockedTeams());
     this.applySafeZones();
     super.beforeWorld(dt);
   }

@@ -11,6 +11,9 @@ import type { MatchResult } from '../ui/screens/Scoreboard';
 import { Arena } from '../world/Arena';
 import type { MapDef } from '../world/maps';
 
+/** Compte à rebours avant le début de la partie, dans tous les modes (s). */
+export const START_COUNTDOWN = 10;
+
 export type ModeKind = 'practice' | 'deathmatch' | 'control' | 'escort';
 
 /** Ce que le jeu fournit au mode pour dessiner son HUD. */
@@ -44,6 +47,8 @@ export abstract class GameMode {
   showHitboxes = false;
   /** Échap pressé : le jeu quitte le mode. */
   exitRequested = false;
+  /** Temps restant avant le début de la partie. */
+  countdown = START_COUNTDOWN;
 
   constructor(
     readonly map: MapDef,
@@ -86,6 +91,8 @@ export abstract class GameMode {
 
     const aim = this.camera.screenToWorld(input.mouseX, input.mouseY);
     this.playerControls.sample(aim.x, aim.y);
+
+    this.countdown = Math.max(0, this.countdown - dt);
 
     if (!this.simulationPaused()) {
       this.beforeWorld(dt);

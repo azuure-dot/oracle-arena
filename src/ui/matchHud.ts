@@ -70,3 +70,31 @@ export function drawKillBanner(
   ctx.fillText(k.name, 0, 22);
   ctx.restore();
 }
+
+/** Compte à rebours de départ : libellé + grand chiffre, sous le bandeau du mode. */
+export function drawCountdown(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  label: string,
+  seconds: number,
+): void {
+  const n = Math.ceil(seconds);
+  const frac = seconds - Math.floor(seconds); // 1 → 0 sur chaque seconde : petit « pop »
+  const cx = width / 2;
+  const y = Math.max(185, height * 0.22); // sous les bandeaux des modes
+  ctx.save();
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(10,14,20,0.7)';
+  ctx.fillRect(cx - 200, y - 30, 400, 104);
+  ctx.fillStyle = COLORS.hud;
+  ctx.font = `800 15px ${FONT}`;
+  ctx.fillText(label.toUpperCase(), cx, y - 6);
+  ctx.translate(cx, y + 50);
+  const scale = 1 + Math.max(0, frac - 0.75) * 1.2;
+  ctx.scale(scale, scale);
+  ctx.fillStyle = n <= 3 ? COLORS.accent : COLORS.hud;
+  ctx.font = `900 50px ${FONT}`;
+  ctx.fillText(String(n), 0, 0);
+  ctx.restore();
+}

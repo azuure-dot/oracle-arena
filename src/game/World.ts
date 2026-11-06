@@ -7,7 +7,7 @@ import { Effects } from '../effects/Effects';
 import type { Bot, BotContext } from '../entities/Bot';
 import { hostile, type Combatant } from '../entities/Combatant';
 import type { Projectile } from '../entities/Projectile';
-import type { Hero } from '../heroes/Hero';
+import { RESPAWN_TIME, type Hero } from '../heroes/Hero';
 import type { Arena } from '../world/Arena';
 import type { Fog } from '../world/Fog';
 import { canSeeBox, computeVisibility, inVisionRange, lineOfSight, type VisPoint } from '../world/Visibility';
@@ -47,6 +47,8 @@ export class World {
   player: Hero | null = null;
   time = 0;
   turretsEnabled = true;
+  /** Délai de réapparition des héros (s). */
+  respawnDelay = RESPAWN_TIME;
 
   private visibility: VisPoint[] = [];
   private targetList: Combatant[] = [];
@@ -68,6 +70,9 @@ export class World {
       spawnProjectile: (p) => this.projectiles.push(p),
       damage: (target, amount, source) => this.damage(target, amount, source),
       respawnPoint: (hero) => this.hooks.respawnPoint(hero),
+      get respawnDelay() {
+        return world.respawnDelay;
+      },
       shake: (m, at) => this.shake(m, at),
     };
   }

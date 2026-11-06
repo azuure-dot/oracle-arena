@@ -190,6 +190,11 @@ const fr = {
   'escort.youAttack': 'Tu étais en attaque',
   'escort.youDefend': 'Tu étais en défense',
   'help.title.escort': '{hero} — ESCORTE',
+
+  // Compte à rebours de départ
+  'start.countdown': 'La partie commence dans',
+  'start.doors': 'Les portes s’ouvrent dans',
+  'start.takePositions': 'Prenez position · l’attaque sort dans',
 };
 
 export type TKey = keyof typeof fr;
@@ -363,6 +368,10 @@ const en: Record<TKey, string> = {
   'escort.youAttack': 'You were attacking',
   'escort.youDefend': 'You were defending',
   'help.title.escort': '{hero} — ESCORT',
+
+  'start.countdown': 'The match starts in',
+  'start.doors': 'Doors open in',
+  'start.takePositions': 'Take your positions · attack leaves in',
 };
 
 export type Lang = 'fr' | 'en';

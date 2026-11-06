@@ -31,7 +31,7 @@ export const INPUT_LABEL_KEYS: Record<InputSlot, TKey> = {
   melee: 'key.melee',
 };
 
-/** Délai de réapparition après une mort (champ de tir et Deathmatch). */
+/** Délai de réapparition par défaut (champ de tir, Deathmatch). La Partie rapide utilise 8 s. */
 export const RESPAWN_TIME = 3;
 
 /**
@@ -330,7 +330,7 @@ export abstract class Hero implements Combatant {
       this.hp = 0;
       this.dead = true;
       this.pinned = false;
-      this.respawnTimer = RESPAWN_TIME;
+      this.respawnTimer = ctx.respawnDelay;
       ctx.effects.sparks(this.x, this.y, this.stats.color, 24, 320);
       this.onDeath(ctx);
     }

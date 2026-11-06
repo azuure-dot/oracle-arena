@@ -128,12 +128,13 @@ export function drawEscortBanner(
   color: string,
   age: number,
   duration: number,
+  yRatio = 0.3,
 ): void {
   const a = age < duration - 0.5 ? 1 : Math.max(0, (duration - age) / 0.5);
   ctx.save();
   ctx.globalAlpha = a;
   ctx.textAlign = 'center';
-  const y = height * 0.3;
+  const y = height * yRatio;
   ctx.fillStyle = 'rgba(10,14,20,0.62)';
   ctx.fillRect(width / 2 - 230, y - 42, 460, sub ? 84 : 62);
   ctx.fillStyle = color;

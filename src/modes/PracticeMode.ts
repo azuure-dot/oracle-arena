@@ -7,6 +7,7 @@ import { ALLY, ENEMY, type Team } from '../entities/Team';
 import type { DamageEvent } from '../game/World';
 import type { HeroEntry } from '../heroes/registry';
 import { t } from '../i18n';
+import { drawCountdown } from '../ui/matchHud';
 import { Stats } from '../ui/Stats';
 import { PRACTICE_MAP } from '../world/maps';
 import { GameMode, type ScreenInfo } from './GameMode';
@@ -60,6 +61,11 @@ export class PracticeMode extends GameMode {
     if (this.input.wasPressed('KeyB')) this.world.turretsEnabled = !this.world.turretsEnabled;
   }
 
+  /** Pas de salle de spawn : tout est figé pendant le compte à rebours. */
+  protected override simulationPaused(): boolean {
+    return this.countdown > 0;
+  }
+
   protected respawnPoint(): Vec2 {
     return PLAYER_SPAWN;
   }
@@ -80,5 +86,6 @@ export class PracticeMode extends GameMode {
       helpTitle: t('help.title', { hero: this.player.name.toUpperCase() }),
       helpFooter: [t('help.misc1'), t('help.misc2'), t('help.hitbox')],
     });
+    if (this.countdown > 0) drawCountdown(ctx, s.width, s.height, t('start.countdown'), this.countdown);
   }
 }

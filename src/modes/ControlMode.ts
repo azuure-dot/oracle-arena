@@ -146,6 +146,7 @@ export class ControlMode extends TeamMatchMode {
     }
 
     if (this.phase === 'playing') {
+      if (this.countdown > 0) return; // portes fermées : le point n'est pas encore en jeu
       this.introTimer = Math.max(0, this.introTimer - dt);
       this.packs.update(dt, this.world.heroes, this.world.effects);
       this.updatePoint(dt);
@@ -290,7 +291,8 @@ export class ControlMode extends TeamMatchMode {
       ctx.fillStyle = '#f5d742';
       ctx.fillText(t('control.swapHint'), s.width / 2, s.height - 200);
     }
-    if (this.phase === 'playing' && this.introTimer > 0) {
+    this.drawStartCountdown(ctx, s.width, s.height);
+    if (this.phase === 'playing' && this.countdown <= 0 && this.introTimer > 0) {
       drawRoundIntro(ctx, s.width, s.height, this.round, CONTROL.roundIntro - this.introTimer);
     }
     if (this.phase !== 'playing' && this.roundWinner) {

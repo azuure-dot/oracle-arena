@@ -66,6 +66,14 @@ Le menu principal propose trois modes. En **Partie rapide**, c'est la carte qui 
   - Pendant la partie : chrono, nombre d'éliminations, position et fil des éliminations.
   - À la fin du chrono : tableau des scores, puis « Rejouer » ou retour au menu.
 
+Départ de partie :
+- **Compte à rebours de 10 s** dans tous les modes.
+  - Champ de tir et Deathmatch : tout est figé pendant ce temps.
+  - Contrôle et Escorte : les portes des spawns sont fermées. On peut bouger dans son spawn et changer de héros.
+- **Escorte** : la défense sort au bout de 10 s, l'attaque au bout de 30 s.
+  La défense a donc 20 s pour se placer, et le chrono de 3:00 ne démarre qu'à la sortie de l'attaque.
+- **Réapparition** : 8 s en Partie rapide (Contrôle, Escorte), 3 s ailleurs.
+
 Commun aux deux modes :
 
 - **3 héros** : Rempart (tank), Flux (dégâts), Tempo (soutien).

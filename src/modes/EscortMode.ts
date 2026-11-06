@@ -9,6 +9,7 @@ import type { HeroEntry } from '../heroes/registry';
 import { t } from '../i18n';
 import { drawObjectiveMarker } from '../ui/ControlHud';
 import { drawEscortBanner, drawEscortBar, drawEscortEnd } from '../ui/EscortHud';
+import { drawCountdown } from '../ui/matchHud';
 import type { MatchResult } from '../ui/screens/Scoreboard';
 import type { EscortDef, MapDef, SpawnRoom } from '../world/maps';
 import type { ScreenInfo } from './GameMode';
@@ -25,6 +26,8 @@ export const ESCORT = {
   intro: 3,
   /** Bandeau « Checkpoint atteint » (s). */
   checkpointBanner: 2.5,
+  /** L'attaque sort de son spawn au bout de 30 s : la défense a le temps de se placer. */
+  attackSetup: 30,
 };
 
 type State = 'playing' | 'ending' | 'over';
@@ -53,6 +56,8 @@ export class EscortMode extends TeamMatchMode {
   private grace = 0;
   private endTimer = 0;
   private introAge = 0;
+  /** Temps avant l'ouverture des portes de l'attaque (le chrono de 3:00 démarre ensuite). */
+  setupLeft = ESCORT.attackSetup;
   private checkpointAge = -1;
 
   constructor(map: MapDef, camera: Camera, input: Input, entry: HeroEntry) {
@@ -90,6 +95,14 @@ export class EscortMode extends TeamMatchMode {
 
   protected override simulationPaused(): boolean {
     return this.state !== 'playing';
+  }
+
+  /** Défense : 10 s comme partout · attaque : 30 s. */
+  protected override lockedTeams(): Team[] {
+    const locked: Team[] = [];
+    if (this.countdown > 0) locked.push(this.defenseTeam);
+    if (this.setupLeft > 0) locked.push(this.attackTeam);
+    return locked;
   }
 
   // ------------------------------------------------------------ spawns dynamiques
@@ -161,6 +174,11 @@ export class EscortMode extends TeamMatchMode {
     this.introAge += dt;
     if (this.checkpointAge >= 0) this.checkpointAge += dt;
     this.packs.update(dt, this.world.heroes, this.world.effects);
+    if (this.setupLeft > 0) {
+      // Préparation : la défense se place, le convoi et le chrono attendent l'attaque.
+      this.setupLeft = Math.max(0, this.setupLeft - dt);
+      return;
+    }
 
     // Qui est dans la zone de poussée ?
     let attackers = 0;
@@ -264,6 +282,17 @@ export class EscortMode extends TeamMatchMode {
       ctx.fillStyle = '#f5d742';
       ctx.fillText(t('control.swapHint'), s.width / 2, s.height - 200);
     }
+    // Préparation : l'attaque attend 30 s, la défense 10 s puis se met en place.
+    if (this.setupLeft > 0) {
+      const defenseOut = !this.playerAttacks && this.countdown <= 0;
+      drawCountdown(
+        ctx,
+        s.width,
+        s.height,
+        t(defenseOut ? 'start.takePositions' : 'start.doors'),
+        this.playerAttacks ? this.setupLeft : defenseOut ? this.setupLeft : this.countdown,
+      );
+    }
     if (this.introAge < ESCORT.intro) {
       drawEscortBanner(
         ctx,
@@ -274,6 +303,7 @@ export class EscortMode extends TeamMatchMode {
         myColor,
         this.introAge,
         ESCORT.intro,
+        this.setupLeft > 0 ? 0.48 : 0.3, // sous le compte à rebours
       );
     } else if (this.checkpointAge >= 0 && this.checkpointAge < ESCORT.checkpointBanner) {
       drawEscortBanner(ctx, s.width, s.height, t('escort.checkpoint'), '', attackColor, this.checkpointAge, ESCORT.checkpointBanner);
