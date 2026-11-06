@@ -47,7 +47,7 @@ const fr = {
   'rempart.fire': 'Onde de feu',
   'rempart.fire.desc': 'Projectile perforant, 100 dégâts · 8 s',
   'rempart.charge': 'Charge',
-  'rempart.charge.desc': 'Préparation 0,6 s · épingle un ennemi · mur : 300 dégâts · 7 s',
+  'rempart.charge.desc': 'Préparation 0,6 s · épingle un ennemi · mur : 250 dégâts + étourdi 2 s · 7 s',
 
   // Tempo
   'tempo.tagline': 'Support mobile : son aura soigne ou accélère toute l’équipe.',
@@ -75,6 +75,7 @@ const fr = {
   'hud.melee': 'MÊLÉE',
   'hud.respawn': 'Réapparition… {s}',
   'hud.shieldHp': '{hp} PV',
+  'hud.stunned': 'ÉTOURDI',
 
   // Aide
   'help.title': '{hero} — CHAMP DE TIR',
@@ -236,7 +237,7 @@ const en: Record<TKey, string> = {
   'rempart.fire': 'Fire Wave',
   'rempart.fire.desc': 'Piercing projectile, 100 damage · 8 s',
   'rempart.charge': 'Charge',
-  'rempart.charge.desc': '0.6 s wind-up · pins an enemy · wall: 300 damage · 7 s',
+  'rempart.charge.desc': '0.6 s wind-up · pins an enemy · wall: 250 damage + 2 s stun · 7 s',
 
   'tempo.tagline': 'Mobile support: the aura heals or speeds up the whole team.',
   'tempo.weapon': 'Sonic Cannon',
@@ -262,6 +263,7 @@ const en: Record<TKey, string> = {
   'hud.melee': 'MELEE',
   'hud.respawn': 'Respawning… {s}',
   'hud.shieldHp': '{hp} HP',
+  'hud.stunned': 'STUNNED',
 
   'help.title': '{hero} — PRACTICE RANGE',
   'help.move': 'WASD / ZQSD: move · Mouse: aim',

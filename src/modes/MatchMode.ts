@@ -26,6 +26,9 @@ export interface KillFeedEntry {
   age: number;
 }
 
+/** Les bots héros infligent 30 % de dégâts en moins que le joueur. */
+export const BOT_DAMAGE_MULTIPLIER = 0.7;
+
 export const BOT_NAMES = ['Nova', 'Vex', 'Krono', 'Echo', 'Rook', 'Zéphyr', 'Pulse', 'Onyx'];
 
 export function shuffle<T>(arr: readonly T[]): T[] {
@@ -69,6 +72,7 @@ export abstract class MatchMode extends GameMode {
     hero.controls = controls;
     hero.outline = outline;
     hero.label = name;
+    hero.damageMultiplier = BOT_DAMAGE_MULTIPLIER;
     const p: Participant = {
       hero,
       name,

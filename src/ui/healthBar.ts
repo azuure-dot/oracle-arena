@@ -68,3 +68,30 @@ export function drawBuffIndicator(ctx: CanvasRenderingContext2D, cx: number, cy:
   }
   ctx.restore();
 }
+
+/** Étoiles qui tournent autour de la tête d'un personnage étourdi. */
+export function drawStunStars(ctx: CanvasRenderingContext2D, cx: number, cy: number): void {
+  const t = performance.now() / 1000;
+  ctx.save();
+  for (let i = 0; i < 3; i++) {
+    const a = t * 5 + (i * Math.PI * 2) / 3;
+    const x = cx + Math.cos(a) * 18;
+    const y = cy + Math.sin(a) * 6;
+    ctx.fillStyle = '#ffe066';
+    ctx.strokeStyle = 'rgba(0,0,0,0.6)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (let k = 0; k < 10; k++) {
+      const r = k % 2 === 0 ? 5 : 2.2;
+      const ang = (k * Math.PI) / 5 - Math.PI / 2;
+      const px = x + Math.cos(ang) * r;
+      const py = y + Math.sin(ang) * r;
+      if (k === 0) ctx.moveTo(px, py);
+      else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.restore();
+}

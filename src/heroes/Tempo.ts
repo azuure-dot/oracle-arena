@@ -25,8 +25,8 @@ export const SONIC = {
 export const BOOP = { cooldown: 4, range: 130, halfArc: degToRad(45), damage: 25, impulse: 1100 };
 export const AURA = {
   radius: 170,
-  heal: 16, // PV/s
-  ampHeal: 70,
+  heal: 10, // PV/s (réduit : 16 → 10)
+  ampHeal: 50, // pendant le Surrégime (70 → 50)
   speedBonus: 0.3, // +30 %
   ampSpeedBonus: 0.7,
   swapCooldown: 0.3,

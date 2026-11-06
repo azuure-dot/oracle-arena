@@ -29,7 +29,9 @@ export const CHARGE = {
   speed: 680,
   maxDuration: 1.6,
   turnRate: 1.3, // rad/s : léger contrôle de trajectoire
-  wallDamage: 300, // ennemi épinglé écrasé contre un mur
+  wallDamage: 250, // ennemi épinglé écrasé contre un mur
+  wallStun: 2, // … puis étourdi
+  slamRecovery: 0.5, // latence de Rempart après le plaquage
   bumpDamage: 50, // ennemis bousculés sur le côté
   bumpImpulse: 520,
 };
@@ -63,6 +65,8 @@ export class Rempart extends Hero {
   private fireCooldown = 0;
   private chargeCooldown = 0;
   private charge: ChargeState | null = null;
+  /** Latence après un plaquage contre un mur : Rempart ne peut ni bouger ni agir. */
+  private slamRecovery = 0;
 
   constructor() {
     super({
@@ -104,6 +108,7 @@ export class Rempart extends Hero {
     this.chargeCooldown = Math.max(0, this.chargeCooldown - dt);
     this.shieldBroken = Math.max(0, this.shieldBroken - dt);
     this.shieldHitFlash = Math.max(0, this.shieldHitFlash - dt);
+    this.slamRecovery = Math.max(0, this.slamRecovery - dt);
 
     if (!this.shieldUp) {
       this.shieldRegenDelay -= dt;
@@ -123,11 +128,16 @@ export class Rempart extends Hero {
   }
 
   protected override isLocked(): boolean {
-    return this.charge !== null;
+    return this.charge !== null || this.slamRecovery > 0;
   }
 
   protected override updateLocked(dt: number, ctx: GameContext): void {
-    this.updateCharge(dt, ctx);
+    if (this.charge) this.updateCharge(dt, ctx);
+    else this.vx = this.vy = 0; // latence après le plaquage
+  }
+
+  protected override onStunned(): void {
+    this.setShield(false);
   }
 
   protected handleInput(dt: number, ctx: GameContext): void {
@@ -154,6 +164,7 @@ export class Rempart extends Hero {
     // Nouvelle manche en pleine Charge : on relâche tout sans dégâts.
     if (this.charge?.pinned) this.charge.pinned.pinned = false;
     this.charge = null;
+    this.slamRecovery = 0;
     this.setShield(false);
     this.hammerTimer = 0;
     this.shieldHp = SHIELD.maxHp;
@@ -201,7 +212,7 @@ export class Rempart extends Hero {
     const a = Math.atan2(p.y - this.y, p.x - this.x);
     if (Math.abs(angleDiff(this.shieldAngle, a)) > SHIELD.halfArc) return false;
 
-    this.shieldHp -= p.damage;
+    this.shieldHp -= p.damage * (p.owner?.damageMultiplier ?? 1);
     this.shieldHitFlash = 0.08;
     if (this.shieldHp <= 0) {
       this.shieldHp = 0;
@@ -340,17 +351,22 @@ export class Rempart extends Hero {
 
   private impact(ctx: GameContext): void {
     const c = this.charge!;
-    if (c.pinned && c.pinned.alive) {
-      const bot = c.pinned;
-      ctx.damage(bot, CHARGE.wallDamage, this);
-      ctx.effects.ring(bot.x, bot.y, '#ffffff', 80, 0.4);
-      ctx.effects.sparks(bot.x, bot.y, '#ffffff', 30, 380);
+    const target = c.pinned && c.pinned.alive ? c.pinned : null;
+    if (target) {
+      ctx.damage(target, CHARGE.wallDamage, this);
+      ctx.effects.ring(target.x, target.y, '#ffffff', 80, 0.4);
+      ctx.effects.sparks(target.x, target.y, '#ffffff', 30, 380);
       ctx.shake(14, this);
     } else {
       ctx.effects.sparks(this.x + Math.cos(c.dir) * this.radius, this.y + Math.sin(c.dir) * this.radius, '#cfd8e3', 16, 260);
       ctx.shake(6, this);
     }
     this.endCharge(ctx);
+    if (target) {
+      // Plaquage réussi : la cible est étourdie, Rempart reste un instant sonné lui aussi.
+      if (target.alive) target.stun(CHARGE.wallStun);
+      this.slamRecovery = CHARGE.slamRecovery;
+    }
   }
 
   private endCharge(ctx: GameContext): void {

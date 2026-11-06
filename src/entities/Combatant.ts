@@ -29,6 +29,9 @@ export interface Combatant {
   takeDamage(amount: number, ctx: GameContext): number;
   heal(amount: number): void;
   applyImpulse(ix: number, iy: number): void;
+  /** Étourdi : ne peut ni bouger ni agir pendant `seconds`. */
+  stun(seconds: number): void;
+  readonly stunTimer: number;
 }
 
 /** Deux entités sont ennemies si elles ne sont pas dans la même équipe. */

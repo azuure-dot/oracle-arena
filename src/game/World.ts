@@ -118,6 +118,7 @@ export class World {
   }
 
   damage(target: Combatant, amount: number, source: Hero | null): number {
+    if (source) amount *= source.damageMultiplier; // bots : -30 %
     const wasAlive = target.alive;
     const dealt = target.takeDamage(amount, this.ctx);
     if (dealt <= 0) return 0;

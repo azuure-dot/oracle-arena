@@ -76,6 +76,11 @@ Départ de partie :
 
 Commun aux deux modes :
 
+- **Soin passif** : après 3 s sans subir de dégâts, chaque héros récupère 15 PV/s.
+- **Bots héros** : ils infligent 30 % de dégâts en moins que le joueur.
+- **Charge de Rempart contre un mur** : 250 dégâts et 2 s d'étourdissement pour la cible.
+  Rempart lui-même reste bloqué 0,5 s après le plaquage.
+
 - **3 héros** : Rempart (tank), Flux (dégâts), Tempo (soutien).
 - **Ligne de vue** : les murs bloquent la vision (raycasting + brouillard de guerre).
 - **Zone de vision 16:9** identique pour tous les écrans ; caméra verrouillée sur le joueur.

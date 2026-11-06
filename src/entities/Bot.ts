@@ -3,7 +3,7 @@ import type { Effects } from '../effects/Effects';
 import type { Hero } from '../heroes/Hero';
 import { angleDiff, rotateTowards } from '../core/math';
 import { t } from '../i18n';
-import { drawBuffIndicator, drawHealthBar, type BuffKind } from '../ui/healthBar';
+import { drawBuffIndicator, drawHealthBar, drawStunStars, type BuffKind } from '../ui/healthBar';
 import type { Arena } from '../world/Arena';
 import type { Box } from '../core/geometry';
 import { canSeeBox } from '../world/Visibility';
@@ -77,6 +77,8 @@ export class Bot implements Combatant {
   visible = true;
   /** Tenu par une Charge : sa position est pilotée par le héros. */
   pinned = false;
+  /** Étourdi : ne patrouille plus, la tourelle ne tire plus. */
+  stunTimer = 0;
   /** Bonus d'aura (remis à zéro chaque frame, appliqué par Tempo). */
   auraSpeedMul = 1;
   buff: BuffKind | null = null;
@@ -138,6 +140,7 @@ export class Bot implements Combatant {
       this.hp = 0;
       this.alive = false;
       this.pinned = false;
+      this.stunTimer = 0;
       this.respawnTimer = BOT.respawnTime;
     }
     return dealt;
@@ -145,6 +148,10 @@ export class Bot implements Combatant {
 
   heal(amount: number): void {
     if (this.alive) this.hp = Math.min(this.maxHp, this.hp + amount);
+  }
+
+  stun(seconds: number): void {
+    if (this.alive) this.stunTimer = Math.max(this.stunTimer, seconds);
   }
 
   applyImpulse(ix: number, iy: number): void {
@@ -178,6 +185,7 @@ export class Bot implements Combatant {
     }
 
     if (this.pinned) return;
+    this.stunTimer = Math.max(0, this.stunTimer - dt);
 
     // Recul : vitesse qui s'amortit, avec collisions contre les murs.
     const kSpeed = Math.hypot(this.kvx, this.kvy);
@@ -192,6 +200,7 @@ export class Bot implements Combatant {
       this.kvx = this.kvy = 0;
     }
     if (kSpeed > 60) return; // pendant un gros recul, le bot ne "marche" pas
+    if (this.stunTimer > 0) return;
 
     if (this.patrol) this.updatePatrol(dt);
     else this.returnHome(dt);
@@ -338,6 +347,7 @@ export class Bot implements Combatant {
     const barWidth = 56;
     drawHealthBar(ctx, this.x, barTop, this.hp, this.maxHp, color, barWidth);
     if (this.buff) drawBuffIndicator(ctx, this.x + barWidth / 2 + 12, barTop - 3.5, this.buff);
+    if (this.stunTimer > 0) drawStunStars(ctx, this.x, this.y - this.hh * 0.4);
 
     const tag = !this.isEnemy
       ? t(this.wounded ? 'tag.wounded' : 'tag.ally')

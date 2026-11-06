@@ -50,7 +50,16 @@ export class HUD {
     this.drawStats(ctx, f);
     if (this.showHelp) this.drawHelp(ctx, f);
     if (f.hero.dead) this.drawRespawn(ctx, f);
+    else if (f.hero.stunTimer > 0) this.drawStunned(ctx, f);
     this.drawCrosshair(ctx, f);
+  }
+
+  /** Étourdi : rappel au-dessus de la barre de compétences. */
+  private drawStunned(ctx: CanvasRenderingContext2D, f: HudFrame): void {
+    ctx.textAlign = 'center';
+    ctx.font = `900 22px ${FONT}`;
+    ctx.fillStyle = '#ffe066';
+    ctx.fillText(`${t('hud.stunned')} ${f.hero.stunTimer.toFixed(1)}`, f.width / 2, f.height * 0.62);
   }
 
   /** Mort : compte à rebours de réapparition au centre de l'écran. */

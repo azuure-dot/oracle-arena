@@ -17,7 +17,7 @@ import {
   walkFrame,
   type SpriteLayout,
 } from '../sprites/SpriteRenderer';
-import { drawBuffIndicator, drawHealthBar, type BuffKind } from '../ui/healthBar';
+import { drawBuffIndicator, drawHealthBar, drawStunStars, type BuffKind } from '../ui/healthBar';
 import { lineOfSight } from '../world/Visibility';
 
 /** Emplacement de touche : le libellé affiché est traduit par le HUD (Clic D / RMB...). */
@@ -29,6 +29,12 @@ export const INPUT_LABEL_KEYS: Record<InputSlot, TKey> = {
   ability1: 'key.ability1',
   ability2: 'key.ability2',
   melee: 'key.melee',
+};
+
+/** Soin passif de tous les héros : après 3 s sans subir de dégâts. */
+export const PASSIVE_REGEN = {
+  delay: 3, // s sans dégâts
+  rate: 15, // PV/s
 };
 
 /** Délai de réapparition par défaut (champ de tir, Deathmatch). La Partie rapide utilise 8 s. */
@@ -122,6 +128,12 @@ export abstract class Hero implements Combatant {
   respawnTimer = 0;
   hurtTimer = 0;
   pinned = false;
+  /** Étourdi (plaqué contre un mur par une Charge) : aucun contrôle. */
+  stunTimer = 0;
+  /** Multiplicateur des dégâts infligés (bots : 0,7). */
+  damageMultiplier = 1;
+  /** Temps depuis les derniers dégâts subis (soin passif). */
+  private sinceDamage = 0;
   /** Dans la zone de spawn de son équipe : invincible (mis à jour par le mode). */
   safe = false;
   /** Buff d'aura reçu cette frame (indicateur au-dessus de la tête). */
@@ -195,11 +207,20 @@ export abstract class Hero implements Combatant {
     this.moveDir = c.move;
     this.meleeCooldown = Math.max(0, this.meleeCooldown - dt);
     this.meleeAnim = Math.max(0, this.meleeAnim - dt);
+    this.stunTimer = Math.max(0, this.stunTimer - dt);
+
+    // Soin passif : au bout de 3 s sans dégâts.
+    this.sinceDamage += dt;
+    if (this.sinceDamage >= PASSIVE_REGEN.delay) this.heal(PASSIVE_REGEN.rate * dt);
 
     this.tick(dt, ctx);
     if (this.pinned) {
       // Épinglé par une Charge : aucun contrôle, la position est imposée.
       this.vx = this.vy = this.kvx = this.kvy = 0;
+    } else if (this.stunTimer > 0) {
+      // Étourdi : immobile (les reculs s'appliquent quand même), aucune action.
+      this.moveDir = { x: 0, y: 0 };
+      this.move(dt, ctx);
     } else if (this.isLocked()) {
       this.kvx = this.kvy = 0;
       this.updateLocked(dt, ctx);
@@ -237,6 +258,16 @@ export abstract class Hero implements Combatant {
     return 1;
   }
   protected onDeath(_ctx: GameContext): void {}
+  /** Début d'un étourdissement (ex. baisser le bouclier). */
+  protected onStunned(): void {}
+
+  /** Étourdit le héros (sauf s'il est invulnérable : Rappel, spawn). */
+  stun(seconds: number): void {
+    if (this.dead || this.invulnerable) return;
+    this.stunTimer = Math.max(this.stunTimer, seconds);
+    this.vx = this.vy = 0;
+    this.onStunned();
+  }
   protected onRespawn(_ctx: GameContext): void {}
 
   // ---------------------------------------------------------- mêlée rapide
@@ -326,6 +357,7 @@ export abstract class Hero implements Combatant {
     const dealt = Math.min(this.hp, amount);
     this.hp -= dealt;
     this.hurtTimer = 0.3;
+    this.sinceDamage = 0;
     if (this.hp <= 0) {
       this.hp = 0;
       this.dead = true;
@@ -361,6 +393,8 @@ export abstract class Hero implements Combatant {
     this.placeAt(at);
     this.kvx = this.kvy = 0;
     this.buff = null;
+    this.stunTimer = 0;
+    this.sinceDamage = 0;
     this.pinned = false;
     this.hurtTimer = 0;
     this.meleeCooldown = 0;
@@ -436,6 +470,7 @@ export abstract class Hero implements Combatant {
     else color = this.outline === COLORS.ally ? COLORS.hpAlly : COLORS.hpEnemy;
     drawHealthBar(ctx, this.x, barBottom, this.hp, this.maxHp, color, width);
     if (this.buff) drawBuffIndicator(ctx, this.x + width / 2 + 12, barBottom - 3.5, this.buff);
+    if (this.stunTimer > 0) drawStunStars(ctx, this.x, this.y - this.hh * 0.4);
     if (this.label) {
       ctx.fillStyle = this.outline;
       ctx.font = 'bold 12px system-ui, sans-serif';
