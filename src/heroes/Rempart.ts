@@ -4,6 +4,8 @@ import { angleDiff, circleInCone, degToRad, rotateTowards } from '../core/math';
 import type { Bot } from '../entities/Bot';
 import { Projectile } from '../entities/Projectile';
 import { t } from '../i18n';
+import { HAMMER as HAMMER_GRID, HAMMER_PALETTE, REMPART_SPRITE, type CharacterSprite } from '../sprites/library';
+import { drawProp, facingFromAngle, propImage, type SpriteLayout } from '../sprites/SpriteRenderer';
 import { lineOfSight } from '../world/Visibility';
 import { Hero, KEYS, type AbilitySlot, type WeaponHud } from './Hero';
 
@@ -334,6 +336,34 @@ export class Rempart extends Hero {
     this.chargeCooldown = CHARGE.cooldown;
     this.vx = this.vy = 0;
     ctx.arena.resolveCircle(this, this.radius);
+  }
+
+  // ------------------------------------------------------------ sprite
+
+  protected override spriteDef(): CharacterSprite {
+    return REMPART_SPRITE;
+  }
+  protected override spriteFacingAngle(): number {
+    return this.charge ? this.charge.dir : this.aim;
+  }
+  protected override isWalking(): boolean {
+    return (this.charge !== null && this.charge.windup <= 0) || super.isWalking();
+  }
+  protected override animRate(): number {
+    return this.charge && this.charge.windup <= 0 ? 2.2 : 1;
+  }
+
+  /** Marteau pixel art : derrière le corps quand Rempart est de dos, devant sinon. */
+  protected override drawSpriteExtras(ctx: CanvasRenderingContext2D, l: SpriteLayout, front: boolean): void {
+    const facing = this.spriteFacingAngle();
+    const behind = facingFromAngle(facing) === 'up';
+    if (front === behind) return;
+    const swingT = 1 - this.swingAnim / 0.2;
+    const angle = this.swingAnim > 0 ? facing + this.swingSide * (1 - 2 * swingT) : facing + 0.9;
+    const img = propImage('hammer', HAMMER_GRID, HAMMER_PALETTE, { outline: '#141820' });
+    const px = l.px * 1.3;
+    // Pivot : bout du manche, tenu à hauteur des mains.
+    drawProp(ctx, img, this.x, this.y - this.radius * 0.1, angle, px, -this.radius * 0.25 / px, img.height / 2);
   }
 
   // ------------------------------------------------------------ HUD

@@ -4,6 +4,8 @@ import { degToRad, lerp, randRange } from '../core/math';
 import { RingBuffer } from '../core/RingBuffer';
 import { Projectile } from '../entities/Projectile';
 import { t } from '../i18n';
+import { FLUX_SPRITE, type CharacterSprite } from '../sprites/library';
+import type { SpriteLayout } from '../sprites/SpriteRenderer';
 import { Hero, KEYS, type AbilitySlot, type WeaponHud } from './Hero';
 import { Magazine } from './Magazine';
 
@@ -247,6 +249,24 @@ export class Flux extends Hero {
       ctx.effects.ring(this.x, this.y, COLORS.recall, 70, 0.45);
       ctx.effects.sparks(this.x, this.y, COLORS.recall, 14, 260);
     }
+  }
+
+  // ------------------------------------------------------------ sprite
+
+  protected override spriteDef(): CharacterSprite {
+    return FLUX_SPRITE;
+  }
+  protected override spriteTint(): { color: string; alpha: number } | undefined {
+    return this.recall ? { color: COLORS.recall, alpha: 0.55 } : undefined;
+  }
+  protected override isWalking(): boolean {
+    return this.recall !== null || super.isWalking();
+  }
+  protected override drawSpriteExtras(ctx: CanvasRenderingContext2D, _l: SpriteLayout, front: boolean): void {
+    if (!front || this.muzzleFlash <= 0) return;
+    const m = this.muzzlePosition(this.muzzleSide);
+    ctx.fillStyle = 'rgba(255,240,180,0.95)';
+    ctx.fillRect(m.x - 3, m.y - 3, 6, 6);
   }
 
   // ------------------------------------------------------------ HUD

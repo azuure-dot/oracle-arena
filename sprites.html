@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Galerie de sprites</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        margin: 0;
+        padding: 24px 16px 48px;
+        background: #151b23;
+        color: #e9eef5;
+        font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 16px 24px;
+        margin-bottom: 24px;
+      }
+      h1 {
+        margin: 0;
+        font-size: 24px;
+        color: #ffb347;
+      }
+      header p {
+        margin: 0;
+        color: rgba(233, 238, 245, 0.6);
+        font-size: 14px;
+      }
+      label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+      }
+      section {
+        margin-bottom: 28px;
+        padding: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 10px;
+        background: #1b222c;
+        overflow-x: auto;
+      }
+      h2 {
+        margin: 0 0 12px;
+        font-size: 16px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .rows {
+        display: grid;
+        gap: 10px;
+      }
+      .row {
+        display: flex;
+        align-items: flex-end;
+        gap: 10px;
+      }
+      .row span {
+        width: 70px;
+        flex: 0 0 auto;
+        color: rgba(233, 238, 245, 0.55);
+        font-size: 12px;
+      }
+      canvas {
+        image-rendering: pixelated;
+        background: repeating-conic-gradient(#232b36 0% 25%, #1e252f 0% 50%) 0 0 / 16px 16px;
+        border-radius: 4px;
+      }
+      .anim {
+        margin-left: 18px;
+        outline: 1px dashed rgba(255, 179, 71, 0.5);
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Galerie de sprites</h1>
+      <p>Les dessins sont dans <code>src/sprites/library.ts</code> — modifie les lettres, la page se recharge toute seule.</p>
+      <label>Zoom <input id="zoom" type="range" min="2" max="10" value="5" /></label>
+    </header>
+    <main id="gallery"></main>
+    <script type="module" src="/src/spriteGallery.ts"></script>
+  </body>
+</html>

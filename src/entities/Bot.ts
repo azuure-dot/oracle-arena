@@ -6,6 +6,17 @@ import { t } from '../i18n';
 import { drawBuffIndicator, drawHealthBar, type BuffKind } from '../ui/healthBar';
 import type { Arena } from '../world/Arena';
 import { canSeeCircle } from '../world/Visibility';
+import { ROBOT_SPRITE, TURRET_BARREL, TURRET_BASE, TURRET_PALETTE } from '../sprites/library';
+import {
+  characterLayout,
+  drawCharacter,
+  drawGroundRing,
+  drawProp,
+  facingFromAngle,
+  propImage,
+  renderSettings,
+  walkFrame,
+} from '../sprites/SpriteRenderer';
 import { Projectile } from './Projectile';
 import type { Team } from './Team';
 
@@ -119,7 +130,18 @@ export class Bot {
     this.kvy += iy;
   }
 
+  private animTime = 0;
+
   update(dt: number, ctx: BotContext): void {
+    const px = this.x;
+    const py = this.y;
+    this.step(dt, ctx);
+    // Animation de marche si le bot s'est déplacé (patrouille, retour au poste, recul).
+    const moved = Math.hypot(this.x - px, this.y - py) > 20 * dt;
+    this.animTime = moved && this.alive && !this.pinned ? this.animTime + dt : 0;
+  }
+
+  private step(dt: number, ctx: BotContext): void {
     this.hitFlash = Math.max(0, this.hitFlash - dt);
 
     if (!this.alive) {
@@ -235,6 +257,10 @@ export class Bot {
 
   draw(ctx: CanvasRenderingContext2D): void {
     const outline = teamColor(this.team);
+    if (this.alive && renderSettings.mode === 'sprites') {
+      this.drawSprite(ctx, outline);
+      return;
+    }
 
     if (!this.alive) {
       ctx.strokeStyle = outline;
@@ -331,10 +357,62 @@ export class Bot {
     ctx.restore();
   }
 
+  // ---------------------------------------------------- sprites pixel art
+
+  private turretPx(): number {
+    return (this.radius * 2.2) / (TURRET_BASE[0].length + 2);
+  }
+
+  /** Haut visuel du bot (pour placer barre de vie et étiquette). */
+  private visualTop(): number {
+    if (renderSettings.mode !== 'sprites') return this.y - this.radius - 6;
+    if (this.kind === 'turret') return this.y - ((TURRET_BASE.length + 2) * this.turretPx()) / 2 - 2;
+    return characterLayout(ROBOT_SPRITE, this.x, this.y, this.radius).top;
+  }
+
+  private drawSprite(ctx: CanvasRenderingContext2D, outline: string): void {
+    const flash = this.hitFlash > 0;
+    if (this.kind === 'turret') {
+      const px = this.turretPx();
+      const v = { outline, overrides: { t: outline }, silhouette: flash ? '#ffffff' : undefined };
+      const base = propImage('turret.base', TURRET_BASE, TURRET_PALETTE, v);
+      const barrel = propImage('turret.barrel', TURRET_BARREL, TURRET_PALETTE, v);
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath();
+      ctx.ellipse(this.x + 3, this.y + 6, this.radius, this.radius * 0.8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      drawProp(ctx, base, this.x, this.y, 0, px, base.width / 2, base.height / 2);
+      drawProp(ctx, barrel, this.x, this.y, this.facing, px, 0, barrel.height / 2);
+    } else {
+      const layout = characterLayout(ROBOT_SPRITE, this.x, this.y, this.radius);
+      drawGroundRing(ctx, this.x, layout.feetY, this.radius, outline);
+      drawCharacter(ctx, ROBOT_SPRITE, {
+        x: this.x,
+        y: this.y,
+        radius: this.radius,
+        facing: facingFromAngle(this.facing),
+        frame: walkFrame(this.animTime),
+        outline,
+        overrides: { t: outline },
+        flash,
+      });
+    }
+
+    if (this.pinned) {
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([4, 3]);
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius + 5, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  }
+
   drawOverlay(ctx: CanvasRenderingContext2D): void {
     if (!this.alive) return;
     const color = this.isEnemy ? COLORS.hpEnemy : COLORS.hpAlly;
-    const barTop = this.y - this.radius - 10;
+    const barTop = this.visualTop() - 4;
     const barWidth = 56;
     drawHealthBar(ctx, this.x, barTop, this.hp, this.maxHp, color, barWidth);
     if (this.buff) drawBuffIndicator(ctx, this.x + barWidth / 2 + 12, barTop - 3.5, this.buff);
@@ -348,7 +426,7 @@ export class Bot {
       ctx.fillStyle = teamColor(this.team);
       ctx.font = 'bold 11px system-ui, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(tag, this.x, this.y - this.radius - 22);
+      ctx.fillText(tag, this.x, barTop - 12);
     }
   }
 }

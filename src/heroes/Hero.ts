@@ -5,6 +5,16 @@ import { damp, normalize, type Vec2 } from '../core/math';
 import type { Projectile } from '../entities/Projectile';
 import type { Team } from '../entities/Team';
 import { t, type TKey } from '../i18n';
+import type { CharacterSprite } from '../sprites/library';
+import {
+  characterLayout,
+  drawCharacter,
+  drawGroundRing,
+  facingFromAngle,
+  renderSettings,
+  walkFrame,
+  type SpriteLayout,
+} from '../sprites/SpriteRenderer';
 import { drawBuffIndicator, drawHealthBar, type BuffKind } from '../ui/healthBar';
 
 /** Touches communes à tous les héros (codes physiques : OK en AZERTY et QWERTY). */
@@ -83,6 +93,8 @@ export abstract class Hero {
   buff: BuffKind | null = null;
   /** Direction de déplacement demandée au clavier (normalisée, ou 0). */
   protected moveDir: Vec2 = { x: 0, y: 0 };
+  /** Temps d'animation de marche (0 = immobile). */
+  protected animTime = 0;
 
   constructor(readonly stats: HeroStats) {
     this.hp = stats.maxHp;
@@ -129,6 +141,16 @@ export abstract class Hero {
     }
     if (!this.dead) this.applyZones(dt, ctx);
     if (!this.dead) this.lateUpdate(dt, ctx);
+    this.animTime = this.isWalking() ? this.animTime + dt * this.animRate() : 0;
+  }
+
+  /** Le sprite doit-il jouer l'animation de marche ? */
+  protected isWalking(): boolean {
+    return Math.hypot(this.vx, this.vy) > 30;
+  }
+  /** Vitesse de l'animation de marche (1 = normale). */
+  protected animRate(): number {
+    return 1;
   }
 
   /** Timers et cooldowns : appelé chaque frame, même quand le héros est "verrouillé". */
@@ -211,8 +233,57 @@ export abstract class Hero {
   /** Sous les entités (aura, traînées...). */
   drawUnder(_ctx: CanvasRenderingContext2D, _time: number): void {}
 
+  // ---- sprites pixel art (branche de test) ----
+
+  /** Sprite du héros (null = formes géométriques). */
+  protected spriteDef(): CharacterSprite | null {
+    return null;
+  }
+  /** Angle utilisé pour choisir la vue (face/dos/profil) : la visée par défaut. */
+  protected spriteFacingAngle(): number {
+    return this.aim;
+  }
+  /** Remplacements de couleurs de la palette (ex. couleur de l'aura de Tempo). */
+  protected spriteOverrides(): Record<string, string> | undefined {
+    return undefined;
+  }
+  protected spriteTint(): { color: string; alpha: number } | undefined {
+    return undefined;
+  }
+  /** Accessoires (marteau, flash de tir...) dessinés derrière ou devant le sprite. */
+  protected drawSpriteExtras(_ctx: CanvasRenderingContext2D, _layout: SpriteLayout, _front: boolean): void {}
+
+  private usesSprite(): CharacterSprite | null {
+    return renderSettings.mode === 'sprites' ? this.spriteDef() : null;
+  }
+
+  /** Haut visuel du héros (pour placer la barre de vie). */
+  protected visualTop(): number {
+    const def = this.usesSprite();
+    return def ? characterLayout(def, this.x, this.y, this.radius).top : this.y - this.radius - 6;
+  }
+
   draw(ctx: CanvasRenderingContext2D): void {
     if (this.dead) return;
+    const def = this.usesSprite();
+    if (def) {
+      const layout = characterLayout(def, this.x, this.y, this.radius);
+      drawGroundRing(ctx, this.x, layout.feetY, this.radius, teamColor(this.team), this.aim);
+      this.drawSpriteExtras(ctx, layout, false);
+      drawCharacter(ctx, def, {
+        x: this.x,
+        y: this.y,
+        radius: this.radius,
+        facing: facingFromAngle(this.spriteFacingAngle()),
+        frame: walkFrame(this.animTime),
+        outline: teamColor(this.team),
+        overrides: this.spriteOverrides(),
+        flash: this.hurtTimer > 0.2,
+        tint: this.spriteTint(),
+      });
+      this.drawSpriteExtras(ctx, layout, true);
+      return;
+    }
     ctx.fillStyle = 'rgba(0,0,0,0.3)';
     ctx.beginPath();
     ctx.ellipse(this.x + 3, this.y + 6, this.radius, this.radius * 0.8, 0, 0, Math.PI * 2);
@@ -236,16 +307,17 @@ export abstract class Hero {
     }
     const low = this.hp / this.maxHp < 0.35;
     const width = this.maxHp > 300 ? 84 : 60;
+    const barBottom = this.visualTop() - 4;
     drawHealthBar(
       ctx,
       this.x,
-      this.y - this.radius - 10,
+      barBottom,
       this.hp,
       this.maxHp,
       low ? COLORS.hpLow : COLORS.hpPlayer,
       width,
     );
-    if (this.buff) drawBuffIndicator(ctx, this.x + width / 2 + 12, this.y - this.radius - 13.5, this.buff);
+    if (this.buff) drawBuffIndicator(ctx, this.x + width / 2 + 12, barBottom - 3.5, this.buff);
   }
 
   /** Corps circulaire standard : contour d'équipe (bleu) + visière orientée vers la visée. */

@@ -12,6 +12,8 @@ npm run dev
 
 Puis ouvrir http://localhost:5173.
 
+Galerie des sprites pixel art (pour travailler les designs) : http://localhost:5173/sprites.html
+
 | Commande            | Rôle                                          |
 | ------------------- | --------------------------------------------- |
 | `npm run dev`       | Serveur de développement (rechargement auto)  |
@@ -39,6 +41,7 @@ Puis ouvrir http://localhost:5173.
 | R                 | Recharger                           |
 | B                 | Activer / couper les tourelles      |
 | T / H             | Remettre les stats à zéro / aide    |
+| V                 | Sprites pixel art / formes          |
 | Échap             | Retour à la sélection de héros      |
 
 ## Structure

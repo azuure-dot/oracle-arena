@@ -9,6 +9,7 @@ import type { Projectile } from './entities/Projectile';
 import type { Team } from './entities/Team';
 import type { Hero } from './heroes/Hero';
 import { HEROES, type HeroEntry } from './heroes/registry';
+import { renderSettings } from './sprites/SpriteRenderer';
 import { HUD } from './ui/HUD';
 import { SelectScreen } from './ui/SelectScreen';
 import { Stats } from './ui/Stats';
@@ -195,6 +196,9 @@ export class Game {
     if (this.input.wasPressed('KeyH')) this.hud.showHelp = !this.hud.showHelp;
     if (this.input.wasPressed('KeyT')) this.stats.reset();
     if (this.input.wasPressed('KeyB')) this.turretsEnabled = !this.turretsEnabled;
+    if (this.input.wasPressed('KeyV')) {
+      renderSettings.mode = renderSettings.mode === 'sprites' ? 'shapes' : 'sprites';
+    }
 
     const aim = this.camera.screenToWorld(this.input.mouseX, this.input.mouseY);
     this.aimX = aim.x;

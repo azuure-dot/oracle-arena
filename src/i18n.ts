@@ -76,6 +76,7 @@ const fr = {
   'help.line': '{key} : {name}',
   'help.misc1': 'R : recharger · B : tourelles on/off',
   'help.misc2': 'T : reset stats · H : aide · Échap : héros',
+  'help.gfx': 'V : graphismes (sprites / formes)',
 
   // Monde
   'tag.ally': 'ALLIÉ',
@@ -151,6 +152,7 @@ const en: Record<TKey, string> = {
   'help.line': '{key}: {name}',
   'help.misc1': 'R: reload · B: toggle turrets',
   'help.misc2': 'T: reset stats · H: help · Esc: heroes',
+  'help.gfx': 'V: graphics (sprites / shapes)',
 
   'tag.ally': 'ALLY',
   'tag.wounded': 'WOUNDED ALLY',

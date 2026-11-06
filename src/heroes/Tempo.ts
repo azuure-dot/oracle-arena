@@ -3,6 +3,7 @@ import type { GameContext } from '../core/GameContext';
 import { circleInCone, degToRad, randRange } from '../core/math';
 import { Projectile } from '../entities/Projectile';
 import { t } from '../i18n';
+import { TEMPO_SPRITE, type CharacterSprite } from '../sprites/library';
 import { lineOfSight } from '../world/Visibility';
 import { Hero, KEYS, type AbilitySlot, type WeaponHud } from './Hero';
 import { Magazine } from './Magazine';
@@ -197,6 +198,16 @@ export class Tempo extends Hero {
     this.ampCooldown = AMP.cooldown;
     ctx.effects.ring(this.x, this.y, this.auraColor, AURA.radius + 20, 0.45);
     ctx.effects.sparks(this.x, this.y, this.auraColor, 18, 300);
+  }
+
+  // ------------------------------------------------------------ sprite
+
+  protected override spriteDef(): CharacterSprite {
+    return TEMPO_SPRITE;
+  }
+  /** Les écouteurs prennent la couleur de l'aura (jaune = Soin, vert = Vitesse). */
+  protected override spriteOverrides(): Record<string, string> {
+    return { a: this.auraColor };
   }
 
   // ------------------------------------------------------------ HUD
