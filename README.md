@@ -38,6 +38,7 @@ Galerie des sprites pixel art (pour travailler les designs) : http://localhost:5
 | Clic gauche       | Arme principale                     |
 | Clic droit        | Compétence 1                        |
 | Espace / Maj      | Compétences 2 et 3                  |
+| Clic molette      | Mêlée rapide (sauf Rempart)         |
 | R                 | Recharger                           |
 | B                 | Activer / couper les tourelles      |
 | T / H             | Remettre les stats à zéro / aide    |

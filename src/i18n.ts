@@ -22,6 +22,11 @@ const fr = {
   'key.ability1': 'Espace',
   'key.ability2': 'Maj',
   'key.escape': 'Échap',
+  'key.melee': 'Molette',
+
+  // Mêlée rapide (tous les héros sauf Rempart)
+  'melee.name': 'Mêlée rapide',
+  'melee.desc': 'Coup au contact, 40 dégâts · 1 s',
 
   // Flux
   'flux.tagline': 'Duelliste ultra-mobile. Petite hurtbox, gros harcèlement.',
@@ -103,6 +108,10 @@ const en: Record<TKey, string> = {
   'key.ability1': 'Space',
   'key.ability2': 'Shift',
   'key.escape': 'Esc',
+  'key.melee': 'MMB',
+
+  'melee.name': 'Quick melee',
+  'melee.desc': 'Point-blank hit, 40 damage · 1 s',
 
   'flux.tagline': 'Hyper-mobile duelist. Tiny hurtbox, relentless harassment.',
   'flux.weapon': 'Twin Blasters',

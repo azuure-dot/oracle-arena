@@ -102,6 +102,11 @@ export class Flux extends Hero {
     if (!this.recall) this.history.push({ t: ctx.time, x: this.x, y: this.y, hp: this.hp });
   }
 
+  /** La mêlée interrompt le rechargement (comme le tir, il faudra le relancer). */
+  protected override onQuickMelee(): void {
+    this.mag.cancelReload();
+  }
+
   protected override onRespawn(): void {
     this.mag.refill();
     this.blinkCharges = BLINK.maxCharges;
@@ -118,7 +123,7 @@ export class Flux extends Hero {
     if (ctx.input.wasPressed(...KEYS.reload)) this.mag.startReload();
 
     this.fireTimer -= dt;
-    if (ctx.input.isMouseDown(0)) {
+    if (ctx.input.isMouseDown(0) && !this.isMeleeing) {
       // Boucle "while" : même à bas FPS on tire bien 20 balles/s.
       while (this.fireTimer <= 0 && this.mag.consume()) {
         this.fire(ctx);

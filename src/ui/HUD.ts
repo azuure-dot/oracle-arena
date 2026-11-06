@@ -401,6 +401,7 @@ export class HUD {
       t('help.move'),
       t('help.line', { key: t('key.primary'), name: f.hero.weaponHud().name }),
       ...f.hero.abilitySlots().map((s) => t('help.line', { key: t(INPUT_LABEL_KEYS[s.input]), name: s.name })),
+      ...(f.hero.hasQuickMelee() ? [t('help.line', { key: t('key.melee'), name: t('melee.name') })] : []),
       t('help.misc1'),
       t('help.misc2'),
       t('help.hitbox'),

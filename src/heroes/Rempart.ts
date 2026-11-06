@@ -98,6 +98,11 @@ export class Rempart extends Hero {
     }
   }
 
+  /** Rempart se bat déjà au corps à corps (Marteau) : pas de mêlée rapide. */
+  override hasQuickMelee(): boolean {
+    return false;
+  }
+
   protected override speedMultiplier(): number {
     return this.shieldUp ? SHIELD.speedMul : 1;
   }

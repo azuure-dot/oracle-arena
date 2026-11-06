@@ -118,7 +118,14 @@ export class Tempo extends Hero {
 
     // Rafale : une pression lance 4 tirs successifs, même si on relâche.
     this.nextBurst = Math.max(0, this.nextBurst - dt);
-    if (input.isMouseDown(0) && this.burstLeft === 0 && this.nextBurst <= 0 && !this.mag.reloading && this.mag.ammo > 0) {
+    if (
+      input.isMouseDown(0) &&
+      !this.isMeleeing &&
+      this.burstLeft === 0 &&
+      this.nextBurst <= 0 &&
+      !this.mag.reloading &&
+      this.mag.ammo > 0
+    ) {
       this.burstLeft = SONIC.burst;
       this.burstTimer = 0;
     }
@@ -140,6 +147,12 @@ export class Tempo extends Hero {
     if (input.wasMousePressed(2) && this.boopCooldown <= 0) this.boop(ctx);
     if (input.wasPressed(...KEYS.ability1) && this.swapCooldown <= 0) this.swapAura(ctx);
     if (input.wasPressed(...KEYS.ability2) && this.ampCooldown <= 0) this.ampItUp(ctx);
+  }
+
+  /** La mêlée interrompt la rafale en cours et le rechargement. */
+  protected override onQuickMelee(): void {
+    this.burstLeft = 0;
+    this.mag.cancelReload();
   }
 
   protected override onRespawn(): void {

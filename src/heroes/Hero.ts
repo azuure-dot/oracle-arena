@@ -1,9 +1,11 @@
 import { COLORS, PLAYER_SPAWN, ZONES, teamColor } from '../config';
 import type { GameContext } from '../core/GameContext';
-import type { Box } from '../core/geometry';
+import { boxExtent, boxInCone, distToBox, type Box } from '../core/geometry';
 import type { Input } from '../core/Input';
-import { damp, normalize, type Vec2 } from '../core/math';
+import { damp, degToRad, normalize, type Vec2 } from '../core/math';
+import type { Bot } from '../entities/Bot';
 import type { Projectile } from '../entities/Projectile';
+import { lineOfSight } from '../world/Visibility';
 import type { Team } from '../entities/Team';
 import { t, type TKey } from '../i18n';
 import type { CharacterSprite } from '../sprites/library';
@@ -26,13 +28,29 @@ export const KEYS = {
 } as const;
 
 /** Emplacement de touche : le libellé affiché est traduit par le HUD (Clic D / RMB...). */
-export type InputSlot = 'primary' | 'secondary' | 'ability1' | 'ability2';
+export type InputSlot = 'primary' | 'secondary' | 'ability1' | 'ability2' | 'melee';
 
 export const INPUT_LABEL_KEYS: Record<InputSlot, TKey> = {
   primary: 'key.primary',
   secondary: 'key.secondary',
   ability1: 'key.ability1',
   ability2: 'key.ability2',
+  melee: 'key.melee',
+};
+
+/**
+ * Mêlée rapide (clic molette), commune à tous les héros sauf ceux qui se battent
+ * déjà au corps à corps. Portée minuscule : il faut quasiment toucher l'adversaire.
+ */
+export const QUICK_MELEE = {
+  damage: 40,
+  cooldown: 1, // s entre deux coups
+  /** Portée au-delà du bord de la hitbox du héros, dans la direction visée. */
+  reach: 12,
+  halfArc: degToRad(50),
+  /** Pendant ce temps le héros ne peut pas tirer (coup en cours). */
+  lockout: 0.35,
+  knockback: 140,
 };
 
 export type AbilityIcon = 'blink' | 'recall' | 'shield' | 'fire' | 'charge' | 'boop' | 'swap' | 'amp';
@@ -98,6 +116,9 @@ export abstract class Hero {
   protected moveDir: Vec2 = { x: 0, y: 0 };
   /** Temps d'animation de marche (0 = immobile). */
   protected animTime = 0;
+  /** Mêlée rapide : temps de recharge restant / durée restante du coup en cours. */
+  meleeCooldown = 0;
+  private meleeAnim = 0;
 
   /** Hitbox rectangulaire = le dessin du sprite (demi-largeur / demi-hauteur). */
   readonly hw: number;
@@ -144,12 +165,15 @@ export abstract class Hero {
 
     this.aim = Math.atan2(ctx.aimY - this.y, ctx.aimX - this.x);
     this.moveDir = readMoveDir(ctx.input);
+    this.meleeCooldown = Math.max(0, this.meleeCooldown - dt);
+    this.meleeAnim = Math.max(0, this.meleeAnim - dt);
 
     this.tick(dt, ctx);
     if (this.isLocked()) {
       this.updateLocked(dt, ctx);
     } else {
       this.move(dt, ctx);
+      if (this.hasQuickMelee() && ctx.input.wasMousePressed(1) && this.meleeCooldown <= 0) this.quickMelee(ctx);
       this.handleInput(dt, ctx);
     }
     if (!this.dead) this.applyZones(dt, ctx);
@@ -182,6 +206,50 @@ export abstract class Hero {
   }
   protected onDeath(_ctx: GameContext): void {}
   protected onRespawn(_ctx: GameContext): void {}
+
+  // ---------------------------------------------------------- mêlée rapide
+
+  /** Le héros a-t-il la mêlée rapide ? (non pour un héros déjà au corps à corps) */
+  hasQuickMelee(): boolean {
+    return true;
+  }
+  /** true pendant le coup : les armes ne tirent pas. */
+  protected get isMeleeing(): boolean {
+    return this.meleeAnim > 0;
+  }
+  /** Appelé au début d'un coup de mêlée (ex. annuler le rechargement). */
+  protected onQuickMelee(): void {}
+
+  private quickMelee(ctx: GameContext): void {
+    this.meleeCooldown = QUICK_MELEE.cooldown;
+    this.meleeAnim = QUICK_MELEE.lockout;
+    this.onQuickMelee();
+
+    const dx = Math.cos(this.aim);
+    const dy = Math.sin(this.aim);
+    // Portée mesurée depuis le bord de la hitbox : il faut être collé à la cible.
+    const reach = boxExtent(this, dx, dy) + QUICK_MELEE.reach;
+    ctx.effects.wedge(this.x, this.y, this.aim, QUICK_MELEE.halfArc, reach + 6, '#ffffff', 0.15, reach * 0.55);
+
+    // Un seul ennemi touché : le plus proche dans le cône, sans mur entre les deux.
+    let target: Bot | null = null;
+    let best = Infinity;
+    for (const bot of ctx.bots) {
+      if (!bot.alive || !bot.isEnemy) continue;
+      if (!boxInCone(this.x, this.y, this.aim, QUICK_MELEE.halfArc, reach, bot.box())) continue;
+      if (!lineOfSight(ctx.arena, this.x, this.y, bot.x, bot.y)) continue;
+      const d = distToBox(this.x, this.y, bot.box());
+      if (d < best) {
+        best = d;
+        target = bot;
+      }
+    }
+    if (!target) return;
+    ctx.damageBot(target, QUICK_MELEE.damage);
+    target.applyImpulse(dx * QUICK_MELEE.knockback, dy * QUICK_MELEE.knockback);
+    ctx.effects.sparks(target.x - dx * target.hw, target.y - dy * target.hh, '#ffffff', 8, 200);
+    ctx.shake(2);
+  }
 
   protected move(dt: number, ctx: GameContext): void {
     const speed = this.stats.speed * this.speedMultiplier();
@@ -232,6 +300,8 @@ export abstract class Hero {
     this.y = PLAYER_SPAWN.y;
     this.vx = 0;
     this.vy = 0;
+    this.meleeCooldown = 0;
+    this.meleeAnim = 0;
     this.onRespawn(ctx);
     ctx.effects.ring(this.x, this.y, this.stats.color, 50, 0.4);
   }
