@@ -1,9 +1,10 @@
 import { COLORS } from '../config';
 import type { GameContext } from '../core/GameContext';
-import { circleInCone, degToRad, randRange } from '../core/math';
+import { boxInCone, distToBox } from '../core/geometry';
+import { degToRad, randRange } from '../core/math';
 import { Projectile } from '../entities/Projectile';
 import { t } from '../i18n';
-import { TEMPO_SPRITE, type CharacterSprite } from '../sprites/library';
+import { TEMPO_SPRITE } from '../sprites/library';
 import { lineOfSight } from '../world/Visibility';
 import { Hero, KEYS, type AbilitySlot, type WeaponHud } from './Hero';
 import { Magazine } from './Magazine';
@@ -55,11 +56,11 @@ export class Tempo extends Hero {
     super({
       name: 'Tempo',
       maxHp: 200,
-      radius: 18, // hurtbox moyenne
+      sprite: TEMPO_SPRITE,
+      px: 2.2, // hitbox moyenne
       speed: 330, // même vitesse de base que Flux
       acceleration: 16,
       color: '#59d48a',
-      colorDark: '#2f8a55',
     });
   }
 
@@ -93,7 +94,7 @@ export class Tempo extends Hero {
     const speedMul = 1 + (this.amped ? AURA.ampSpeedBonus : AURA.speedBonus);
     for (const bot of ctx.bots) {
       if (!bot.alive || bot.isEnemy) continue;
-      if (Math.hypot(bot.x - this.x, bot.y - this.y) > AURA.radius + bot.radius * 0.5) continue;
+      if (distToBox(this.x, this.y, bot.box()) > AURA.radius) continue;
       bot.buff = this.mode; // indicateur "+" ou ">>" au-dessus de la tête
       if (this.mode === 'heal') bot.heal(heal);
       else bot.auraSpeedMul = speedMul;
@@ -179,7 +180,7 @@ export class Tempo extends Hero {
 
     for (const bot of ctx.bots) {
       if (!bot.alive || !bot.isEnemy || bot.pinned) continue;
-      if (!circleInCone(this.x, this.y, this.aim, BOOP.halfArc, reach, bot.x, bot.y, bot.radius)) continue;
+      if (!boxInCone(this.x, this.y, this.aim, BOOP.halfArc, reach, bot.box())) continue;
       if (!lineOfSight(ctx.arena, this.x, this.y, bot.x, bot.y)) continue;
       ctx.damageBot(bot, BOOP.damage);
       const d = Math.hypot(bot.x - this.x, bot.y - this.y) || 1;
@@ -202,9 +203,6 @@ export class Tempo extends Hero {
 
   // ------------------------------------------------------------ sprite
 
-  protected override spriteDef(): CharacterSprite {
-    return TEMPO_SPRITE;
-  }
   /** Les écouteurs prennent la couleur de l'aura (jaune = Soin, vert = Vitesse). */
   protected override spriteOverrides(): Record<string, string> {
     return { a: this.auraColor };
@@ -283,30 +281,5 @@ export class Tempo extends Hero {
     ctx.arc(this.x, this.y, this.radius + (R - this.radius) * wave, 0, Math.PI * 2);
     ctx.stroke();
     ctx.globalAlpha = 1;
-  }
-
-  protected drawBody(ctx: CanvasRenderingContext2D): void {
-    const { x, y, radius: r } = this;
-
-    // Amplificateur (arme) tenu à droite
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(this.aim);
-    ctx.fillStyle = '#2a2f38';
-    ctx.fillRect(r - 4, 2, 16, 9);
-    ctx.fillStyle = this.auraColor;
-    ctx.fillRect(r + 8, 3, 4, 7);
-    ctx.restore();
-
-    this.drawRoundBody(ctx, this.stats.color);
-
-    // Casque audio : deux écouteurs perpendiculaires à la visée, couleur de l'aura
-    ctx.fillStyle = this.auraColor;
-    for (const side of [-1, 1]) {
-      const a = this.aim + side * 1.57;
-      ctx.beginPath();
-      ctx.arc(x + Math.cos(a) * r * 0.85, y + Math.sin(a) * r * 0.85, r * 0.3, 0, Math.PI * 2);
-      ctx.fill();
-    }
   }
 }

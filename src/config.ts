@@ -10,7 +10,9 @@ export const WORLD = {
 export const PLAYER_SPAWN = { x: 260, y: 650 } as const;
 
 export const BOT = {
-  radius: 22,
+  /** Taille d'un pixel de sprite (unités monde) : fixe la hitbox rectangulaire des bots. */
+  robotPx: 2.6,
+  turretPx: 2.6,
   enemyHp: 200,
   allyHp: 200,
   respawnTime: 3,

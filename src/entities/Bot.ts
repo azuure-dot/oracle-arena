@@ -5,16 +5,17 @@ import { angleDiff, rotateTowards } from '../core/math';
 import { t } from '../i18n';
 import { drawBuffIndicator, drawHealthBar, type BuffKind } from '../ui/healthBar';
 import type { Arena } from '../world/Arena';
-import { canSeeCircle } from '../world/Visibility';
+import type { Box } from '../core/geometry';
+import { canSeeBox } from '../world/Visibility';
 import { ROBOT_SPRITE, TURRET_BARREL, TURRET_BASE, TURRET_PALETTE } from '../sprites/library';
 import {
+  characterHalfSize,
   characterLayout,
   drawCharacter,
   drawGroundRing,
   drawProp,
   facingFromAngle,
   propImage,
-  renderSettings,
   walkFrame,
 } from '../sprites/SpriteRenderer';
 import { Projectile } from './Projectile';
@@ -56,7 +57,10 @@ export interface BotContext {
 export class Bot {
   x: number;
   y: number;
-  readonly radius = BOT.radius;
+  /** Taille d'un pixel de sprite → fixe la hitbox rectangulaire (hw, hh). */
+  readonly px: number;
+  readonly hw: number;
+  readonly hh: number;
   readonly maxHp: number;
   readonly team: Team;
   readonly kind: BotKind;
@@ -94,6 +98,24 @@ export class Bot {
     this.facing = this.spawnFacing = opts.facing ?? Math.PI;
     this.maxHp = this.team === 'enemy' ? BOT.enemyHp : BOT.allyHp;
     this.hp = this.wounded ? this.maxHp * 0.5 : this.maxHp;
+    if (this.kind === 'turret') {
+      this.px = BOT.turretPx;
+      this.hw = (TURRET_BASE[0].length * this.px) / 2;
+      this.hh = (TURRET_BASE.length * this.px) / 2;
+    } else {
+      this.px = BOT.robotPx;
+      ({ hw: this.hw, hh: this.hh } = characterHalfSize(ROBOT_SPRITE, this.px));
+    }
+  }
+
+  /** Hitbox rectangulaire = le dessin du sprite. */
+  box(): Box {
+    return { x: this.x, y: this.y, hw: this.hw, hh: this.hh };
+  }
+
+  /** Taille approximative pour placer les effets (demi-largeur). */
+  get radius(): number {
+    return this.hw;
   }
 
   get isEnemy(): boolean {
@@ -164,7 +186,7 @@ export class Bot {
       const decay = Math.exp(-BOT.knockbackDamping * dt);
       this.kvx *= decay;
       this.kvy *= decay;
-      ctx.arena.resolveCircle(this, this.radius);
+      ctx.arena.resolveBox(this, this.hw, this.hh);
     } else {
       this.kvx = this.kvy = 0;
     }
@@ -217,14 +239,14 @@ export class Bot {
     if (!ctx.turretsEnabled || !h || h.dead) return;
     const dist = Math.hypot(h.x - this.x, h.y - this.y);
     if (dist > TURRET.range) return;
-    if (!canSeeCircle(ctx.arena, this.x, this.y, h.x, h.y, h.radius)) return;
+    if (!canSeeBox(ctx.arena, this.x, this.y, h.box())) return;
 
     const target = Math.atan2(h.y - this.y, h.x - this.x);
     this.facing = rotateTowards(this.facing, target, TURRET.turnRate * dt);
     if (this.fireTimer <= 0 && Math.abs(angleDiff(this.facing, target)) < 0.12) {
       this.fireTimer = TURRET.fireInterval;
-      const mx = this.x + Math.cos(this.facing) * (this.radius + 8);
-      const my = this.y + Math.sin(this.facing) * (this.radius + 8);
+      const mx = this.x + Math.cos(this.facing) * (this.hw + 8);
+      const my = this.y + Math.sin(this.facing) * (this.hw + 8);
       ctx.spawnProjectile(
         new Projectile({
           x: mx,
@@ -257,19 +279,14 @@ export class Bot {
 
   draw(ctx: CanvasRenderingContext2D): void {
     const outline = teamColor(this.team);
-    if (this.alive && renderSettings.mode === 'sprites') {
-      this.drawSprite(ctx, outline);
-      return;
-    }
 
     if (!this.alive) {
+      // Silhouette fantôme de la hitbox + compte à rebours
       ctx.strokeStyle = outline;
       ctx.globalAlpha = 0.35;
       ctx.setLineDash([5, 5]);
       ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.strokeRect(this.x - this.hw, this.y - this.hh, this.hw * 2, this.hh * 2);
       ctx.setLineDash([]);
       ctx.globalAlpha = 0.8;
       ctx.fillStyle = outline;
@@ -280,116 +297,22 @@ export class Bot {
       return;
     }
 
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.beginPath();
-    ctx.ellipse(this.x + 3, this.y + 6, this.radius, this.radius * 0.8, 0, 0, Math.PI * 2);
-    ctx.fill();
-
-    const body = this.hitFlash > 0 ? '#ffffff' : COLORS.botBody;
-    if (this.kind === 'turret') this.drawTurret(ctx, body, outline);
-    else this.drawTarget(ctx, body, outline);
-
-    if (this.pinned) {
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = 2;
-      ctx.setLineDash([4, 3]);
-      ctx.beginPath();
-      ctx.arc(this.x, this.y, this.radius + 5, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
-  }
-
-  /** Mannequin : corps neutre, cœur + contour à la couleur d'équipe (bleu allié / rouge ennemi). */
-  private drawTarget(ctx: CanvasRenderingContext2D, body: string, outline: string): void {
-    ctx.fillStyle = body;
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,0.18)';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius * 0.6, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.fillStyle = outline;
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius * 0.3, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Visière : direction du regard
-    ctx.strokeStyle = '#2a2f38';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius - 5, this.facing - 0.5, this.facing + 0.5);
-    ctx.stroke();
-
-    if (this.wounded) {
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(this.x - 1.5, this.y - 5, 3, 10);
-      ctx.fillRect(this.x - 5, this.y - 1.5, 10, 3);
-    }
-
-    // Contour d'équipe
-    ctx.strokeStyle = outline;
-    ctx.lineWidth = 3.5;
-    ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-    ctx.stroke();
-  }
-
-  private drawTurret(ctx: CanvasRenderingContext2D, body: string, outline: string): void {
-    const r = this.radius;
-    const half = r * 0.85;
-    ctx.save();
-    ctx.translate(this.x, this.y);
-    ctx.rotate(this.facing);
-    ctx.fillStyle = '#2a2f38';
-    ctx.fillRect(r * 0.2, -5, r + 10, 10); // canon
-    ctx.fillStyle = body;
-    ctx.fillRect(-half, -half, half * 2, half * 2);
-    ctx.fillStyle = outline;
-    ctx.beginPath();
-    ctx.arc(0, 0, r * 0.35, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = outline;
-    ctx.lineWidth = 3.5;
-    ctx.strokeRect(-half, -half, half * 2, half * 2);
-    ctx.restore();
-  }
-
-  // ---------------------------------------------------- sprites pixel art
-
-  private turretPx(): number {
-    return (this.radius * 2.2) / (TURRET_BASE[0].length + 2);
-  }
-
-  /** Haut visuel du bot (pour placer barre de vie et étiquette). */
-  private visualTop(): number {
-    if (renderSettings.mode !== 'sprites') return this.y - this.radius - 6;
-    if (this.kind === 'turret') return this.y - ((TURRET_BASE.length + 2) * this.turretPx()) / 2 - 2;
-    return characterLayout(ROBOT_SPRITE, this.x, this.y, this.radius).top;
-  }
-
-  private drawSprite(ctx: CanvasRenderingContext2D, outline: string): void {
     const flash = this.hitFlash > 0;
     if (this.kind === 'turret') {
-      const px = this.turretPx();
       const v = { outline, overrides: { t: outline }, silhouette: flash ? '#ffffff' : undefined };
       const base = propImage('turret.base', TURRET_BASE, TURRET_PALETTE, v);
       const barrel = propImage('turret.barrel', TURRET_BARREL, TURRET_PALETTE, v);
       ctx.fillStyle = 'rgba(0,0,0,0.3)';
-      ctx.beginPath();
-      ctx.ellipse(this.x + 3, this.y + 6, this.radius, this.radius * 0.8, 0, 0, Math.PI * 2);
-      ctx.fill();
-      drawProp(ctx, base, this.x, this.y, 0, px, base.width / 2, base.height / 2);
-      drawProp(ctx, barrel, this.x, this.y, this.facing, px, 0, barrel.height / 2);
+      ctx.fillRect(this.x - this.hw + 4, this.y - this.hh + 6, this.hw * 2, this.hh * 2);
+      drawProp(ctx, base, this.x, this.y, 0, this.px, base.width / 2, base.height / 2);
+      drawProp(ctx, barrel, this.x, this.y, this.facing, this.px, 0, barrel.height / 2);
     } else {
-      const layout = characterLayout(ROBOT_SPRITE, this.x, this.y, this.radius);
-      drawGroundRing(ctx, this.x, layout.feetY, this.radius, outline);
+      const layout = characterLayout(ROBOT_SPRITE, this.x, this.y, this.px);
+      drawGroundRing(ctx, this.x, layout.feetY, this.hw, outline);
       drawCharacter(ctx, ROBOT_SPRITE, {
         x: this.x,
         y: this.y,
-        radius: this.radius,
+        px: this.px,
         facing: facingFromAngle(this.facing),
         frame: walkFrame(this.animTime),
         outline,
@@ -402,9 +325,7 @@ export class Bot {
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 2;
       ctx.setLineDash([4, 3]);
-      ctx.beginPath();
-      ctx.arc(this.x, this.y, this.radius + 5, 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.strokeRect(this.x - this.hw - 4, this.y - this.hh - 4, this.hw * 2 + 8, this.hh * 2 + 8);
       ctx.setLineDash([]);
     }
   }
@@ -412,7 +333,7 @@ export class Bot {
   drawOverlay(ctx: CanvasRenderingContext2D): void {
     if (!this.alive) return;
     const color = this.isEnemy ? COLORS.hpEnemy : COLORS.hpAlly;
-    const barTop = this.visualTop() - 4;
+    const barTop = this.y - this.hh - this.px - 4;
     const barWidth = 56;
     drawHealthBar(ctx, this.x, barTop, this.hp, this.maxHp, color, barWidth);
     if (this.buff) drawBuffIndicator(ctx, this.x + barWidth / 2 + 12, barTop - 3.5, this.buff);

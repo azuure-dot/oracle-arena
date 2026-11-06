@@ -403,7 +403,7 @@ export class HUD {
       ...f.hero.abilitySlots().map((s) => t('help.line', { key: t(INPUT_LABEL_KEYS[s.input]), name: s.name })),
       t('help.misc1'),
       t('help.misc2'),
-      t('help.gfx'),
+      t('help.hitbox'),
     ];
     const x = 24;
     let y = 30;

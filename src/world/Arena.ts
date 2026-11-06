@@ -76,15 +76,11 @@ export class Arena {
     onLangChange(() => (this.floorCache = null));
   }
 
-  /** Le cercle chevauche-t-il un mur ou sort-il de la map ? */
-  circleCollides(x: number, y: number, r: number): boolean {
-    if (x - r < 0 || y - r < 0 || x + r > this.width || y + r > this.height) return true;
+  /** La boîte (centre x,y, demi-dimensions hw,hh) chevauche-t-elle un mur ou sort-elle de la map ? */
+  boxCollides(x: number, y: number, hw: number, hh: number): boolean {
+    if (x - hw < 0 || y - hh < 0 || x + hw > this.width || y + hh > this.height) return true;
     for (const w of this.walls) {
-      const cx = clamp(x, w.x, w.x + w.w);
-      const cy = clamp(y, w.y, w.y + w.h);
-      const dx = x - cx;
-      const dy = y - cy;
-      if (dx * dx + dy * dy < r * r) return true;
+      if (x + hw > w.x && x - hw < w.x + w.w && y + hh > w.y && y - hh < w.y + w.h) return true;
     }
     return false;
   }
@@ -95,43 +91,24 @@ export class Arena {
   }
 
   /**
-   * Repousse un cercle hors des murs et des bords (résolution par plus petite
-   * pénétration). Le joueur "glisse" ainsi le long des murs.
+   * Repousse une boîte hors des murs et des bords, sur l'axe de plus petite
+   * pénétration : le personnage "glisse" le long des murs.
    */
-  resolveCircle(pos: { x: number; y: number }, r: number): void {
+  resolveBox(pos: { x: number; y: number }, hw: number, hh: number): void {
     for (let iter = 0; iter < 3; iter++) {
       let moved = false;
       for (const w of this.walls) {
-        const cx = clamp(pos.x, w.x, w.x + w.w);
-        const cy = clamp(pos.y, w.y, w.y + w.h);
-        const dx = pos.x - cx;
-        const dy = pos.y - cy;
-        const d2 = dx * dx + dy * dy;
-        if (d2 >= r * r) continue;
-
-        if (d2 > 1e-8) {
-          const d = Math.sqrt(d2);
-          const push = r - d;
-          pos.x += (dx / d) * push;
-          pos.y += (dy / d) * push;
-        } else {
-          // Centre à l'intérieur du rectangle : on sort par le côté le plus proche.
-          const left = pos.x - w.x;
-          const right = w.x + w.w - pos.x;
-          const top = pos.y - w.y;
-          const bottom = w.y + w.h - pos.y;
-          const m = Math.min(left, right, top, bottom);
-          if (m === left) pos.x = w.x - r;
-          else if (m === right) pos.x = w.x + w.w + r;
-          else if (m === top) pos.y = w.y - r;
-          else pos.y = w.y + w.h + r;
-        }
+        const ox = Math.min(pos.x + hw, w.x + w.w) - Math.max(pos.x - hw, w.x);
+        const oy = Math.min(pos.y + hh, w.y + w.h) - Math.max(pos.y - hh, w.y);
+        if (ox <= 0 || oy <= 0) continue;
+        if (ox < oy) pos.x += pos.x < w.x + w.w / 2 ? -ox : ox;
+        else pos.y += pos.y < w.y + w.h / 2 ? -oy : oy;
         moved = true;
       }
       if (!moved) break;
     }
-    pos.x = clamp(pos.x, r, this.width - r);
-    pos.y = clamp(pos.y, r, this.height - r);
+    pos.x = clamp(pos.x, hw, this.width - hw);
+    pos.y = clamp(pos.y, hh, this.height - hh);
   }
 
   zoneAt(x: number, y: number): Zone | undefined {

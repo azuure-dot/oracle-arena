@@ -1,5 +1,6 @@
 import { COLORS, PLAYER_SPAWN, ZONES, teamColor } from '../config';
 import type { GameContext } from '../core/GameContext';
+import type { Box } from '../core/geometry';
 import type { Input } from '../core/Input';
 import { damp, normalize, type Vec2 } from '../core/math';
 import type { Projectile } from '../entities/Projectile';
@@ -7,11 +8,11 @@ import type { Team } from '../entities/Team';
 import { t, type TKey } from '../i18n';
 import type { CharacterSprite } from '../sprites/library';
 import {
+  characterHalfSize,
   characterLayout,
   drawCharacter,
   drawGroundRing,
   facingFromAngle,
-  renderSettings,
   walkFrame,
   type SpriteLayout,
 } from '../sprites/SpriteRenderer';
@@ -63,11 +64,13 @@ export interface WeaponHud {
 export interface HeroStats {
   name: string;
   maxHp: number;
-  radius: number; // hurtbox
+  /** Sprite pixel art du héros. */
+  sprite: CharacterSprite;
+  /** Taille d'un pixel du sprite (unités monde) : fixe aussi la taille de la hitbox. */
+  px: number;
   speed: number; // px/s
   acceleration?: number;
   color: string;
-  colorDark: string;
 }
 
 /**
@@ -96,15 +99,25 @@ export abstract class Hero {
   /** Temps d'animation de marche (0 = immobile). */
   protected animTime = 0;
 
+  /** Hitbox rectangulaire = le dessin du sprite (demi-largeur / demi-hauteur). */
+  readonly hw: number;
+  readonly hh: number;
+
   constructor(readonly stats: HeroStats) {
     this.hp = stats.maxHp;
+    ({ hw: this.hw, hh: this.hh } = characterHalfSize(stats.sprite, stats.px));
   }
 
   get name(): string {
     return this.stats.name;
   }
+  /** Taille approximative (demi-largeur) pour placer effets et projectiles. */
   get radius(): number {
-    return this.stats.radius;
+    return this.hw;
+  }
+  /** Hitbox courante (dégâts reçus + collisions avec les murs). */
+  box(): Box {
+    return { x: this.x, y: this.y, hw: this.hw, hh: this.hh };
   }
   get maxHp(): number {
     return this.stats.maxHp;
@@ -177,7 +190,7 @@ export abstract class Hero {
     this.vy = damp(this.vy, this.moveDir.y * speed, accel, dt);
     this.x += this.vx * dt;
     this.y += this.vy * dt;
-    ctx.arena.resolveCircle(this, this.radius);
+    ctx.arena.resolveBox(this, this.hw, this.hh);
   }
 
   private applyZones(dt: number, ctx: GameContext): void {
@@ -233,12 +246,8 @@ export abstract class Hero {
   /** Sous les entités (aura, traînées...). */
   drawUnder(_ctx: CanvasRenderingContext2D, _time: number): void {}
 
-  // ---- sprites pixel art (branche de test) ----
+  // ---- rendu : sprite pixel art ----
 
-  /** Sprite du héros (null = formes géométriques). */
-  protected spriteDef(): CharacterSprite | null {
-    return null;
-  }
   /** Angle utilisé pour choisir la vue (face/dos/profil) : la visée par défaut. */
   protected spriteFacingAngle(): number {
     return this.aim;
@@ -253,45 +262,25 @@ export abstract class Hero {
   /** Accessoires (marteau, flash de tir...) dessinés derrière ou devant le sprite. */
   protected drawSpriteExtras(_ctx: CanvasRenderingContext2D, _layout: SpriteLayout, _front: boolean): void {}
 
-  private usesSprite(): CharacterSprite | null {
-    return renderSettings.mode === 'sprites' ? this.spriteDef() : null;
-  }
-
-  /** Haut visuel du héros (pour placer la barre de vie). */
-  protected visualTop(): number {
-    const def = this.usesSprite();
-    return def ? characterLayout(def, this.x, this.y, this.radius).top : this.y - this.radius - 6;
-  }
-
   draw(ctx: CanvasRenderingContext2D): void {
     if (this.dead) return;
-    const def = this.usesSprite();
-    if (def) {
-      const layout = characterLayout(def, this.x, this.y, this.radius);
-      drawGroundRing(ctx, this.x, layout.feetY, this.radius, teamColor(this.team), this.aim);
-      this.drawSpriteExtras(ctx, layout, false);
-      drawCharacter(ctx, def, {
-        x: this.x,
-        y: this.y,
-        radius: this.radius,
-        facing: facingFromAngle(this.spriteFacingAngle()),
-        frame: walkFrame(this.animTime),
-        outline: teamColor(this.team),
-        overrides: this.spriteOverrides(),
-        flash: this.hurtTimer > 0.2,
-        tint: this.spriteTint(),
-      });
-      this.drawSpriteExtras(ctx, layout, true);
-      return;
-    }
-    ctx.fillStyle = 'rgba(0,0,0,0.3)';
-    ctx.beginPath();
-    ctx.ellipse(this.x + 3, this.y + 6, this.radius, this.radius * 0.8, 0, 0, Math.PI * 2);
-    ctx.fill();
-    this.drawBody(ctx);
+    const def = this.stats.sprite;
+    const layout = characterLayout(def, this.x, this.y, this.stats.px);
+    drawGroundRing(ctx, this.x, layout.feetY, this.hw, teamColor(this.team), this.aim);
+    this.drawSpriteExtras(ctx, layout, false);
+    drawCharacter(ctx, def, {
+      x: this.x,
+      y: this.y,
+      px: this.stats.px,
+      facing: facingFromAngle(this.spriteFacingAngle()),
+      frame: walkFrame(this.animTime),
+      outline: teamColor(this.team),
+      overrides: this.spriteOverrides(),
+      flash: this.hurtTimer > 0.2,
+      tint: this.spriteTint(),
+    });
+    this.drawSpriteExtras(ctx, layout, true);
   }
-
-  protected abstract drawBody(ctx: CanvasRenderingContext2D): void;
 
   /** Au-dessus des entités (bouclier...). */
   drawOver(_ctx: CanvasRenderingContext2D): void {}
@@ -307,37 +296,9 @@ export abstract class Hero {
     }
     const low = this.hp / this.maxHp < 0.35;
     const width = this.maxHp > 300 ? 84 : 60;
-    const barBottom = this.visualTop() - 4;
-    drawHealthBar(
-      ctx,
-      this.x,
-      barBottom,
-      this.hp,
-      this.maxHp,
-      low ? COLORS.hpLow : COLORS.hpPlayer,
-      width,
-    );
+    const barBottom = this.y - this.hh - this.stats.px - 4;
+    drawHealthBar(ctx, this.x, barBottom, this.hp, this.maxHp, low ? COLORS.hpLow : COLORS.hpPlayer, width);
     if (this.buff) drawBuffIndicator(ctx, this.x + width / 2 + 12, barBottom - 3.5, this.buff);
-  }
-
-  /** Corps circulaire standard : contour d'équipe (bleu) + visière orientée vers la visée. */
-  protected drawRoundBody(ctx: CanvasRenderingContext2D, fill: string): void {
-    const { x, y, radius: r } = this;
-    ctx.fillStyle = this.hurtTimer > 0.2 ? '#ffffff' : fill;
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = teamColor(this.team);
-    ctx.lineWidth = 3.5;
-    ctx.stroke();
-
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = Math.max(3, r * 0.22);
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.arc(x, y, r * 0.68, this.aim - 0.55, this.aim + 0.55);
-    ctx.stroke();
-    ctx.lineCap = 'butt';
   }
 }
 

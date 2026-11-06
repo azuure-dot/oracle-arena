@@ -41,25 +41,3 @@ export const rotateTowards = (current: number, target: number, maxStep: number):
   const d = angleDiff(current, target);
   return Math.abs(d) <= maxStep ? target : current + Math.sign(d) * maxStep;
 };
-
-/**
- * Un cercle (cx, cy, r) est-il dans le cône d'origine (ox, oy), de direction
- * `angle`, de demi-ouverture `halfArc` et de portée `reach` ?
- * La tolérance angulaire tient compte du rayon de la cible.
- */
-export const circleInCone = (
-  ox: number,
-  oy: number,
-  angle: number,
-  halfArc: number,
-  reach: number,
-  cx: number,
-  cy: number,
-  r: number,
-): boolean => {
-  const d = Math.hypot(cx - ox, cy - oy);
-  if (d - r > reach) return false;
-  if (d < r) return true;
-  const tolerance = Math.asin(Math.min(1, r / d));
-  return Math.abs(angleDiff(angle, Math.atan2(cy - oy, cx - ox))) <= halfArc + tolerance;
-};

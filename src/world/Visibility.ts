@@ -1,4 +1,5 @@
 import { VISION } from '../config';
+import type { Box } from '../core/geometry';
 import type { Vec2 } from '../core/math';
 import type { Arena, Rect } from './Arena';
 
@@ -10,7 +11,7 @@ import type { Arena, Rect } from './Arena';
  *    les rayons décalés "glissent" le long du coin et révèlent ce qu'il y a derrière.
  *    On garde l'impact le plus proche de chaque rayon, puis on trie par angle.
  *
- * 2. lineOfSight() / canSeeCircle() : test logique (pour le GAMEPLAY).
+ * 2. lineOfSight() / canSeeBox() : test logique (pour le GAMEPLAY).
  *    Un segment œil→cible coupe-t-il un mur ? (algorithme de Liang-Barsky).
  *    C'est ce test qui décide si un bot est affiché, si une tourelle peut tirer,
  *    si un coup de mêlée passe... Il servira aussi côté serveur en multijoueur
@@ -57,11 +58,11 @@ export function computeVisibility(ex: number, ey: number, arena: Arena): VisPoin
 }
 
 /**
- * Le cercle (cx, cy, r) touche-t-il la zone de vision 16:9 centrée sur l'œil ?
+ * La boîte (ou le point si hw = hh = 0) touche-t-elle la zone de vision 16:9 centrée sur l'œil ?
  * Au-delà de ce périmètre, rien n'est visible, même sans mur.
  */
-export function inVisionRange(ex: number, ey: number, cx: number, cy: number, r = 0): boolean {
-  return Math.abs(cx - ex) <= VISION.width / 2 + r && Math.abs(cy - ey) <= VISION.height / 2 + r;
+export function inVisionRange(ex: number, ey: number, cx: number, cy: number, hw = 0, hh = hw): boolean {
+  return Math.abs(cx - ex) <= VISION.width / 2 + hw && Math.abs(cy - ey) <= VISION.height / 2 + hh;
 }
 
 /** Le segment [A, B] traverse-t-il le rectangle ? (Liang-Barsky) */
@@ -104,24 +105,17 @@ export function lineOfSight(arena: Arena, ax: number, ay: number, bx: number, by
 }
 
 /**
- * Un cercle est visible si son centre OU l'un de ses deux bords latéraux
- * (perpendiculaires à la ligne de visée) l'est : un bot à moitié caché
- * derrière un coin reste donc visible.
+ * Une hitbox est visible si son centre OU l'un de ses coins (légèrement rentrés)
+ * l'est : un personnage à moitié caché derrière un coin de mur reste visible.
  */
-export function canSeeCircle(
-  arena: Arena,
-  ex: number,
-  ey: number,
-  cx: number,
-  cy: number,
-  r: number,
-): boolean {
-  if (lineOfSight(arena, ex, ey, cx, cy)) return true;
-  const dx = cx - ex;
-  const dy = cy - ey;
-  const len = Math.hypot(dx, dy);
-  if (len < 1e-6) return true;
-  const px = (-dy / len) * r * 0.85;
-  const py = (dx / len) * r * 0.85;
-  return lineOfSight(arena, ex, ey, cx + px, cy + py) || lineOfSight(arena, ex, ey, cx - px, cy - py);
+export function canSeeBox(arena: Arena, ex: number, ey: number, b: Box): boolean {
+  if (lineOfSight(arena, ex, ey, b.x, b.y)) return true;
+  const kx = b.hw * 0.85;
+  const ky = b.hh * 0.85;
+  return (
+    lineOfSight(arena, ex, ey, b.x - kx, b.y - ky) ||
+    lineOfSight(arena, ex, ey, b.x + kx, b.y - ky) ||
+    lineOfSight(arena, ex, ey, b.x - kx, b.y + ky) ||
+    lineOfSight(arena, ex, ey, b.x + kx, b.y + ky)
+  );
 }

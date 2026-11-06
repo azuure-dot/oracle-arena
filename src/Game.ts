@@ -9,13 +9,13 @@ import type { Projectile } from './entities/Projectile';
 import type { Team } from './entities/Team';
 import type { Hero } from './heroes/Hero';
 import { HEROES, type HeroEntry } from './heroes/registry';
-import { renderSettings } from './sprites/SpriteRenderer';
 import { HUD } from './ui/HUD';
 import { SelectScreen } from './ui/SelectScreen';
 import { Stats } from './ui/Stats';
 import { Arena } from './world/Arena';
 import { Fog } from './world/Fog';
-import { canSeeCircle, computeVisibility, inVisionRange, lineOfSight, type VisPoint } from './world/Visibility';
+import { canSeeBox, computeVisibility, inVisionRange, lineOfSight, type VisPoint } from './world/Visibility';
+import { circleIntersectsBox } from './core/geometry';
 
 /** Delta max pour éviter les "téléportations" après un onglet en arrière-plan. */
 const MAX_DT = 1 / 20;
@@ -39,6 +39,8 @@ export class Game {
   private projectiles: Projectile[] = [];
   private visibility: VisPoint[] = [];
   private turretsEnabled = true;
+  /** Touche X : affiche les hitbox (débogage / réglage des sprites). */
+  private showHitboxes = false;
 
   private time = 0;
   private lastTs = 0;
@@ -196,9 +198,7 @@ export class Game {
     if (this.input.wasPressed('KeyH')) this.hud.showHelp = !this.hud.showHelp;
     if (this.input.wasPressed('KeyT')) this.stats.reset();
     if (this.input.wasPressed('KeyB')) this.turretsEnabled = !this.turretsEnabled;
-    if (this.input.wasPressed('KeyV')) {
-      renderSettings.mode = renderSettings.mode === 'sprites' ? 'shapes' : 'sprites';
-    }
+    if (this.input.wasPressed('KeyX')) this.showHitboxes = !this.showHitboxes;
 
     const aim = this.camera.screenToWorld(this.input.mouseX, this.input.mouseY);
     this.aimX = aim.x;
@@ -219,8 +219,7 @@ export class Game {
     this.visibility = computeVisibility(hero.x, hero.y, this.arena);
     for (const b of this.bots) {
       b.visible =
-        inVisionRange(hero.x, hero.y, b.x, b.y, b.radius) &&
-        canSeeCircle(this.arena, hero.x, hero.y, b.x, b.y, b.radius);
+        inVisionRange(hero.x, hero.y, b.x, b.y, b.hw, b.hh) && canSeeBox(this.arena, hero.x, hero.y, b.box());
     }
 
     this.effects.update(dt);
@@ -237,7 +236,7 @@ export class Game {
     const killed = !bot.alive;
     this.stats.record(this.time, dealt, killed);
     this.hud.onHit(killed);
-    this.effects.damageNumber(bot.x, bot.y - bot.radius, dealt);
+    this.effects.damageNumber(bot.x, bot.y - bot.hh, dealt);
     if (killed) {
       this.effects.sparks(bot.x, bot.y, COLORS.enemy, 26, 320);
       this.effects.ring(bot.x, bot.y, COLORS.enemy, 60, 0.4);
@@ -271,7 +270,7 @@ export class Game {
           if (hero.shieldBlocks(p)) {
             p.dead = true;
             this.effects.sparks(p.x, p.y, COLORS.shield, 5, 160);
-          } else if (Math.hypot(p.x - hero.x, p.y - hero.y) <= hero.radius + p.radius) {
+          } else if (circleIntersectsBox(p.x, p.y, p.radius, hero.box())) {
             hero.takeDamage(p.damage, gctx);
             p.dead = true;
             this.effects.sparks(p.x, p.y, COLORS.enemyBullet, 5, 160);
@@ -288,8 +287,7 @@ export class Game {
   private hitBots(p: Projectile): void {
     for (const bot of this.bots) {
       if (!bot.alive || bot.team === p.team) continue;
-      const r = bot.radius + p.radius;
-      if ((p.x - bot.x) ** 2 + (p.y - bot.y) ** 2 > r * r) continue;
+      if (!circleIntersectsBox(p.x, p.y, p.radius, bot.box())) continue;
       if (p.pierce) {
         if (p.hits.has(bot)) continue;
         p.hits.add(bot);
@@ -305,6 +303,15 @@ export class Game {
   }
 
   // ------------------------------------------------------------ rendu
+
+  private drawHitboxes(ctx: CanvasRenderingContext2D, hero: Hero): void {
+    ctx.save();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#00ff9c';
+    const boxes = [hero.box(), ...this.bots.filter((b) => b.visible && b.alive).map((b) => b.box())];
+    for (const b of boxes) ctx.strokeRect(b.x - b.hw, b.y - b.hh, b.hw * 2, b.hh * 2);
+    ctx.restore();
+  }
 
   private draw(): void {
     const ctx = this.ctx;
@@ -338,6 +345,7 @@ export class Game {
     }
     this.effects.drawOver(ctx);
     hero?.drawOver(ctx);
+    if (hero && this.showHitboxes) this.drawHitboxes(ctx, hero);
 
     // --- 2. Ombre des murs (ligne de vue)
     toScreen();

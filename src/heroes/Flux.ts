@@ -4,7 +4,7 @@ import { degToRad, lerp, randRange } from '../core/math';
 import { RingBuffer } from '../core/RingBuffer';
 import { Projectile } from '../entities/Projectile';
 import { t } from '../i18n';
-import { FLUX_SPRITE, type CharacterSprite } from '../sprites/library';
+import { FLUX_SPRITE } from '../sprites/library';
 import type { SpriteLayout } from '../sprites/SpriteRenderer';
 import { Hero, KEYS, type AbilitySlot, type WeaponHud } from './Hero';
 import { Magazine } from './Magazine';
@@ -54,11 +54,11 @@ export class Flux extends Hero {
     super({
       name: 'Flux',
       maxHp: 175,
-      radius: 14, // hurtbox réduite : fragile mais difficile à toucher
+      sprite: FLUX_SPRITE,
+      px: 1.8, // petit sprite = petite hitbox : fragile mais difficile à toucher
       speed: 330,
       acceleration: 16,
       color: COLORS.accent,
-      colorDark: '#c9761a',
     });
   }
 
@@ -175,7 +175,7 @@ export class Flux extends Hero {
     for (let i = 1; i <= steps; i++) {
       const px = this.x + (dir.x * dist * i) / steps;
       const py = this.y + (dir.y * dist * i) / steps;
-      if (ctx.arena.circleCollides(px, py, this.radius - 0.5)) break;
+      if (ctx.arena.boxCollides(px, py, this.hw - 0.5, this.hh - 0.5)) break;
       nx = px;
       ny = py;
     }
@@ -253,9 +253,6 @@ export class Flux extends Hero {
 
   // ------------------------------------------------------------ sprite
 
-  protected override spriteDef(): CharacterSprite {
-    return FLUX_SPRITE;
-  }
   protected override spriteTint(): { color: string; alpha: number } | undefined {
     return this.recall ? { color: COLORS.recall, alpha: 0.55 } : undefined;
   }
@@ -325,41 +322,8 @@ export class Flux extends Hero {
     if (ghost && this.recallCooldown <= 0) {
       ctx.globalAlpha = 0.3;
       ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      ctx.arc(ghost.x, ghost.y, this.radius, 0, Math.PI * 2);
-      ctx.stroke();
+      ctx.strokeRect(ghost.x - this.hw, ghost.y - this.hh, this.hw * 2, this.hh * 2);
       ctx.setLineDash([]);
-    }
-    ctx.globalAlpha = 1;
-  }
-
-  protected drawBody(ctx: CanvasRenderingContext2D): void {
-    const { x, y, radius: r } = this;
-    if (this.recall) ctx.globalAlpha = 0.6;
-
-    // Pistolets
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(this.aim);
-    ctx.fillStyle = '#2a2f38';
-    ctx.fillRect(r - 5, -9, 15, 5);
-    ctx.fillRect(r - 5, 4, 15, 5);
-    ctx.restore();
-
-    this.drawRoundBody(ctx, this.recall ? COLORS.recall : this.stats.color);
-
-    // Accélérateur dorsal lumineux
-    ctx.fillStyle = COLORS.recall;
-    ctx.beginPath();
-    ctx.arc(x - Math.cos(this.aim) * 4, y - Math.sin(this.aim) * 4, 3.5, 0, Math.PI * 2);
-    ctx.fill();
-
-    if (this.muzzleFlash > 0) {
-      const m = this.muzzlePosition(this.muzzleSide);
-      ctx.fillStyle = 'rgba(255,240,180,0.9)';
-      ctx.beginPath();
-      ctx.arc(m.x, m.y, 4.5, 0, Math.PI * 2);
-      ctx.fill();
     }
     ctx.globalAlpha = 1;
   }

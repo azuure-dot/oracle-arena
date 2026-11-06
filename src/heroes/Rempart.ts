@@ -1,10 +1,11 @@
 import { COLORS } from '../config';
 import type { GameContext } from '../core/GameContext';
-import { angleDiff, circleInCone, degToRad, rotateTowards } from '../core/math';
+import { boxExtent, boxInCone, boxesOverlap } from '../core/geometry';
+import { angleDiff, degToRad, rotateTowards } from '../core/math';
 import type { Bot } from '../entities/Bot';
 import { Projectile } from '../entities/Projectile';
 import { t } from '../i18n';
-import { HAMMER as HAMMER_GRID, HAMMER_PALETTE, REMPART_SPRITE, type CharacterSprite } from '../sprites/library';
+import { HAMMER as HAMMER_GRID, HAMMER_PALETTE, REMPART_SPRITE } from '../sprites/library';
 import { drawProp, facingFromAngle, propImage, type SpriteLayout } from '../sprites/SpriteRenderer';
 import { lineOfSight } from '../world/Visibility';
 import { Hero, KEYS, type AbilitySlot, type WeaponHud } from './Hero';
@@ -67,11 +68,11 @@ export class Rempart extends Hero {
     super({
       name: 'Rempart',
       maxHp: 600,
-      radius: 30, // très grande hurtbox
+      sprite: REMPART_SPRITE,
+      px: 3, // très grande hitbox
       speed: 220, // très lent
       acceleration: 10,
       color: '#a9b8c9',
-      colorDark: '#5d6b7c',
     });
   }
 
@@ -148,7 +149,7 @@ export class Rempart extends Hero {
     let hit = false;
     for (const bot of ctx.bots) {
       if (!bot.alive || !bot.isEnemy) continue;
-      if (!circleInCone(this.x, this.y, this.aim, HAMMER.halfArc, reach, bot.x, bot.y, bot.radius)) continue;
+      if (!boxInCone(this.x, this.y, this.aim, HAMMER.halfArc, reach, bot.box())) continue;
       if (!lineOfSight(ctx.arena, this.x, this.y, bot.x, bot.y)) continue; // pas de coup à travers un mur
       ctx.damageBot(bot, HAMMER.damage);
       const d = Math.hypot(bot.x - this.x, bot.y - this.y) || 1;
@@ -255,15 +256,16 @@ export class Rempart extends Hero {
       const nx = this.x + (dx * dist) / steps;
       const ny = this.y + (dy * dist) / steps;
 
-      if (ctx.arena.circleCollides(nx, ny, this.radius - 0.5)) {
+      if (ctx.arena.boxCollides(nx, ny, this.hw - 0.5, this.hh - 0.5)) {
         this.impact(ctx);
         return;
       }
       if (c.pinned) {
-        const off = this.radius + c.pinned.radius + 2;
+        // Ennemi collé contre l'avant de la hitbox de Rempart.
+        const off = boxExtent(this, dx, dy) + boxExtent(c.pinned, dx, dy) + 2;
         const px = nx + dx * off;
         const py = ny + dy * off;
-        if (ctx.arena.circleCollides(px, py, c.pinned.radius - 0.5)) {
+        if (ctx.arena.boxCollides(px, py, c.pinned.hw - 0.5, c.pinned.hh - 0.5)) {
           this.impact(ctx);
           return;
         }
@@ -292,7 +294,7 @@ export class Rempart extends Hero {
       const ox = bot.x - this.x;
       const oy = bot.y - this.y;
       const d = Math.hypot(ox, oy);
-      if (d > this.radius + bot.radius + 4) continue;
+      if (!boxesOverlap(this.box(), bot.box(), 4)) continue;
 
       const frontal = (ox * dx + oy * dy) / (d || 1) > 0.35;
       if (!c.pinned && frontal) {
@@ -330,19 +332,16 @@ export class Rempart extends Hero {
     if (!c) return;
     if (c.pinned) {
       c.pinned.pinned = false;
-      if (c.pinned.alive) ctx.arena.resolveCircle(c.pinned, c.pinned.radius);
+      if (c.pinned.alive) ctx.arena.resolveBox(c.pinned, c.pinned.hw, c.pinned.hh);
     }
     this.charge = null;
     this.chargeCooldown = CHARGE.cooldown;
     this.vx = this.vy = 0;
-    ctx.arena.resolveCircle(this, this.radius);
+    ctx.arena.resolveBox(this, this.hw, this.hh);
   }
 
   // ------------------------------------------------------------ sprite
 
-  protected override spriteDef(): CharacterSprite {
-    return REMPART_SPRITE;
-  }
   protected override spriteFacingAngle(): number {
     return this.charge ? this.charge.dir : this.aim;
   }
@@ -437,51 +436,6 @@ export class Rempart extends Hero {
     }
     ctx.restore();
     ctx.globalAlpha = 1;
-  }
-
-  protected drawBody(ctx: CanvasRenderingContext2D): void {
-    const { x, y, radius: r } = this;
-    const facing = this.charge ? this.charge.dir : this.aim;
-
-    // Marteau : manche + tête, balancé pendant le coup
-    const swingT = 1 - this.swingAnim / 0.2; // 0 → 1 pendant le coup
-    const hammerAngle =
-      this.swingAnim > 0 ? facing + this.swingSide * (1 - 2 * swingT) : facing + 0.9; // repos : sur le côté
-    ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(hammerAngle);
-    ctx.fillStyle = '#4a3b2a';
-    ctx.fillRect(r * 0.4, -3, r + 26, 6);
-    ctx.fillStyle = '#6f7b88';
-    ctx.fillRect(r + 18, -13, 18, 26);
-    ctx.fillStyle = COLORS.fire;
-    ctx.fillRect(r + 34, -9, 5, 18);
-    ctx.restore();
-
-    this.drawRoundBody(ctx, this.stats.color);
-
-    // Épaulières dorées
-    ctx.fillStyle = '#d9b44a';
-    for (const side of [-1, 1]) {
-      const a = facing + side * 1.57;
-      ctx.beginPath();
-      ctx.arc(x + Math.cos(a) * r * 0.78, y + Math.sin(a) * r * 0.78, r * 0.32, 0, Math.PI * 2);
-      ctx.fill();
-    }
-
-    if (this.charge && this.charge.windup <= 0) {
-      // Lignes de vitesse
-      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-      ctx.lineWidth = 2;
-      for (const o of [-0.7, 0, 0.7]) {
-        const bx = x - Math.cos(facing) * r * 1.2 + Math.cos(facing + 1.57) * o * r;
-        const by = y - Math.sin(facing) * r * 1.2 + Math.sin(facing + 1.57) * o * r;
-        ctx.beginPath();
-        ctx.moveTo(bx, by);
-        ctx.lineTo(bx - Math.cos(facing) * 30, by - Math.sin(facing) * 30);
-        ctx.stroke();
-      }
-    }
   }
 
   override drawOver(ctx: CanvasRenderingContext2D): void {

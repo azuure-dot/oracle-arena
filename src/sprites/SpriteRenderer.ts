@@ -4,9 +4,6 @@ import { mirrorGrid, renderGrid, type Grid, type Palette } from './pixelArt';
 
 export type Facing = 'down' | 'up' | 'left' | 'right';
 
-/** Mode de rendu (touche V en jeu) : sprites pixel art ou anciennes formes géométriques. */
-export const renderSettings: { mode: 'sprites' | 'shapes' } = { mode: 'sprites' };
-
 /** Nombre d'images du cycle de marche. */
 export const WALK_FRAMES = 4;
 /** Images de marche par seconde. */
@@ -93,18 +90,21 @@ export interface SpriteLayout {
 }
 
 /**
- * Place le sprite autour de la hurtbox (cercle de centre x,y et rayon `radius`) :
- * largeur ≈ 2,3 × rayon, pieds un peu sous le cercle, tête au-dessus.
- * La hurtbox couvre donc le torse et le bas de la tête.
+ * Demi-dimensions de la hitbox d'un personnage : exactement le dessin du sprite
+ * (sans le contour d'1 px), pour une taille de pixel `px` donnée.
  */
-export function characterLayout(def: CharacterSprite, x: number, y: number, radius: number): SpriteLayout {
-  const gw = def.down[0].length + 2; // + contour
-  const gh = def.down.length + def.legs.frontIdle.length + 2;
-  const px = (radius * 2.3) / gw;
-  const w = gw * px;
-  const h = gh * px;
-  const feetY = y + radius * 1.15;
-  return { px, left: x - w / 2, top: feetY - h, w, h, feetY };
+export function characterHalfSize(def: CharacterSprite, px: number): { hw: number; hh: number } {
+  const gw = def.down[0].length;
+  const gh = def.down.length + def.legs.frontIdle.length;
+  return { hw: (gw * px) / 2, hh: (gh * px) / 2 };
+}
+
+/** Le sprite est centré sur (x, y) : sa partie dessinée coïncide avec la hitbox. */
+export function characterLayout(def: CharacterSprite, x: number, y: number, px: number): SpriteLayout {
+  const { hw, hh } = characterHalfSize(def, px);
+  const w = (hw + px) * 2; // + contour
+  const h = (hh + px) * 2;
+  return { px, left: x - w / 2, top: y - h / 2, w, h, feetY: y + hh };
 }
 
 // ------------------------------------------------------------------ dessin
@@ -112,7 +112,7 @@ export function characterLayout(def: CharacterSprite, x: number, y: number, radi
 export interface DrawCharacterOptions {
   x: number;
   y: number;
-  radius: number;
+  px: number;
   facing: Facing;
   frame: number;
   outline: string;
@@ -125,7 +125,7 @@ export interface DrawCharacterOptions {
 }
 
 export function drawCharacter(ctx: CanvasRenderingContext2D, def: CharacterSprite, o: DrawCharacterOptions): SpriteLayout {
-  const L = characterLayout(def, o.x, o.y, o.radius);
+  const L = characterLayout(def, o.x, o.y, o.px);
   const base = characterFrame(def, o.facing, o.frame, { outline: o.outline, overrides: o.overrides });
 
   ctx.save();
@@ -174,12 +174,12 @@ export function drawGroundRing(
   ctx: CanvasRenderingContext2D,
   x: number,
   feetY: number,
-  radius: number,
+  halfWidth: number,
   color: string,
   aim?: number,
 ): void {
-  const rx = radius * 1.05;
-  const ry = radius * 0.42;
+  const rx = halfWidth * 1.15;
+  const ry = halfWidth * 0.45;
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.35)';
   ctx.beginPath();

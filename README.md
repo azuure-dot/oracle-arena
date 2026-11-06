@@ -41,7 +41,7 @@ Galerie des sprites pixel art (pour travailler les designs) : http://localhost:5
 | R                 | Recharger                           |
 | B                 | Activer / couper les tourelles      |
 | T / H             | Remettre les stats à zéro / aide    |
-| V                 | Sprites pixel art / formes          |
+| X                 | Afficher les hitbox                 |
 | Échap             | Retour à la sélection de héros      |
 
 ## Structure
