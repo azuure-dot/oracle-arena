@@ -505,6 +505,8 @@ kbd {
   display: block;
   width: 100%;
   height: auto;
+  /* Même hauteur pour toutes les cartes : une carte en hauteur (Volcan) est centrée. */
+  aspect-ratio: 16 / 10;
   background: #0d1117;
 }
 .map-info {

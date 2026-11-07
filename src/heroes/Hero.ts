@@ -37,6 +37,17 @@ export const PASSIVE_REGEN = {
   rate: 15, // PV/s
 };
 
+/**
+ * Lave (carte Volcan) : impossible d'y entrer en marchant ; un recul assez fort fait
+ * passer par-dessus le bord, et le héros meurt si son centre arrive au-dessus de la lave.
+ */
+export const LAVA = {
+  /** Vitesse de recul (px/s) au-delà de laquelle le bord de la fosse ne retient plus. */
+  knockThreshold: 40,
+  /** Durée (s) pendant laquelle celui qui a poussé est crédité de la chute. */
+  creditTime: 4,
+};
+
 /** Délai de réapparition par défaut (champ de tir, Deathmatch). La Partie rapide utilise 8 s. */
 export const RESPAWN_TIME = 3;
 
@@ -149,6 +160,9 @@ export abstract class Hero implements Combatant {
   /** Recul (Onde de choc, marteau...) : vitesse qui s'amortit. */
   private kvx = 0;
   private kvy = 0;
+  /** Dernier héros qui l'a poussé (crédit d'une chute dans la lave) et temps restant du crédit. */
+  private pushedBy: Hero | null = null;
+  private pushCredit = 0;
 
   /** Hitbox rectangulaire = le dessin du sprite (demi-largeur / demi-hauteur). */
   readonly hw: number;
@@ -208,6 +222,7 @@ export abstract class Hero implements Combatant {
     this.meleeCooldown = Math.max(0, this.meleeCooldown - dt);
     this.meleeAnim = Math.max(0, this.meleeAnim - dt);
     this.stunTimer = Math.max(0, this.stunTimer - dt);
+    this.pushCredit = Math.max(0, this.pushCredit - dt);
 
     // Soin passif : au bout de 3 s sans dégâts.
     this.sinceDamage += dt;
@@ -309,7 +324,7 @@ export abstract class Hero implements Combatant {
     }
     if (!target) return;
     ctx.damage(target, QUICK_MELEE.damage, this);
-    target.applyImpulse(dx * QUICK_MELEE.knockback, dy * QUICK_MELEE.knockback);
+    target.applyImpulse(dx * QUICK_MELEE.knockback, dy * QUICK_MELEE.knockback, this);
     ctx.effects.sparks(target.x - dx * target.hw, target.y - dy * target.hh, '#ffffff', 8, 200);
     ctx.shake(2, this);
   }
@@ -323,6 +338,8 @@ export abstract class Hero implements Combatant {
     this.y += this.vy * dt;
 
     // Recul subi : s'ajoute au déplacement et s'amortit (comme pour les bots).
+    // Un recul assez fort fait passer par-dessus le bord d'une fosse de lave.
+    const knocked = Math.hypot(this.kvx, this.kvy) > LAVA.knockThreshold;
     if (Math.hypot(this.kvx, this.kvy) > 1) {
       this.x += this.kvx * dt;
       this.y += this.kvy * dt;
@@ -332,21 +349,43 @@ export abstract class Hero implements Combatant {
     } else {
       this.kvx = this.kvy = 0;
     }
-    ctx.arena.resolveBox(this, this.hw, this.hh, this.team);
+    ctx.arena.resolveBox(this, this.hw, this.hh, this.team, knocked);
   }
 
-  applyImpulse(ix: number, iy: number): void {
+  applyImpulse(ix: number, iy: number, source?: Hero): void {
     if (this.dead || this.pinned || this.isLocked()) return;
     const mass = this.stats.mass ?? 1;
     this.kvx += ix / mass;
     this.kvy += iy / mass;
+    if (source) this.notePush(source);
+  }
+
+  notePush(source: Hero): void {
+    if (source === this) return;
+    this.pushedBy = source;
+    this.pushCredit = LAVA.creditTime;
   }
 
   private applyZones(dt: number, ctx: GameContext): void {
+    if (ctx.arena.lavaAt(this.x, this.y)) {
+      this.fallIntoLava(ctx);
+      return;
+    }
     const zone = ctx.arena.zoneAt(this.x, this.y);
     if (!zone) return;
     if (zone.kind === 'hazard') ctx.damage(this, ZONES.hazardDps * dt, null);
     else this.heal(ZONES.healHps * dt);
+  }
+
+  /** Chute dans la lave : mort immédiate, créditée à celui qui a poussé (s'il y en a un). */
+  private fallIntoLava(ctx: GameContext): void {
+    const by = this.pushCredit > 0 ? this.pushedBy : null;
+    ctx.effects.ring(this.x, this.y, '#ff6a1a', 90, 0.5);
+    ctx.effects.sparks(this.x, this.y, '#ffb02e', 34, 380);
+    ctx.effects.sparks(this.x, this.y, '#ff4a12', 20, 220);
+    ctx.shake(5, this);
+    // Montant énorme : ni le multiplicateur des bots ni les PV ne l'empêchent.
+    ctx.damage(this, 1e6, by, 'lava');
   }
 
   // ------------------------------------------------------------------- PV
@@ -392,6 +431,8 @@ export abstract class Hero implements Combatant {
     this.hp = this.maxHp;
     this.placeAt(at);
     this.kvx = this.kvy = 0;
+    this.pushedBy = null;
+    this.pushCredit = 0;
     this.buff = null;
     this.stunTimer = 0;
     this.sinceDamage = 0;

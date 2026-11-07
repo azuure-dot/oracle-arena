@@ -15,6 +15,8 @@ export interface FeedLine {
   /** La ligne concerne le joueur : fond surligné. */
   highlight: boolean;
   age: number;
+  /** Mort dans la lave (poussé, ou tombé seul). */
+  lava?: boolean;
 }
 
 /** Fil des éliminations, en haut à droite : « Vex (Flux) ✕ Toi (Tempo) ». */
@@ -27,7 +29,7 @@ export function drawKillFeed(ctx: CanvasRenderingContext2D, width: number, feed:
     if (alpha <= 0) continue;
     const parts: { text: string; color: string }[] = [];
     if (e.killer) parts.push({ text: `${e.killer.name} (${e.killer.hero})`, color: e.killer.color });
-    parts.push({ text: '  ✕  ', color: COLORS.hudDim });
+    parts.push(e.lava ? { text: `  ▼ ${t('feed.lava')} ▼  `, color: '#ff8a3d' } : { text: '  ✕  ', color: COLORS.hudDim });
     parts.push({ text: `${e.victim.name} (${e.victim.hero})`, color: e.victim.color });
 
     const widths = parts.map((p) => ctx.measureText(p.text).width);

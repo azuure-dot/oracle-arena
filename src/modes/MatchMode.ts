@@ -24,6 +24,8 @@ export interface KillFeedEntry {
   killer: Participant | null; // null : mort dans la zone de dégâts
   victim: Participant;
   age: number;
+  /** Mort dans la lave. */
+  lava?: boolean;
 }
 
 /** Les bots héros infligent 30 % de dégâts en moins que le joueur. */
@@ -48,6 +50,8 @@ export abstract class MatchMode extends GameMode {
   readonly participants: Participant[] = [];
   readonly feed: KillFeedEntry[] = [];
   protected killedBy: Participant | null = null;
+  /** Le joueur est mort dans la lave (message de mort). */
+  protected killedByLava = false;
   /** Dernière élimination du joueur (bandeau « ÉLIMINATION »). */
   protected lastKill: { victim: Participant; age: number } | null = null;
 
@@ -142,9 +146,13 @@ export abstract class MatchMode extends GameMode {
     victim.deaths++;
     const killer = e.source && e.source !== e.target ? (this.participantOf(e.source) ?? null) : null;
     if (killer) killer.kills++;
-    this.feed.unshift({ killer, victim, age: 0 });
+    const lava = e.cause === 'lava';
+    this.feed.unshift({ killer, victim, age: 0, lava });
     if (this.feed.length > 5) this.feed.pop();
-    if (victim.isPlayer) this.killedBy = killer;
+    if (victim.isPlayer) {
+      this.killedBy = killer;
+      this.killedByLava = lava;
+    }
     if (killer?.isPlayer) this.lastKill = { victim, age: 0 };
   }
 
@@ -152,8 +160,11 @@ export abstract class MatchMode extends GameMode {
 
   /** « Éliminé par Vex (Flux) » sous le compte à rebours de réapparition. */
   protected deathMessage(): string | undefined {
-    const k = this.player.dead ? this.killedBy : null;
-    return k ? t('hud.dm.killedBy', { name: `${k.name} (${k.hero.name})` }) : undefined;
+    if (!this.player.dead) return undefined;
+    const k = this.killedBy;
+    const name = k ? `${k.name} (${k.hero.name})` : '';
+    if (this.killedByLava) return k ? t('hud.lava.pushedBy', { name }) : t('hud.lava.fell');
+    return k ? t('hud.dm.killedBy', { name }) : undefined;
   }
 
   /** Fil des éliminations + bandeau d'élimination. */
@@ -170,6 +181,7 @@ export abstract class MatchMode extends GameMode {
         killer: e.killer ? name(e.killer) : null,
         victim: name(e.victim),
         highlight: !!(e.killer?.isPlayer || e.victim.isPlayer),
+        lava: e.lava,
         age: e.age,
       })),
       feedTop,

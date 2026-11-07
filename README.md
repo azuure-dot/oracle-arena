@@ -40,7 +40,7 @@ Le menu principal propose trois modes. En **Partie rapide**, c'est la carte qui 
     - Phase 1 : attaque au départ, défense au milieu.
     - Phase 2 : attaque au milieu, défense à l'arrivée.
     - Le spawn du milieu est caché derrière le virage, ses portes tournées à l'opposé du pont.
-- **Partie rapide → Sanctuaire (Contrôle)**, en 2 contre 2.
+- **Partie rapide → Sanctuaire ou Volcan (Contrôle)**, en 2 contre 2.
   - Équipes :
     - **Bleue** : toi + 1 bot. **Rouge** : 2 bots.
     - Aucun héros en double dans une même équipe.
@@ -92,6 +92,32 @@ Carte originale :
 - Il passe le checkpoint, puis tourne dans les rues jusqu'au nord-est.
 - On peut contourner par une passerelle à l'ouest, ou par une rue et un passage étroit à l'est.
 - L'eau bloque les déplacements mais pas la vue ni les tirs.
+
+## Carte Volcan
+
+Carte de contrôle dessinée par le joueur : un camp scientifique installé dans un volcan.
+Elle est symétrique par rotation de 180°, comme Sanctuaire.
+
+- **Spawns** : des laboratoires d'analyse avec paillasses et console.
+  Chacun s'ouvre par deux portes sur une cour avec un héliport.
+- **Accès au point** : un couloir longe les bâtiments du camp jusqu'à l'entrée nord ;
+  un autre descend vers une grande salle latérale, avec une cuve de magma comme couvert.
+- **Le point** : il est posé sur une passerelle en tôle perforée au-dessus du cratère.
+  - On y entre par quatre accès : nord, sud, est et ouest.
+  - Il est entouré de quatre fosses de lave. Leurs côtés extérieurs sont fermés
+    par des garde-corps ; elles sont ouvertes côté point.
+- **La lave** :
+  - Impossible d'y entrer en marchant : on s'arrête au bord, marqué d'une bande jaune et noire.
+  - Un recul (Onde de choc, marteau, mêlée, bousculade de Charge) peut y projeter un héros.
+    Il meurt dès que son centre passe au-dessus de la lave.
+  - Une Charge de Rempart qui épingle un ennemi le lâche au-dessus de la fosse ;
+    Rempart, lui, s'arrête au bord.
+  - La chute est créditée au dernier héros qui a poussé la victime (dans les 4 s).
+    Le fil des éliminations affiche « LAVE ».
+- **Rendu pixel art** (`src/world/themes/volcano.ts`) : 1 pixel du décor = 4 unités.
+  - Roche veinée de lave, toits équipés (panneaux solaires, clims, paraboles, cheminées),
+    façades éclairées, garde-corps rayés.
+  - La lave des fosses est animée, avec une lueur et des braises.
 
 ## Carte Sanctuaire
 
@@ -172,6 +198,6 @@ src/
   core/            entrées, commandes joueur / IA, caméra, maths
   heroes/          classe Hero + un fichier par héros + registre
   entities/        bots du champ de tir, projectiles, interface Combatant
-  world/           cartes (maps.ts), arène, ligne de vue, brouillard
+  world/           cartes (maps.ts), arène, ligne de vue, brouillard, thèmes pixel art (themes/)
   ui/              HUD, HUD du Deathmatch, écrans HTML (menus, sélection, scores)
 ```

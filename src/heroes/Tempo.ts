@@ -207,7 +207,7 @@ export class Tempo extends Hero {
       if (!lineOfSight(ctx.arena, this.x, this.y, bot.x, bot.y)) continue;
       ctx.damage(bot, BOOP.damage, this);
       const d = Math.hypot(bot.x - this.x, bot.y - this.y) || 1;
-      bot.applyImpulse(((bot.x - this.x) / d) * BOOP.impulse, ((bot.y - this.y) / d) * BOOP.impulse);
+      bot.applyImpulse(((bot.x - this.x) / d) * BOOP.impulse, ((bot.y - this.y) / d) * BOOP.impulse, this);
     }
   }
 

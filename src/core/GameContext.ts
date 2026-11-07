@@ -5,6 +5,9 @@ import type { Hero } from '../heroes/Hero';
 import type { Arena } from '../world/Arena';
 import type { Vec2 } from './math';
 
+/** Cause particulière d'un dégât (affichée dans le fil des éliminations). */
+export type DamageCause = 'lava';
+
 /**
  * Ce qu'un héros peut lire / déclencher dans le monde pendant sa mise à jour.
  * Les commandes (clavier ou IA) ne sont PAS ici : chaque héros a les siennes.
@@ -17,7 +20,7 @@ export interface GameContext {
   targets: readonly Combatant[];
   spawnProjectile(p: Projectile): void;
   /** Inflige des dégâts (stats, hitmarker, score...). Retourne les dégâts réels. */
-  damage(target: Combatant, amount: number, source: Hero | null): number;
+  damage(target: Combatant, amount: number, source: Hero | null, cause?: DamageCause): number;
   /** Où réapparaît ce héros après sa mort. */
   respawnPoint(hero: Hero): Vec2;
   /** Délai de réapparition (s) : 3 s par défaut, 8 s en Partie rapide. */

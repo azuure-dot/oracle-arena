@@ -2,7 +2,7 @@ import { PLAYER_SPAWN, WORLD } from '../config';
 import type { Vec2 } from '../core/math';
 import { ALLY, ENEMY, type Team } from '../entities/Team';
 import type { TKey } from '../i18n';
-import type { Rect, Segment, Zone } from './Arena';
+import type { Rect, Segment, WallRect, Zone } from './Arena';
 
 /** Zone de spawn protégée : invincibilité + soin pour son équipe, interdite à l'adversaire. */
 export interface SafeZone {
@@ -42,6 +42,14 @@ export interface ControlPointDef {
   r: number;
 }
 
+/** Élément de décor dessiné par le thème de la carte (cuves, héliports...). */
+export interface Decor {
+  kind: 'tank' | 'helipad';
+  x: number;
+  y: number;
+  r: number;
+}
+
 export interface MapDef {
   id: string;
   nameKey: TKey;
@@ -50,9 +58,14 @@ export interface MapDef {
   descKey: TKey;
   width: number;
   height: number;
-  walls: Rect[];
+  walls: WallRect[];
   /** Eau : infranchissable, mais on voit et on tire par-dessus. */
   water?: Rect[];
+  /** Lave : infranchissable en marchant, mortelle si un recul y projette un héros. */
+  lava?: Rect[];
+  /** Habillage pixel art (src/world/themes). Sans thème : rendu par défaut. */
+  theme?: 'volcano';
+  decor?: Decor[];
   zones: Zone[];
   safeZones: SafeZone[];
   /** Points d'apparition par équipe. */
@@ -416,5 +429,170 @@ export const ROUTE66_MAP: MapDef = {
   ],
 };
 
+// ------------------------------------------------------------------ Volcan
+
+/**
+ * VOLCAN (Contrôle) — carte dessinée par le joueur : un camp scientifique installé
+ * dans un volcan. Symétrique par rotation de 180° autour du point (même terrain pour
+ * chaque équipe). On décrit la moitié nord (spawn rouge) ; le sud est généré.
+ *
+ * - Le spawn (laboratoire) s'ouvre par deux portes sur une cour (héliport).
+ * - Deux chemins vers le centre : le couloir ouest qui longe les bâtiments, puis
+ *   l'entrée nord entre les fosses ; ou le couloir est qui descend vers la grande salle.
+ * - Le point est sur une passerelle en ferraille au-dessus du cratère, entourée de
+ *   quatre fosses de lave ouvertes côté point : un recul bien placé y précipite l'adversaire.
+ * - Quatre entrées vers le point (nord, sud, est, ouest) ; une cuve ronde fait couvert
+ *   dans chaque grande salle latérale.
+ *
+ * Toutes les coordonnées sont des multiples de 4 (1 pixel du décor = 4 unités).
+ */
+const VW = 2120;
+const VH = 3160;
+const vRect = <T extends Rect>(r: T): T => ({ ...r, x: VW - r.x - r.w, y: VH - r.y - r.h });
+const vPt = (p: Vec2): Vec2 => ({ x: VW - p.x, y: VH - p.y });
+const vSeg = (s: Segment): Segment => ({ ax: VW - s.ax, ay: VH - s.ay, bx: VW - s.bx, by: VH - s.by });
+
+/** Obstacle rond (cuve) : cercle approché par trois rectangles en escalier. */
+function roundObstacle(x: number, y: number, r: number): WallRect[] {
+  const q = (v: number) => Math.round(v / 4) * 4;
+  const box = (hw: number, hh: number): WallRect => ({
+    x: x - q(hw),
+    y: y - q(hh),
+    w: q(hw) * 2,
+    h: q(hh) * 2,
+    style: 'tank',
+  });
+  return [box(r * 0.92, r * 0.38), box(r * 0.71, r * 0.71), box(r * 0.38, r * 0.92)];
+}
+
+const VOLCANO_HALF_WALLS: WallRect[] = [
+  // Roche : tout ce qui est hors du camp
+  { x: 0, y: 0, w: 1392, h: 372, style: 'rock' },
+  { x: 1392, y: 0, w: 672, h: 24, style: 'rock' },
+  { x: 0, y: 372, w: 948, h: 300, style: 'rock' },
+  { x: 0, y: 672, w: 720, h: 128, style: 'rock' },
+  { x: 0, y: 800, w: 264, h: 316, style: 'rock' },
+  { x: 0, y: 1116, w: 72, h: 464, style: 'rock' },
+  { x: 2064, y: 0, w: 56, h: 804, style: 'rock' },
+  { x: 1848, y: 804, w: 272, h: 300, style: 'rock' },
+  { x: 2040, y: 1104, w: 80, h: 476, style: 'rock' },
+  // Laboratoire (spawn) : façade à deux portes, paillasses et console au fond
+  { x: 1392, y: 280, w: 144, h: 40, style: 'lab' },
+  { x: 1716, y: 280, w: 96, h: 40, style: 'lab' },
+  { x: 1968, y: 280, w: 96, h: 40, style: 'lab' },
+  { x: 1440, y: 24, w: 176, h: 52, style: 'lab' },
+  { x: 1680, y: 24, w: 100, h: 64, style: 'lab' },
+  { x: 1840, y: 24, w: 176, h: 52, style: 'lab' },
+  // Bâtiments du camp : bloc nord (entre le couloir et le point) et station ouest
+  { x: 1104, y: 492, w: 264, h: 180, style: 'building' },
+  { x: 1200, y: 672, w: 168, h: 132, style: 'building' },
+  { x: 1200, y: 804, w: 384, h: 276, style: 'building' },
+  { x: 528, y: 952, w: 216, h: 80, style: 'building' },
+  { x: 432, y: 1032, w: 312, h: 108, style: 'building' },
+  // Garde-corps des fosses (côtés fermés)
+  { x: 744, y: 1068, w: 216, h: 24, style: 'barrier' },
+  { x: 936, y: 1092, w: 24, h: 180, style: 'barrier' },
+  { x: 648, y: 1140, w: 24, h: 300, style: 'barrier' },
+  { x: 1104, y: 1068, w: 24, h: 156, style: 'barrier' },
+  { x: 1128, y: 1068, w: 72, h: 24, style: 'barrier' },
+  { x: 1464, y: 1080, w: 24, h: 324, style: 'barrier' },
+  // Cuve (grande salle ouest)
+  ...roundObstacle(368, 1460, 80),
+];
+
+/** Fosses nord-ouest et nord-est : escaliers qui suivent le bord arrondi tourné vers le point. */
+const VOLCANO_HALF_LAVA: Rect[] = [
+  { x: 744, y: 1092, w: 192, h: 48 },
+  { x: 672, y: 1140, w: 264, h: 120 },
+  { x: 672, y: 1260, w: 208, h: 60 },
+  { x: 672, y: 1320, w: 120, h: 60 },
+  { x: 672, y: 1380, w: 48, h: 60 },
+  { x: 1128, y: 1080, w: 336, h: 144 },
+  { x: 1200, y: 1224, w: 264, h: 60 },
+  { x: 1296, y: 1284, w: 168, h: 60 },
+  { x: 1392, y: 1344, w: 72, h: 60 },
+];
+
+const VOLCANO_HALF_NAV: Vec2[] = [
+  { x: 1626, y: 170 }, // labo, face aux portes
+  { x: 1890, y: 170 },
+  { x: 1626, y: 400 }, // cour
+  { x: 1890, y: 400 },
+  { x: 1716, y: 600 },
+  { x: 1460, y: 432 }, // couloir ouest
+  { x: 1200, y: 432 },
+  { x: 1026, y: 432 },
+  { x: 1026, y: 600 },
+  { x: 1026, y: 760 },
+  { x: 860, y: 880 },
+  { x: 1152, y: 940 },
+  { x: 600, y: 880 },
+  { x: 348, y: 900 },
+  { x: 348, y: 1080 }, // passage vers la grande salle ouest
+  { x: 500, y: 1250 },
+  { x: 180, y: 1300 },
+  { x: 180, y: 1460 }, // autour de la cuve
+  { x: 556, y: 1460 },
+  { x: 1032, y: 1180 }, // entrée nord
+  { x: 1060, y: 1350 },
+  { x: 840, y: 1500 },
+  { x: 1290, y: 1460 },
+  { x: 740, y: 1560 }, // entrée ouest
+  { x: 1716, y: 950 }, // couloir est
+  { x: 1650, y: 1180 }, // grande salle est
+  { x: 1950, y: 1300 },
+  { x: 1600, y: 1480 },
+  { x: 1900, y: 1540 },
+];
+
+const volcanoRedSpawns: Vec2[] = [
+  { x: 1550, y: 170 },
+  { x: 1890, y: 170 },
+  { x: 1720, y: 210 },
+];
+const volcanoRedSafe: SafeZone = {
+  team: ENEMY,
+  rect: { x: 1392, y: 24, w: 672, h: 256 },
+  doors: [
+    { ax: 1536, ay: 300, bx: 1716, by: 300 },
+    { ax: 1812, ay: 300, bx: 1968, by: 300 },
+  ],
+};
+
+export const VOLCANO_MAP: MapDef = {
+  id: 'volcano',
+  nameKey: 'map.volcano',
+  modeKey: 'mode.control',
+  descKey: 'map.volcano.desc',
+  width: VW,
+  height: VH,
+  walls: withMirror(VOLCANO_HALF_WALLS, vRect),
+  lava: withMirror(VOLCANO_HALF_LAVA, vRect),
+  theme: 'volcano',
+  decor: withMirror<Decor>(
+    [
+      { kind: 'tank', x: 368, y: 1460, r: 80 },
+      { kind: 'helipad', x: 1716, y: 560, r: 112 },
+    ],
+    (d) => ({ ...d, ...vPt(d) }),
+  ),
+  zones: [],
+  safeZones: [
+    volcanoRedSafe,
+    { team: ALLY, rect: vRect(volcanoRedSafe.rect), doors: volcanoRedSafe.doors.map(vSeg) },
+  ],
+  spawns: { [ENEMY]: volcanoRedSpawns, [ALLY]: volcanoRedSpawns.map(vPt) },
+  control: { x: VW / 2, y: VH / 2, r: 190 },
+  healthPacks: withMirror(
+    [
+      { x: 336, y: 896 },
+      { x: 840, y: 1000 },
+      { x: 1980, y: 1192 },
+    ],
+    vPt,
+  ),
+  nav: [...withMirror(VOLCANO_HALF_NAV, vPt), { x: VW / 2, y: VH / 2 }],
+};
+
 /** Cartes jouables en Partie rapide (la carte détermine le mode). */
-export const QUICKPLAY_MAPS: MapDef[] = [SANCTUARY_MAP, ROUTE66_MAP];
+export const QUICKPLAY_MAPS: MapDef[] = [SANCTUARY_MAP, ROUTE66_MAP, VOLCANO_MAP];

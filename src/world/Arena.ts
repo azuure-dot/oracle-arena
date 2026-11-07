@@ -3,6 +3,7 @@ import { COLORS, WORLD, ZONES, teamColor } from '../config';
 import type { Team } from '../entities/Team';
 import { getLang, t } from '../i18n';
 import type { MapDef, SafeZone } from './maps';
+import { THEMES, type MapTheme } from './themes';
 
 export interface Rect {
   x: number;
@@ -16,6 +17,13 @@ export interface Segment {
   ay: number;
   bx: number;
   by: number;
+}
+
+/** Habillage d'un mur (cartes à thème) : roche, toit de bâtiment, paillasse de labo, barrière, cuve. */
+export type WallStyle = 'rock' | 'building' | 'lab' | 'barrier' | 'tank';
+
+export interface WallRect extends Rect {
+  style?: WallStyle;
 }
 
 export type ZoneKind = 'hazard' | 'heal';
@@ -44,7 +52,13 @@ const boxHitsRect = (x: number, y: number, hw: number, hh: number, r: Rect): boo
 export class Arena {
   readonly width: number;
   readonly height: number;
-  readonly walls: Rect[];
+  readonly walls: WallRect[];
+  /**
+   * Lave : on ne peut pas y entrer en marchant (bord de fosse), mais un recul peut y
+   * projeter un héros. Celui dont le centre passe au-dessus de la lave meurt.
+   * Ne bloque ni la vue ni les tirs.
+   */
+  readonly lava: Rect[];
   /** Eau : bloque les déplacements, pas la vue ni les tirs. */
   readonly water: Rect[];
   readonly zones: Zone[];
@@ -62,12 +76,17 @@ export class Arena {
 
   private floorCache: HTMLCanvasElement | null = null;
   private floorLang = '';
+  /** Habillage propre à la carte (sol et murs en pixel art), ou null : rendu par défaut. */
+  private readonly theme: MapTheme | null;
+  private wallCache: HTMLCanvasElement | null = null;
 
   constructor(readonly map: MapDef) {
     this.width = map.width;
     this.height = map.height;
     this.walls = map.walls;
     this.water = map.water ?? [];
+    this.lava = map.lava ?? [];
+    this.theme = map.theme ? THEMES[map.theme] : null;
     this.zones = map.zones;
     this.safeZones = map.safeZones;
 
@@ -94,9 +113,12 @@ export class Arena {
    * Rectangles infranchissables pour une équipe : les murs + les zones de spawn adverses.
    * Sans équipe (bots du champ de tir), seulement les murs.
    */
-  private blockers(team?: Team): Rect[] {
+  private blockers(team?: Team, overLava = false): Rect[] {
+    const lava = overLava ? [] : this.lava;
     const base =
-      this.water.length || this.dynamicRects.length ? [...this.walls, ...this.water, ...this.dynamicRects] : this.walls;
+      this.water.length || this.dynamicRects.length || lava.length
+        ? [...this.walls, ...this.water, ...lava, ...this.dynamicRects]
+        : this.walls;
     if (team === undefined || this.safeZones.length === 0) return base;
     return [
       ...base,
@@ -118,10 +140,18 @@ export class Arena {
     this.floorCache = null; // le sol teinté des spawns est dans le cache
   }
 
-  /** La boîte (centre x,y, demi-dimensions hw,hh) chevauche-t-elle un obstacle ou sort-elle de la map ? */
-  boxCollides(x: number, y: number, hw: number, hh: number, team?: Team): boolean {
+  /**
+   * La boîte (centre x,y, demi-dimensions hw,hh) chevauche-t-elle un obstacle ou sort-elle de la map ?
+   * `overLava` : la lave ne compte pas (recul, héros porté par une Charge).
+   */
+  boxCollides(x: number, y: number, hw: number, hh: number, team?: Team, overLava = false): boolean {
     if (x - hw < 0 || y - hh < 0 || x + hw > this.width || y + hh > this.height) return true;
-    return this.blockers(team).some((w) => boxHitsRect(x, y, hw, hh, w));
+    return this.blockers(team, overLava).some((w) => boxHitsRect(x, y, hw, hh, w));
+  }
+
+  /** Ce point est-il au-dessus de la lave ? (un héros y tombe si son centre y passe) */
+  lavaAt(x: number, y: number): boolean {
+    return this.lava.some((r) => pointInRect(x, y, r));
   }
 
   /** Arrête les projectiles : murs et obstacles mobiles (pas l'eau). */
@@ -134,8 +164,8 @@ export class Arena {
    * Repousse une boîte hors des obstacles et des bords, sur l'axe de plus petite
    * pénétration : le personnage "glisse" le long des murs.
    */
-  resolveBox(pos: { x: number; y: number }, hw: number, hh: number, team?: Team): void {
-    const blockers = this.blockers(team);
+  resolveBox(pos: { x: number; y: number }, hw: number, hh: number, team?: Team, overLava = false): void {
+    const blockers = this.blockers(team, overLava);
     for (let iter = 0; iter < 3; iter++) {
       let moved = false;
       for (const w of blockers) {
@@ -163,13 +193,18 @@ export class Arena {
 
   // ---------------------------------------------------------------- rendu
 
-  drawFloor(ctx: CanvasRenderingContext2D): void {
+  drawFloor(ctx: CanvasRenderingContext2D, time = 0): void {
     // Le sol est mis en cache ; il contient des libellés traduits : on le refait si la langue change.
     if (!this.floorCache || this.floorLang !== getLang()) {
       this.floorCache = this.renderFloor();
       this.floorLang = getLang();
     }
-    ctx.drawImage(this.floorCache, 0, 0);
+    // Cartes à thème : cache en basse résolution (1 pixel = 4 unités), agrandi sans lissage.
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(this.floorCache, 0, 0, this.width, this.height);
+    ctx.restore();
+    this.theme?.drawLive?.(ctx, this, time);
   }
 
   drawWalls(ctx: CanvasRenderingContext2D): void {
@@ -195,6 +230,14 @@ export class Arena {
       ctx.lineWidth = 2;
       ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
     }
+    if (this.theme) {
+      this.wallCache ??= this.theme.renderWalls(this);
+      ctx.save();
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(this.wallCache, 0, 0, this.width, this.height);
+      ctx.restore();
+      return;
+    }
     for (const w of this.walls) {
       // ombre portée
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
@@ -212,10 +255,19 @@ export class Arena {
   }
 
   private renderFloor(): HTMLCanvasElement {
+    const scale = this.theme ? 1 / this.theme.pixel : 1;
     const c = document.createElement('canvas');
-    c.width = this.width;
-    c.height = this.height;
+    c.width = Math.ceil(this.width * scale);
+    c.height = Math.ceil(this.height * scale);
     const g = c.getContext('2d')!;
+
+    if (this.theme) {
+      // Le thème peint le sol pixel par pixel ; les marquages communs (spawns...) viennent par-dessus.
+      this.theme.renderFloor(g, this);
+      g.setTransform(scale, 0, 0, scale, 0, 0);
+      this.drawFloorOverlays(g);
+      return c;
+    }
 
     g.fillStyle = COLORS.floor;
     g.fillRect(0, 0, this.width, this.height);
@@ -260,6 +312,18 @@ export class Arena {
       g.strokeRect(w.x + 1.5, w.y + 1.5, w.w - 3, w.h - 3);
     }
 
+    // lave (rendu simple, sans thème)
+    for (const l of this.lava) {
+      g.fillStyle = '#c2340c';
+      g.fillRect(l.x, l.y, l.w, l.h);
+    }
+
+    this.drawFloorOverlays(g);
+    return c;
+  }
+
+  /** Marquages communs à toutes les cartes : zones spéciales, spawns, marqueur, bordure. */
+  private drawFloorOverlays(g: CanvasRenderingContext2D): void {
     // zones spéciales
     for (const z of this.zones) {
       const color = z.kind === 'hazard' ? '255,77,94' : '90,220,140';
@@ -304,11 +368,11 @@ export class Arena {
     }
 
     // bordure de map
-    g.strokeStyle = 'rgba(255,255,255,0.25)';
-    g.lineWidth = 6;
-    g.strokeRect(3, 3, this.width - 6, this.height - 6);
-
-    return c;
+    if (!this.theme) {
+      g.strokeStyle = 'rgba(255,255,255,0.25)';
+      g.lineWidth = 6;
+      g.strokeRect(3, 3, this.width - 6, this.height - 6);
+    }
   }
 
   private hatch(g: CanvasRenderingContext2D, z: Rect, color: string): void {

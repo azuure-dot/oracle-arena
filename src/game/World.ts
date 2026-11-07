@@ -1,6 +1,6 @@
 import { COLORS } from '../config';
 import type { Camera } from '../core/Camera';
-import type { GameContext } from '../core/GameContext';
+import type { DamageCause, GameContext } from '../core/GameContext';
 import { circleIntersectsBox } from '../core/geometry';
 import { clamp, type Vec2 } from '../core/math';
 import { Effects } from '../effects/Effects';
@@ -17,6 +17,7 @@ export interface DamageEvent {
   source: Hero | null;
   dealt: number;
   killed: boolean;
+  cause?: DamageCause;
 }
 
 /** Ce que le mode de jeu branche sur le monde. */
@@ -68,7 +69,7 @@ export class World {
         return world.targetList;
       },
       spawnProjectile: (p) => this.projectiles.push(p),
-      damage: (target, amount, source) => this.damage(target, amount, source),
+      damage: (target, amount, source, cause) => this.damage(target, amount, source, cause),
       respawnPoint: (hero) => this.hooks.respawnPoint(hero),
       get respawnDelay() {
         return world.respawnDelay;
@@ -117,7 +118,7 @@ export class World {
     this.effects.clear();
   }
 
-  damage(target: Combatant, amount: number, source: Hero | null): number {
+  damage(target: Combatant, amount: number, source: Hero | null, cause?: DamageCause): number {
     if (source) amount *= source.damageMultiplier; // bots : -30 %
     const wasAlive = target.alive;
     const dealt = target.takeDamage(amount, this.ctx);
@@ -131,7 +132,7 @@ export class World {
       this.effects.sparks(target.x, target.y, COLORS.enemy, 26, 320);
       this.effects.ring(target.x, target.y, COLORS.enemy, 60, 0.4);
     }
-    this.hooks.onDamage?.({ target, source, dealt, killed });
+    this.hooks.onDamage?.({ target, source, dealt, killed, cause });
     return dealt;
   }
 
@@ -232,7 +233,7 @@ export class World {
 
     // --- 1. Monde (sol, entités visibles, effets)
     toWorld();
-    this.arena.drawFloor(ctx);
+    this.arena.drawFloor(ctx, this.time);
     this.hooks.drawGround?.(ctx, this.time);
     this.effects.drawUnder(ctx);
     for (const h of shown) h.drawUnder(ctx, this.time);

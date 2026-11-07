@@ -189,7 +189,7 @@ export class Rempart extends Hero {
       if (!lineOfSight(ctx.arena, this.x, this.y, bot.x, bot.y)) continue; // pas de coup à travers un mur
       ctx.damage(bot, HAMMER.damage, this);
       const d = Math.hypot(bot.x - this.x, bot.y - this.y) || 1;
-      bot.applyImpulse(((bot.x - this.x) / d) * HAMMER.knockback, ((bot.y - this.y) / d) * HAMMER.knockback);
+      bot.applyImpulse(((bot.x - this.x) / d) * HAMMER.knockback, ((bot.y - this.y) / d) * HAMMER.knockback, this);
       hit = true;
     }
     if (hit) ctx.shake(3, this);
@@ -293,8 +293,14 @@ export class Rempart extends Hero {
       const nx = this.x + (dx * dist) / steps;
       const ny = this.y + (dy * dist) / steps;
 
-      if (ctx.arena.boxCollides(nx, ny, this.hw - 0.5, this.hh - 0.5, this.team)) {
+      // Les murs arrêtent la charge (plaquage) ; la lave seulement Rempart, qui s'arrête au bord.
+      if (ctx.arena.boxCollides(nx, ny, this.hw - 0.5, this.hh - 0.5, this.team, true)) {
         this.impact(ctx);
+        return;
+      }
+      if (ctx.arena.boxCollides(nx, ny, this.hw - 0.5, this.hh - 0.5, this.team)) {
+        // Bord d'une fosse : l'ennemi épinglé, porté devant, est lâché au-dessus de la lave.
+        this.endCharge(ctx);
         return;
       }
       if (c.pinned) {
@@ -302,7 +308,7 @@ export class Rempart extends Hero {
         const off = boxExtent(this, dx, dy) + boxExtent(c.pinned, dx, dy) + 2;
         const px = nx + dx * off;
         const py = ny + dy * off;
-        if (ctx.arena.boxCollides(px, py, c.pinned.hw - 0.5, c.pinned.hh - 0.5, this.team)) {
+        if (ctx.arena.boxCollides(px, py, c.pinned.hw - 0.5, c.pinned.hh - 0.5, this.team, true)) {
           this.impact(ctx);
           return;
         }
@@ -336,6 +342,7 @@ export class Rempart extends Hero {
       const frontal = (ox * dx + oy * dy) / (d || 1) > 0.35;
       if (!c.pinned && frontal) {
         c.pinned = bot;
+        bot.notePush?.(this);
         bot.pinned = true;
         ctx.effects.ring(bot.x, bot.y, '#ffffff', 40, 0.25);
         ctx.shake(4, this);
@@ -344,7 +351,7 @@ export class Rempart extends Hero {
         ctx.damage(bot, CHARGE.bumpDamage, this);
         // Éjecté sur le côté (gauche ou droite selon sa position)
         const side = dx * oy - dy * ox >= 0 ? 1 : -1;
-        bot.applyImpulse(-dy * side * CHARGE.bumpImpulse, dx * side * CHARGE.bumpImpulse);
+        bot.applyImpulse(-dy * side * CHARGE.bumpImpulse, dx * side * CHARGE.bumpImpulse, this);
       }
     }
   }
@@ -374,7 +381,8 @@ export class Rempart extends Hero {
     if (!c) return;
     if (c.pinned) {
       c.pinned.pinned = false;
-      if (c.pinned.alive) ctx.arena.resolveBox(c.pinned, c.pinned.hw, c.pinned.hh, c.pinned.team);
+      // Lâché tel quel au-dessus de la lave s'il y est : il y tombe.
+      if (c.pinned.alive) ctx.arena.resolveBox(c.pinned, c.pinned.hw, c.pinned.hh, c.pinned.team, true);
     }
     this.charge = null;
     this.chargeCooldown = CHARGE.cooldown;

@@ -1,4 +1,5 @@
 import type { GameContext } from '../core/GameContext';
+import type { Hero } from '../heroes/Hero';
 import type { Box } from '../core/geometry';
 import type { BuffKind } from '../ui/healthBar';
 import type { Team } from './Team';
@@ -28,7 +29,10 @@ export interface Combatant {
   /** Retourne les dégâts réellement infligés (0 si immunisé). */
   takeDamage(amount: number, ctx: GameContext): number;
   heal(amount: number): void;
-  applyImpulse(ix: number, iy: number): void;
+  /** Recul ; `source` : le héros qui pousse (crédité si la cible tombe dans la lave). */
+  applyImpulse(ix: number, iy: number, source?: Hero): void;
+  /** Note qui vient de déplacer de force cette cible (Charge) : crédit d'une chute dans la lave. */
+  notePush?(source: Hero): void;
   /** Étourdi : ne peut ni bouger ni agir pendant `seconds`. */
   stun(seconds: number): void;
   readonly stunTimer: number;

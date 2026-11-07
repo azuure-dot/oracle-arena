@@ -19,6 +19,9 @@ function mapPreview(m: MapDef): string {
   const water = (m.water ?? [])
     .map((w) => `<rect x="${w.x}" y="${w.y}" width="${w.w}" height="${w.h}" fill="#1d5a7d"/>`)
     .join('');
+  const lava = (m.lava ?? [])
+    .map((w) => `<rect x="${w.x}" y="${w.y}" width="${w.w}" height="${w.h}" fill="#ff6a1a"/>`)
+    .join('');
   // Escorte : parcours du convoi, checkpoint, arrivée et salles de spawn
   let escort = '';
   if (m.escort) {
@@ -38,7 +41,7 @@ function mapPreview(m: MapDef): string {
   return `
     <svg class="map-preview" viewBox="0 0 ${m.width} ${m.height}" role="img" aria-label="${t(m.nameKey)}">
       <rect width="${m.width}" height="${m.height}" fill="#151b23" stroke="rgba(255,255,255,0.25)" stroke-width="12"/>
-      ${water}${safe}${escort}${point}
+      ${water}${lava}${safe}${escort}${point}
       <g fill="#536079">${walls}</g>
       ${packs}
     </svg>`;
