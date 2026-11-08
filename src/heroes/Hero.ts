@@ -8,16 +8,7 @@ import { hostile, type Combatant } from '../entities/Combatant';
 import type { Projectile } from '../entities/Projectile';
 import { ALLY, type Team } from '../entities/Team';
 import type { TKey } from '../i18n';
-import type { CharacterSprite } from '../sprites/library';
-import {
-  characterHalfSize,
-  characterLayout,
-  drawCharacter,
-  drawGroundRing,
-  facingFromAngle,
-  walkFrame,
-  type SpriteLayout,
-} from '../sprites/SpriteRenderer';
+import { drawTeamMarker, hand } from '../render/topdown';
 import { drawBuffIndicators, drawHealthBar, drawStunStars, type BuffKind } from '../ui/healthBar';
 import { lineOfSight } from '../world/Visibility';
 
@@ -74,7 +65,7 @@ export const QUICK_MELEE = {
   knockback: 140,
 };
 
-export type AbilityIcon = 'blink' | 'recall' | 'shield' | 'fire' | 'charge' | 'boop' | 'swap' | 'amp' | 'gear' | 'trick' | 'turtle' | 'shell' | 'bomb';
+export type AbilityIcon = 'blink' | 'recall' | 'shield' | 'fire' | 'charge' | 'boop' | 'swap' | 'amp' | 'gear' | 'trick' | 'turtle' | 'shell' | 'bomb' | 'hammer';
 
 /** Description d'une case de compétence pour le HUD (générique pour tous les héros). */
 export interface AbilitySlot {
@@ -103,12 +94,8 @@ export interface WeaponHud {
 export interface HeroStats {
   name: string;
   maxHp: number;
-  /** Sprite pixel art du héros (absent si le héros dessine lui-même ses poses : Skater). */
-  sprite?: CharacterSprite;
-  /** Hitbox imposée (demi-largeur / demi-hauteur) ; par défaut, la taille du sprite. */
-  hitbox?: { hw: number; hh: number };
-  /** Taille d'un pixel du sprite (unités monde) : fixe aussi la taille de la hitbox. */
-  px: number;
+  /** Hitbox (demi-largeur / demi-hauteur) : dégâts reçus et collisions avec les murs. */
+  hitbox: { hw: number; hh: number };
   speed: number; // px/s
   acceleration?: number;
   /** Résistance au recul (2 = reculs deux fois plus courts). */
@@ -159,6 +146,8 @@ export abstract class Hero implements Combatant {
   safe = false;
   /** Buff d'aura reçu cette frame (indicateur au-dessus de la tête). */
   buffs: BuffKind[] = [];
+  /** Soins reçus depuis le dernier calcul du soin passif (qui ne fait que les compléter). */
+  private healReceived = 0;
   auraSpeedMul = 1;
   /** Direction de déplacement demandée (normalisée, ou 0). */
   protected moveDir: Vec2 = { x: 0, y: 0 };
@@ -166,7 +155,7 @@ export abstract class Hero implements Combatant {
   protected animTime = 0;
   /** Mêlée rapide : temps de recharge restant / durée restante du coup en cours. */
   meleeCooldown = 0;
-  private meleeAnim = 0;
+  protected meleeAnim = 0;
   /** Recul (Onde de choc, marteau...) : vitesse qui s'amortit. */
   private kvx = 0;
   private kvy = 0;
@@ -180,7 +169,7 @@ export abstract class Hero implements Combatant {
 
   constructor(readonly stats: HeroStats) {
     this.hp = stats.maxHp;
-    ({ hw: this.hw, hh: this.hh } = stats.hitbox ?? characterHalfSize(stats.sprite!, stats.px));
+    ({ hw: this.hw, hh: this.hh } = stats.hitbox);
   }
 
   get name(): string {
@@ -235,8 +224,15 @@ export abstract class Hero implements Combatant {
     this.pushCredit = Math.max(0, this.pushCredit - dt);
 
     // Soin passif : au bout de 5 s sans dégâts (plus tôt sur l'eau de son équipe, voir passiveRegenDelay).
+    // Il ne se cumule pas avec les autres soins : seul le plus fort compte. Le passif ne fait
+    // que compléter ce qui a été reçu depuis la frame précédente (aura, zone...) jusqu'à 15 PV/s.
     this.sinceDamage += dt;
-    if (this.sinceDamage >= this.passiveRegenDelay(ctx)) this.heal(PASSIVE_REGEN.rate * dt);
+    const received = this.healReceived;
+    if (this.sinceDamage >= this.passiveRegenDelay(ctx)) {
+      const topUp = PASSIVE_REGEN.rate * dt - received;
+      if (topUp > 0) this.heal(topUp);
+    }
+    this.healReceived = 0;
 
     this.tick(dt, ctx);
     if (this.pinned) {
@@ -430,6 +426,7 @@ export abstract class Hero implements Combatant {
 
   heal(amount: number): void {
     if (this.dead) return;
+    this.healReceived += amount;
     this.hp = Math.min(this.maxHp, this.hp + amount);
   }
 
@@ -474,41 +471,59 @@ export abstract class Hero implements Combatant {
   /** Sous les entités (aura, traînées...). */
   drawUnder(_ctx: CanvasRenderingContext2D, _time: number): void {}
 
-  // ---- rendu : sprite pixel art ----
+  // ---- rendu : vue de dessus (voir src/render/topdown.ts) ----
 
-  /** Angle utilisé pour choisir la vue (face/dos/profil) : la visée par défaut. */
+  /** Rayon de la tête vue de dessus (unités monde). */
+  protected abstract headRadius(): number;
+  /**
+   * Dessine le héros dans son propre repère : origine au centre, regard vers +x (le repère
+   * est déjà tourné vers `spriteFacingAngle`). `rot` = cette rotation (pour la lumière fixe).
+   */
+  protected abstract drawTop(ctx: CanvasRenderingContext2D, rot: number): void;
+  /** Direction du regard (la visée par défaut) : tout le personnage tourne avec. */
   protected spriteFacingAngle(): number {
     return this.aim;
   }
-  /** Remplacements de couleurs de la palette (ex. couleur de l'aura de Tempo). */
-  protected spriteOverrides(): Record<string, string> | undefined {
-    return undefined;
-  }
+  /** Voile coloré sur la tête (Rappel de Flux...). */
   protected spriteTint(): { color: string; alpha: number } | undefined {
     return undefined;
   }
-  /** Accessoires (marteau, flash de tir...) dessinés derrière ou devant le sprite. */
-  protected drawSpriteExtras(_ctx: CanvasRenderingContext2D, _layout: SpriteLayout, _front: boolean): void {}
+
+  /**
+   * Mains au repos de part et d'autre de la tête (repère local) : elles se balancent d'avant
+   * en arrière en marchant, et l'une part en avant pendant la mêlée rapide.
+   */
+  protected idleHands(ctx: CanvasRenderingContext2D, R: number, color: string, rot: number, opts: { wrap?: string; band?: string } = {}): void {
+    const swing = this.isWalking() ? Math.sin(this.animTime * 10) * R * 0.18 : 0;
+    const punch = this.meleeAnim > 0 ? Math.sin((1 - this.meleeAnim / QUICK_MELEE.lockout) * Math.PI) : 0;
+    for (const side of [-1, 1]) {
+      const jab = side === 1 ? punch : 0;
+      hand(ctx, R * (0.55 + jab * 0.9) + swing * side, side * R * (0.85 - jab * 0.45), R * 0.3, color, rot, opts);
+    }
+  }
 
   draw(ctx: CanvasRenderingContext2D): void {
     if (this.dead) return;
-    const def = this.stats.sprite;
-    if (!def) return;
-    const layout = characterLayout(def, this.x, this.y, this.stats.px);
-    drawGroundRing(ctx, this.x, layout.feetY, this.hw, this.outline, this.aim);
-    this.drawSpriteExtras(ctx, layout, false);
-    drawCharacter(ctx, def, {
-      x: this.x,
-      y: this.y,
-      px: this.stats.px,
-      facing: facingFromAngle(this.spriteFacingAngle()),
-      frame: walkFrame(this.animTime),
-      outline: this.outline,
-      overrides: this.spriteOverrides(),
-      flash: this.hurtTimer > 0.2,
-      tint: this.spriteTint(),
-    });
-    this.drawSpriteExtras(ctx, layout, true);
+    const R = this.headRadius();
+    const face = this.spriteFacingAngle();
+    drawTeamMarker(ctx, this.x, this.y, R, this.outline);
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(face);
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    this.drawTop(ctx, face);
+    // Flash des dégâts / voile du Rappel, sur la tête
+    const tint = this.hurtTimer > 0.2 ? { color: '#ffffff', alpha: 0.7 } : this.spriteTint();
+    if (tint) {
+      ctx.globalAlpha = tint.alpha;
+      ctx.fillStyle = tint.color;
+      ctx.beginPath();
+      ctx.arc(0, 0, R, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
     if (this.pinned) {
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 2;
@@ -522,12 +537,11 @@ export abstract class Hero implements Combatant {
   drawOver(_ctx: CanvasRenderingContext2D): void {}
 
   /**
-   * Haut du sprite (y monde, pose de base, sans saut ni rebond) : la barre de vie se place
-   * juste au-dessus. Par défaut le sprite est la hitbox (+ son contour) ; les héros dont le
-   * dessin dépasse de la hitbox (cheveux de Turty, Skater sur sa planche) le redéfinissent.
+   * Haut du dessin (y monde) : la barre de vie se place juste au-dessus. Par défaut : le haut
+   * de la tête et de ses cheveux (qui débordent un peu).
    */
   protected spriteTop(): number {
-    return this.y - this.hh - this.stats.px;
+    return this.y - this.headRadius() * 1.4;
   }
 
   /** Barre de vie (+ nom pour les bots) au-dessus du héros. */

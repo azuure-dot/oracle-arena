@@ -8,32 +8,21 @@ import type { WorldObject } from '../entities/WorldObject';
 import { WET, type WetGround } from '../game/WetGround';
 import { t } from '../i18n';
 import { dir8, type Dir8 } from '../sprites/skater';
-import {
-  BLAST_FRAMES,
-  blastImage,
-  bombImage,
-  HUMAN_WALK_STEPS,
-  IMPACT_FRAMES,
-  impactImage,
-  turtyFrame,
-  type TurtyLook,
-} from '../sprites/turty';
+import { BLAST_FRAMES, blastImage, bombImage, IMPACT_FRAMES, impactImage } from '../sprites/turty';
+import { cached, drawTeamMarker, hand, head, inked, LINE, turtyHair, turtyShell, waterGun } from '../render/topdown';
 import { lineOfSight } from '../world/Visibility';
 import { WEAPON as FLUX_WEAPON } from './Flux';
 import { Hero, MOVE_SPEED_SCALE, type AbilitySlot, type WeaponHud } from './Hero';
 import { Magazine } from './Magazine';
 import { SKATE_AURA } from './Skater';
 
-/** Taille d'un pixel de la planche (unités monde) et hitbox du corps (sans l'arme). */
-const PX = 1.05;
-/**
- * Forme humaine : sa planche (turty-human-combat.png) a des pixels plus gros (36 rangées
- * au lieu de ~56) : on les dessine plus grands pour garder la même taille à l'écran.
- */
-const HUMAN_PX = 1.6;
-/** Hauteur de la forme humaine au-dessus des pieds (calculée au premier besoin). */
-let humanHeight = 0;
+/** Rayon de la tête vue de dessus et peau verte (d'après son croquis). */
+const R = 14;
+const SKIN = '#69c7a1';
+/** Hitbox du corps (sans l'arme). */
 const HITBOX = { hw: 11, hh: 20 };
+/** Forme tortue / carapace : rayon de la carapace (unités monde). */
+const SHELL_R = 16;
 
 const WATER_COLOR = '#5fd6ea';
 const FOAM_COLOR = '#d8fbff';
@@ -171,7 +160,6 @@ export class Turty extends Hero {
     super({
       name: 'Turty',
       maxHp: 200,
-      px: PX,
       hitbox: HITBOX,
       speed: TURTY.speed,
       acceleration: 14,
@@ -603,128 +591,153 @@ export class Turty extends Hero {
     ctx.restore();
   }
 
+  protected headRadius(): number {
+    return R;
+  }
+  /** Repère local de la forme humaine (draw() choisit la forme). */
+  protected drawTop(ctx: CanvasRenderingContext2D): void {
+    this.drawHuman(ctx, false);
+  }
+
   override draw(ctx: CanvasRenderingContext2D): void {
     if (this.dead) return;
-    const feetY = this.y + this.hh;
-    const speed = Math.hypot(this.vx, this.vy);
-    const moving = speed > 40;
-
-    // Ombre + anneau d'équipe
-    ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.33)';
-    ctx.beginPath();
-    ctx.ellipse(this.x, feetY, this.hw * 1.4, this.hw * 0.55, 0, 0, TAU);
-    ctx.fill();
-    ctx.strokeStyle = this.outline;
-    ctx.globalAlpha = 0.85;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.ellipse(this.x, feetY, this.hw * 1.6, this.hw * 0.66, 0, 0, TAU);
-    ctx.stroke();
-    ctx.restore();
-
+    const moving = Math.hypot(this.vx, this.vy) > 40;
+    drawTeamMarker(ctx, this.x, this.y, this.form === 'human' && !this.shell ? R : SHELL_R, this.outline);
     const flash = this.hurtTimer > 0.2;
+
     const s = this.shell;
     if (s) {
-      // Dans la carapace : elle tourne sur elle-même (8 vues qui défilent).
-      const dir = dirFromIndex(Math.floor(s.spin) % 8);
-      const hop = s.windup > 0 ? Math.abs(Math.sin(s.spin * 0.5)) * 2 : 0;
-      this.blit(ctx, 'shell', dir, feetY + 2 - hop, 1, 1, 0, flash);
+      // Dans la carapace : elle tourne sur elle-même (le motif tourne).
+      this.inFrame(ctx, s.dir, 1, () => {
+        ctx.rotate(s.spin);
+        cached(ctx, 'turty.shell', SHELL_R * 1.05, (c) => turtyShell(c, SHELL_R));
+      }, flash ? SHELL_R : 0);
       return;
     }
-
-    const human: Dir8 = dir8(this.aim);
-    const turtleDir: Dir8 = moving ? dir8(Math.atan2(this.vy, this.vx)) : dir8(this.aim);
-
-    // Transformation : l'ancienne forme s'écrase dans une gerbe d'eau, la nouvelle en jaillit.
+    // Transformation : l'ancienne forme rétrécit, la nouvelle grandit, dans une gerbe d'eau.
     if (this.morph > 0) {
       const u = 1 - this.morph / TURTY.morphTime; // 0 → 1
-      if (u < 0.5) {
-        const k = 1 - u * 2;
-        this.drawForm(ctx, this.morphFrom, human, turtleDir, feetY, 1 + (1 - k) * 0.25, 0.2 + 0.8 * k, flash, moving);
-      } else {
-        const k = (u - 0.5) * 2;
-        this.drawForm(ctx, this.form, human, turtleDir, feetY, 1 + (1 - k) * 0.25, 0.2 + 0.8 * k, flash, moving);
+      const k = u < 0.5 ? 1 - u * 2 : (u - 0.5) * 2;
+      this.drawForm(ctx, u < 0.5 ? this.morphFrom : this.form, 0.25 + 0.75 * k, moving, false);
+      ctx.fillStyle = 'rgba(216,251,255,0.75)';
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * TAU + u * 3;
+        ctx.beginPath();
+        ctx.arc(this.x + Math.cos(a) * 20 * u, this.y + Math.sin(a) * 20 * u, 2.6 * (1 - u * 0.5), 0, TAU);
+        ctx.fill();
       }
       return;
     }
-    this.drawForm(ctx, this.form, human, turtleDir, feetY, 1, 1, flash, moving);
+    this.drawForm(ctx, this.form, 1, moving, flash);
   }
 
-  private drawForm(
-    ctx: CanvasRenderingContext2D,
-    form: Form,
-    human: Dir8,
-    turtleDir: Dir8,
-    feetY: number,
-    sx: number,
-    sy: number,
-    flash: boolean,
-    moving: boolean,
-  ): void {
-    if (form === 'human') {
-      // Marche : jambes animées (4 temps) + petit rebond quand une jambe est levée ;
-      // tir : l'arme recule, un jet d'eau sort du canon, et tout le corps recule de 2 px ;
-      // lancer : petit saut.
-      const phase = (this.walkAnim * 10) / TAU; // un pas complet (2 jambes) par période du rebond
-      const step = moving ? Math.floor(phase * HUMAN_WALK_STEPS) % HUMAN_WALK_STEPS : 0;
-      const bob = moving ? Math.round(Math.abs(Math.sin(this.walkAnim * 10)) * 1.5) : 0;
-      const r = this.recoil > 0 ? 2 * (this.recoil / 0.09) : 0;
-      const fire = this.recoil > 0.04;
-      const hop = this.throwAnim > 0 ? Math.sin((1 - this.throwAnim / 0.25) * Math.PI) * 4 : 0;
-      const tilt = moving ? Math.sin(this.walkAnim * 10) * 0.03 : 0;
-      ctx.save();
-      ctx.translate(-Math.cos(this.aim) * r, -Math.sin(this.aim) * r * 0.5);
-      this.blit(ctx, 'human', human, feetY - bob - hop, sx, sy, tilt, flash, step, fire);
-      ctx.restore();
-    } else {
-      // Tortue : se dandine en avançant ; sur l'eau, ses gerbes d'eau dessinées apparaissent.
-      const look: TurtyLook = this.onWet && moving ? 'turtle' : 'turtleDry';
-      const fast = this.onWet && moving;
-      const waddle = moving ? Math.sin(this.walkAnim * (fast ? 16 : 9)) * (fast ? 0.04 : 0.08) : 0;
-      const bob = moving ? Math.round(Math.abs(Math.sin(this.walkAnim * (fast ? 16 : 9))) * 1) : 0;
-      this.blit(ctx, look, turtleDir, feetY + 1 - bob, sx, sy, waddle, flash);
-    }
-  }
-
-  /** Dessine une pose, `bottom` = bas de l'image ; écrasement (sx, sy) et inclinaison autour des pieds. */
-  private blit(
-    ctx: CanvasRenderingContext2D,
-    look: TurtyLook,
-    dir: Dir8,
-    bottom: number,
-    sx: number,
-    sy: number,
-    tilt: number,
-    flash: boolean,
-    step = 0,
-    fire = false,
-  ): void {
-    const f = turtyFrame(look, dir, { outline: this.outline, step, fire });
-    const px = look === 'human' ? HUMAN_PX : PX;
-    const w = f.img.width * px;
-    const h = f.img.height * px;
+  /** Dessine `draw` dans un repère tourné vers `angle` et mis à l'échelle (flash : disque blanc). */
+  private inFrame(ctx: CanvasRenderingContext2D, angle: number, scale: number, draw: () => void, flashR = 0): void {
     ctx.save();
-    ctx.imageSmoothingEnabled = false;
-    ctx.translate(this.x, bottom);
-    if (tilt) ctx.rotate(tilt);
-    ctx.scale(sx, sy);
-    const top = -f.ground * px;
-    ctx.drawImage(f.img, -f.anchorX * px, top, w, h);
-    if (flash) {
-      const s = turtyFrame(look, dir, { outline: this.outline, silhouette: '#ffffff', step, fire });
-      ctx.drawImage(s.img, -f.anchorX * px, top, w, h);
+    ctx.translate(this.x, this.y);
+    ctx.rotate(angle);
+    ctx.scale(scale, scale);
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    draw();
+    if (flashR > 0) {
+      ctx.globalAlpha = 0.7;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(0, 0, flashR, 0, TAU);
+      ctx.fill();
     }
     ctx.restore();
   }
 
+  private drawForm(ctx: CanvasRenderingContext2D, form: Form, scale: number, moving: boolean, flash: boolean): void {
+    if (form === 'turtle') {
+      const dir = moving ? Math.atan2(this.vy, this.vx) : this.aim;
+      this.inFrame(ctx, dir, scale, () => this.drawTurtle(ctx, moving), flash ? SHELL_R : 0);
+      return;
+    }
+    // Forme humaine : elle grossit un peu pendant le saut du lancer de bombe (vue de dessus).
+    const hop = this.throwAnim > 0 ? Math.sin((1 - this.throwAnim / 0.25) * Math.PI) * 0.12 : 0;
+    this.inFrame(ctx, this.aim, scale * (1 + hop), () => this.drawHuman(ctx, moving), flash ? R : 0);
+  }
+
   /**
-   * Haut du sprite : celui de la forme humaine (la plus haute), quelle que soit la forme,
-   * pour que la barre de vie ne saute pas à chaque transformation.
+   * Forme humaine (repère local, regard vers +x) : carapace sur le dos, pistolet à eau tenu
+   * à deux mains, qui recule à chaque tir (jet d'eau au bout du canon) ; lancer de bombe :
+   * une main tendue en avant.
    */
-  protected override spriteTop(): number {
-    if (humanHeight === 0) humanHeight = turtyFrame('human', 'down', { outline: this.outline }).ground * HUMAN_PX;
-    return this.y + this.hh - humanHeight;
+  private drawHuman(ctx: CanvasRenderingContext2D, moving: boolean): void {
+    const rot = this.aim;
+    const hr = R * 0.3;
+    // Carapace sur le dos (dépasse derrière la chevelure)
+    ctx.save();
+    ctx.translate(-R * 1.0, 0);
+    cached(ctx, 'turty.backShell', R * 0.82, (c) => turtyShell(c, R * 0.78));
+    ctx.restore();
+    if (this.meleeAnim > 0) {
+      cached(ctx, 'turty.head', R * 2.3, (c) => {
+        head(c, R, SKIN);
+        turtyHair(c, R);
+      });
+      this.idleHands(ctx, R, SKIN, rot);
+      return;
+    }
+    const kick = this.recoil > 0 ? this.recoil / 0.09 : 0;
+    const throwing = this.throwAnim > 0 ? Math.sin((1 - this.throwAnim / 0.25) * Math.PI) : 0;
+    const sway = moving ? Math.sin(this.walkAnim * 10) * R * 0.08 : 0;
+    ctx.save();
+    ctx.translate(R * (0.95 - kick * 0.2) + sway, R * 0.35);
+    cached(ctx, 'turty.gun', R * 1.85, (c) => waterGun(c, R * 1.7));
+    if (kick > 0.3) {
+      ctx.fillStyle = 'rgba(95,214,234,0.9)';
+      for (const [x, y, r] of [[R * 2.0, 0, 3.5], [R * 2.25, -3, 2.5], [R * 2.3, 3, 2]]) {
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, TAU);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+    cached(ctx, 'turty.head', R * 2.3, (c) => {
+      head(c, R, SKIN);
+      turtyHair(c, R);
+    });
+    hand(ctx, R * (0.95 - kick * 0.2) + sway, R * 0.35, hr, SKIN, rot);
+    if (throwing > 0) hand(ctx, R * (0.7 + throwing * 0.9), -R * (0.75 - throwing * 0.3), hr, SKIN, rot);
+    else hand(ctx, R * (1.75 - kick * 0.2) + sway, R * 0.35, hr, SKIN, rot);
+  }
+
+  /**
+   * Forme tortue (repère local, vers +x) : carapace ronde, tête et quatre pattes qui
+   * trottinent ; sur l'eau, elle file en laissant des gerbes d'eau derrière elle.
+   */
+  private drawTurtle(ctx: CanvasRenderingContext2D, moving: boolean): void {
+    const S = SHELL_R;
+    const fast = this.onWet && moving;
+    const step = moving ? this.walkAnim * (fast ? 16 : 9) : 0;
+    if (fast) {
+      ctx.fillStyle = 'rgba(216,251,255,0.85)';
+      for (let i = 0; i < 5; i++) {
+        const k = (step * 0.4 + i * 0.2) % 1;
+        const side = i % 2 ? 1 : -1;
+        ctx.beginPath();
+        ctx.arc(-S * (1.05 + k * 0.9), side * S * (0.35 + k * 0.4), 2.6 * (1 - k), 0, TAU);
+        ctx.fill();
+      }
+    }
+    for (const [f, sd] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+      const swing = Math.sin(step + (f * sd > 0 ? 0 : Math.PI)) * S * 0.15;
+      inked(ctx, SKIN, () => ctx.ellipse(f * S * 0.7 + swing, sd * S * 0.82, S * 0.3, S * 0.2, sd * f * 0.4, 0, TAU), 1.6);
+    }
+    inked(ctx, SKIN, () => ctx.arc(S * 1.12, 0, S * 0.4, 0, TAU), 1.8);
+    // Grands yeux sur le dessus de la tête (comme sur le croquis)
+    for (const sd of [-1, 1]) {
+      inked(ctx, '#ffffff', () => ctx.arc(S * 1.22, sd * S * 0.2, S * 0.13, 0, TAU), 1.2);
+      ctx.fillStyle = LINE;
+      ctx.beginPath();
+      ctx.arc(S * 1.27, sd * S * 0.2, S * 0.07, 0, TAU);
+      ctx.fill();
+    }
+    cached(ctx, 'turty.shell', S * 1.05, (c) => turtyShell(c, S));
   }
 
   override drawOver(ctx: CanvasRenderingContext2D): void {
@@ -745,8 +758,6 @@ export class Turty extends Hero {
   }
 }
 
-const DIR_ORDER: Dir8[] = ['down', 'downLeft', 'left', 'upLeft', 'up', 'upRight', 'right', 'downRight'];
-const dirFromIndex = (i: number): Dir8 => DIR_ORDER[((i % 8) + 8) % 8];
 
 /**
  * Bombe à eau : vole en cloche jusqu'au point visé (au-dessus des murs et des joueurs),

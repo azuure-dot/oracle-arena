@@ -429,6 +429,23 @@ export class HUD {
         ctx.fill();
         break;
       }
+      case 'hammer': {
+        // Marteau penché + éclair
+        ctx.save();
+        ctx.translate(cx - 2, cy + 2);
+        ctx.rotate(-0.6);
+        ctx.fillRect(-2, -4, 4, 20);
+        ctx.fillRect(-11, -14, 22, 11);
+        ctx.restore();
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(cx + 15, cy - 18);
+        ctx.lineTo(cx + 9, cy - 6);
+        ctx.lineTo(cx + 15, cy - 6);
+        ctx.lineTo(cx + 8, cy + 6);
+        ctx.stroke();
+        break;
+      }
       case 'amp':
         ctx.lineWidth = 3;
         for (let i = 0; i < 4; i++) {

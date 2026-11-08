@@ -4,6 +4,7 @@ import type { Hero, InputSlot } from './Hero';
 import { Rempart } from './Rempart';
 import { Skater } from './Skater';
 import { Tempo } from './Tempo';
+import { Thor } from './Thor';
 import { Turty } from './Turty';
 
 export type Role = 'tank' | 'damage' | 'support';
@@ -43,6 +44,21 @@ export const HEROES: HeroEntry[] = [
       { input: 'ability2', name: 'rempart.charge', desc: 'rempart.charge.desc' },
     ],
     create: () => new Rempart(),
+  },
+  {
+    id: 'thor',
+    name: 'Thor',
+    role: 'tank',
+    hp: 600,
+    color: '#5ab4ff',
+    tagline: 'thor.tagline',
+    abilities: [
+      { input: 'primary', name: 'thor.weapon', desc: 'thor.weapon.desc' },
+      { input: 'secondary', name: 'thor.barrier', desc: 'thor.barrier.desc' },
+      { input: 'ability1', name: 'thor.smash', desc: 'thor.smash.desc' },
+      { input: 'ability2', name: 'thor.throw', desc: 'thor.throw.desc' },
+    ],
+    create: () => new Thor(),
   },
   {
     id: 'flux',

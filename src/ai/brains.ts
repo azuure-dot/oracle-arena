@@ -6,6 +6,7 @@ import type { Hero } from '../heroes/Hero';
 import { FIRE, HAMMER, Rempart } from '../heroes/Rempart';
 import { GEAR, Skater, TRICK } from '../heroes/Skater';
 import { BOOP, SONIC, Tempo } from '../heroes/Tempo';
+import { SMASH, THROW, Thor } from '../heroes/Thor';
 import { BOMB, SHELL, Turty, WATER_GUN } from '../heroes/Turty';
 import { HeroBrain, type BrainWorld, type TargetInfo } from './HeroBrain';
 import { pathClear } from './steering';
@@ -108,6 +109,73 @@ export class RempartBrain extends HeroBrain<Rempart> {
     ) {
       c.press('ability2');
       this.chargeHesitation = randRange(0.3, 1.2);
+    }
+  }
+}
+
+/**
+ * Thor — cherche le corps à corps comme Rempart.
+ * Mur de foudre (clic D) s'il est touché de loin, Ruée (Espace) pour coller une cible
+ * un peu éloignée, Lancer du marteau (Maj) à mi-distance ; une fois le marteau au sol,
+ * fonce le rechercher (Ruée) s'il est près de la cible, sinon le rappelle (Maj).
+ */
+export class ThorBrain extends HeroBrain<Thor> {
+  protected readonly preferredRange = 70;
+  protected override rangeBand = 25;
+  protected override strafeWeight = 0.15;
+  protected override projectileSpeed = THROW.speed;
+  protected override turnRate = 5;
+
+  private shieldTimer = 0;
+  private hesitation = randRange(0.4, 1.2);
+  private hammerTime = 0;
+
+  protected override always(dt: number): void {
+    const h = this.hero;
+    this.hammerTime = h.hammer ? this.hammerTime + dt : 0;
+    // Hors combat, le marteau ne reste pas au sol : rappel au bout d'un moment.
+    if (h.hammer?.phase === 'landed' && this.hammerTime > 2.5) this.controls.press('ability2');
+  }
+
+  protected combat(dt: number, w: BrainWorld, t: Combatant, i: TargetInfo): void {
+    const h = this.hero;
+    const c = this.controls;
+    if (h.isDashing) return;
+
+    this.shieldTimer = Math.max(0, this.shieldTimer - dt);
+    this.hesitation -= dt;
+    const reach = h.radius + h.meleeReach;
+    const inMelee = this.targetVisible && i.edge < reach * 0.9;
+
+    const hitFromRange = w.time - this.lastDamage.time < 0.3 && this.lastDamage.fromDist > 230;
+    if (hitFromRange && h.barrierAvailable && h.barrierHp > 300) this.shieldTimer = randRange(1.2, 2.2);
+
+    if (inMelee) {
+      this.shieldTimer = 0; // baisse le mur pour frapper
+      if (i.aimError < 0.5) c.hold('primary');
+    } else if (this.shieldTimer > 0) {
+      c.hold('secondary');
+    }
+
+    // Marteau au sol : ruée vers lui s'il est près de la cible (décharge), sinon rappel.
+    const ham = h.hammer;
+    if (ham && ham.phase === 'landed' && this.hammerTime > 0.6) {
+      const nearTarget = Math.hypot(ham.x - t.x, ham.y - t.y) < SMASH.pickupRadiusAoe;
+      if (nearTarget && h.dashReady) c.press('ability1');
+      else if (this.hammerTime > 1.2) c.press('ability2');
+      return;
+    }
+
+    if (!this.targetVisible || this.reaction > 0 || this.hesitation > 0) return;
+
+    if (h.throwReady && i.dist > 200 && i.dist < THROW.range && i.aimError < 0.1) {
+      c.press('ability2');
+      this.hesitation = randRange(0.4, 1.2);
+      return;
+    }
+    if (h.dashReady && h.hasHammer && i.dist > 110 && i.dist < 200 && i.aimError < 0.1 && pathClear(w.arena, h, t.x, t.y)) {
+      c.press('ability1');
+      this.hesitation = randRange(0.4, 1.2);
     }
   }
 }
@@ -311,6 +379,7 @@ export class TurtyBrain extends HeroBrain<Turty> {
 export function createBrain(hero: Hero, controls: BotControls): HeroBrain {
   if (hero instanceof Flux) return new FluxBrain(hero, controls);
   if (hero instanceof Rempart) return new RempartBrain(hero, controls);
+  if (hero instanceof Thor) return new ThorBrain(hero, controls);
   if (hero instanceof Tempo) return new TempoBrain(hero, controls);
   if (hero instanceof Skater) return new SkaterBrain(hero, controls);
   if (hero instanceof Turty) return new TurtyBrain(hero, controls);

@@ -5,7 +5,7 @@ import { degToRad, randRange } from '../core/math';
 import { hostile } from '../entities/Combatant';
 import { Projectile } from '../entities/Projectile';
 import { t } from '../i18n';
-import { TEMPO_SPRITE } from '../sprites/library';
+import { cached, hand, head, sonicCannon, tempoHair } from '../render/topdown';
 import { addBuff } from '../ui/healthBar';
 import { lineOfSight } from '../world/Visibility';
 import { Hero, type AbilitySlot, type WeaponHud } from './Hero';
@@ -36,6 +36,11 @@ const AMP = { duration: 3, cooldown: 12 };
 
 type AuraMode = 'heal' | 'speed';
 
+/** Rayon de la tête vue de dessus, peau, gants. */
+const R = 15;
+const SKIN = '#f1c5a2';
+const GLOVE = '#2f3550';
+
 /**
  * Tempo — support mobile.
  * Passif : aura (Soin / Vitesse) · Clic G : rafale de 4 · Clic D : Onde de choc (recul)
@@ -48,6 +53,9 @@ export class Tempo extends Hero {
   private boopCooldown = 0;
   private swapCooldown = 0;
   private pulse = 0;
+  /** Recul du canon (tir) et poussée des mains (Onde de choc), pour l'animation. */
+  private recoil = 0;
+  private boopAnim = 0;
 
   private readonly mag = new Magazine(SONIC.magSize, SONIC.reloadTime);
   private burstLeft = 0;
@@ -58,8 +66,7 @@ export class Tempo extends Hero {
     super({
       name: 'Tempo',
       maxHp: 200,
-      sprite: TEMPO_SPRITE,
-      px: 2.2, // hitbox moyenne
+      hitbox: { hw: 15.4, hh: 19.8 }, // hitbox moyenne
       speed: 330, // même vitesse de base que Flux
       acceleration: 16,
       color: '#59d48a',
@@ -92,6 +99,8 @@ export class Tempo extends Hero {
     this.boopCooldown = Math.max(0, this.boopCooldown - dt);
     this.swapCooldown = Math.max(0, this.swapCooldown - dt);
     this.pulse += dt;
+    this.recoil = Math.max(0, this.recoil - dt);
+    this.boopAnim = Math.max(0, this.boopAnim - dt);
 
     this.mag.update(dt);
   }
@@ -178,6 +187,7 @@ export class Tempo extends Hero {
     const oy = this.y + Math.sin(this.aim) * (this.radius + 10);
     if (ctx.arena.pointInWall(ox, oy)) return;
     const half = degToRad(SONIC.spreadDeg) / 2;
+    this.recoil = 0.08;
     ctx.spawnProjectile(
       new Projectile({
         x: ox,
@@ -197,6 +207,7 @@ export class Tempo extends Hero {
   /** Cône très court : peu de dégâts, gros recul. Nécessite une ligne de vue. */
   private boop(ctx: GameContext): void {
     this.boopCooldown = BOOP.cooldown;
+    this.boopAnim = 0.25;
     const reach = this.radius + BOOP.range;
     ctx.effects.wedge(this.x, this.y, this.aim, BOOP.halfArc, reach, this.auraColor, 0.25, this.radius);
 
@@ -223,11 +234,40 @@ export class Tempo extends Hero {
     ctx.effects.sparks(this.x, this.y, this.auraColor, 18, 300);
   }
 
-  // ------------------------------------------------------------ sprite
+  // ------------------------------------------------------------ rendu (boule)
 
-  /** Les écouteurs prennent la couleur de l'aura (jaune = Soin, vert = Vitesse). */
-  protected override spriteOverrides(): Record<string, string> {
-    return { a: this.auraColor };
+  protected headRadius(): number {
+    return R;
+  }
+
+  /**
+   * Canon sonique tenu à deux mains : il recule à chaque tir et son pavillon pulse.
+   * Onde de choc : le canon s'écarte et les deux mains poussent en avant.
+   * Le casque audio prend la couleur de l'aura (jaune = Soin, vert = Vitesse).
+   */
+  protected drawTop(ctx: CanvasRenderingContext2D, rot: number): void {
+    const aura = this.auraColor;
+    if (this.meleeAnim > 0) {
+      cached(ctx, `tempo.head.${aura}`, R * 1.5, (c) => {
+        head(c, R, SKIN);
+        tempoHair(c, R, aura);
+      });
+      this.idleHands(ctx, R, GLOVE, rot);
+      return;
+    }
+    const kick = this.recoil / 0.08;
+    const push = this.boopAnim > 0 ? Math.sin((1 - this.boopAnim / 0.25) * Math.PI) : 0;
+    ctx.save();
+    ctx.translate(R * (0.9 - kick * 0.2), R * (0.35 + push * 0.45));
+    const pk = Math.round(kick * 3) / 3; // 4 images de pavillon en cache
+    cached(ctx, `tempo.cannon.${aura}.${pk}`, R * 1.85, (c) => sonicCannon(c, R * 1.7, aura, pk));
+    ctx.restore();
+    cached(ctx, `tempo.head.${aura}`, R * 1.5, (c) => {
+      head(c, R, SKIN);
+      tempoHair(c, R, aura);
+    });
+    hand(ctx, R * (0.9 - kick * 0.2 + push * 0.4), R * (0.35 + push * 0.2), R * 0.3, GLOVE, rot);
+    hand(ctx, R * (1.5 - kick * 0.2 + push * 0.3), R * (0.1 - push * 0.6), R * 0.3, GLOVE, rot);
   }
 
   // ------------------------------------------------------------ HUD

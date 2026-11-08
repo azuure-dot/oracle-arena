@@ -62,8 +62,34 @@ interface FloatText {
   size: number;
 }
 
+/** Éclair : ligne brisée entre deux points (Thor), tracée une fois puis qui s'efface. */
+interface Bolt {
+  points: number[]; // x0, y0, x1, y1...
+  life: number;
+  maxLife: number;
+  color: string;
+  width: number;
+}
+
+/** Points d'un éclair de (x0, y0) à (x1, y1) : segments de ~14 px déviés au hasard. */
+function boltPoints(x0: number, y0: number, x1: number, y1: number, jitter: number): number[] {
+  const len = Math.hypot(x1 - x0, y1 - y0);
+  const n = Math.max(2, Math.round(len / 14));
+  const nx = -(y1 - y0) / (len || 1);
+  const ny = (x1 - x0) / (len || 1);
+  const pts = [x0, y0];
+  for (let i = 1; i < n; i++) {
+    const t = i / n;
+    const o = randRange(-jitter, jitter) * Math.sin(Math.PI * t);
+    pts.push(x0 + (x1 - x0) * t + nx * o, y0 + (y1 - y0) * t + ny * o);
+  }
+  pts.push(x1, y1);
+  return pts;
+}
+
 /** Effets visuels purement cosmétiques (étincelles, chiffres de dégâts, traînées). */
 export class Effects {
+  private bolts: Bolt[] = [];
   private particles: Particle[] = [];
   private numbers: DamageNumber[] = [];
   private afterimages: Afterimage[] = [];
@@ -72,6 +98,7 @@ export class Effects {
   private texts: FloatText[] = [];
 
   clear(): void {
+    this.bolts = [];
     this.texts = [];
     this.particles = [];
     this.numbers = [];
@@ -136,7 +163,23 @@ export class Effects {
     this.texts.push({ x, y, text, color, life, maxLife: life, size });
   }
 
+  /** Éclair entre deux points (ligne brisée lumineuse). */
+  bolt(x0: number, y0: number, x1: number, y1: number, color: string, life = 0.18, width = 2.5, jitter = 12): void {
+    this.bolts.push({ points: boltPoints(x0, y0, x1, y1, jitter), life, maxLife: life, color, width });
+  }
+
+  /** Gerbe d'éclairs qui partent d'un point dans toutes les directions (impact de foudre). */
+  lightningBurst(x: number, y: number, radius: number, color: string, count = 7, life = 0.25): void {
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2 + randRange(-0.3, 0.3);
+      const r = radius * randRange(0.6, 1);
+      this.bolt(x, y, x + Math.cos(a) * r, y + Math.sin(a) * r * 0.75, color, life * randRange(0.7, 1), 2.5, radius * 0.18);
+    }
+  }
+
   update(dt: number): void {
+    for (const b of this.bolts) b.life -= dt;
+    this.bolts = this.bolts.filter((b) => b.life > 0);
     for (const tx of this.texts) {
       tx.y -= 45 * dt;
       tx.life -= dt;
@@ -227,6 +270,27 @@ export class Effects {
       ctx.globalAlpha = p.life / p.maxLife;
       ctx.fillStyle = p.color;
       ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+    }
+    if (this.bolts.length) {
+      ctx.save();
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      for (const b of this.bolts) {
+        const t = b.life / b.maxLife;
+        ctx.beginPath();
+        ctx.moveTo(b.points[0], b.points[1]);
+        for (let i = 2; i < b.points.length; i += 2) ctx.lineTo(b.points[i], b.points[i + 1]);
+        // Halo coloré puis cœur blanc
+        ctx.globalAlpha = 0.5 * t;
+        ctx.strokeStyle = b.color;
+        ctx.lineWidth = b.width * 3;
+        ctx.stroke();
+        ctx.globalAlpha = t;
+        ctx.strokeStyle = '#f4fbff';
+        ctx.lineWidth = b.width;
+        ctx.stroke();
+      }
+      ctx.restore();
     }
     ctx.globalAlpha = 1;
 

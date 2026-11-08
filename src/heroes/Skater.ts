@@ -1,22 +1,28 @@
 import { COLORS } from '../config';
 import type { GameContext } from '../core/GameContext';
 import { boxesOverlap, boxInCone, distToBox } from '../core/geometry';
-import { angleDiff, degToRad, TAU } from '../core/math';
+import { degToRad, TAU } from '../core/math';
 import { hostile, type Combatant } from '../entities/Combatant';
 import { Projectile } from '../entities/Projectile';
 import { t, type TKey } from '../i18n';
-import { deckImage, dir8, gearImage, GEAR as GEAR_GRIDS, skaterFrame, type DeckFace } from '../sprites/skater';
+import { gearImage, GEAR as GEAR_GRIDS } from '../sprites/skater';
+import { cached, deck, drawTeamMarker, hand, head, inked, skaterBeanie, skaterHeadphones } from '../render/topdown';
 import { addBuff } from '../ui/healthBar';
 import { lineOfSight } from '../world/Visibility';
 import { BLINK } from './Flux';
 import { Hero, MOVE_SPEED_SCALE, type AbilitySlot, type WeaponHud } from './Hero';
 
-/** Taille d'un pixel de la planche de sprites (unités monde) et hitbox du corps (sans la planche). */
-// 1,3 → 1,8 : même hauteur à l'écran que Turty (~60 unités au-dessus des pieds).
-const PX = 1.8;
-/** Hauteur de sa plus haute pose au-dessus des pieds (calculée au premier besoin). */
-let skaterHeight = 0;
-const DIRS8 = ['down', 'downLeft', 'left', 'upLeft', 'up', 'upRight', 'right', 'downRight'] as const;
+/** Rayon de la tête vue de dessus, peau, bracelets (d'après son croquis). */
+const R = 14;
+const SKIN = '#f1c9a5';
+const BAND = '#2a2a30';
+/** Planche de skate (longueur, largeur). */
+const DECK = { L: 52, W: 15 };
+
+/** Planche (dessus ou dessous), en cache. */
+function skaterDeck(ctx: CanvasRenderingContext2D, side: 'top' | 'bottom'): void {
+  cached(ctx, `skater.deck.${side}`, DECK.L * 0.55, (c) => deck(c, DECK.L, DECK.W, side));
+}
 const HITBOX = { hw: 10, hh: 21 };
 
 export const SKATER = {
@@ -189,7 +195,6 @@ export class Skater extends Hero {
     super({
       name: 'Skater',
       maxHp: 200,
-      px: PX,
       hitbox: HITBOX,
       speed: SKATER.speed,
       acceleration: 12, // glisse un peu plus que les autres : il roule
@@ -664,225 +669,158 @@ export class Skater extends Hero {
     ctx.restore();
   }
 
+  protected headRadius(): number {
+    return R;
+  }
+
   override draw(ctx: CanvasRenderingContext2D): void {
     if (this.dead) return;
-    const feetY = this.y + this.hh;
     const tr = this.trick;
-    // Hauteur du saut
+    // Hauteur du saut : vu de dessus, il grossit et son ombre s'éloigne.
     const z = tr && tr.phase === 'air' ? Math.sin(Math.PI * Math.min(1, tr.t / TRICK.airTime)) * TRICK.jumpHeight : 0;
-
-    // Ombre + anneau d'équipe (au sol, même en l'air)
-    ctx.save();
-    ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    ctx.beginPath();
-    ctx.ellipse(this.x, feetY, this.hw * 1.3 * (1 - z / 80), this.hw * 0.5 * (1 - z / 80), 0, 0, TAU);
-    ctx.fill();
-    ctx.strokeStyle = this.outline;
-    ctx.globalAlpha = 0.85;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.ellipse(this.x, feetY, this.hw * 1.5, this.hw * 0.62, 0, 0, TAU);
-    ctx.stroke();
-    ctx.restore();
+    drawTeamMarker(ctx, this.x, this.y, R, this.outline, z);
 
     const moving = Math.hypot(this.vx, this.vy) > 60;
     const throwing = this.throwAnim > 0 && !this.onFoot && !tr;
-    const facing = this.swing || this.onFoot || throwing || !moving ? this.aim : Math.atan2(this.vy, this.vx);
-    const dir = dir8(tr ? Math.atan2(tr.phase === 'dash' ? tr.dy : this.vy || tr.dy, tr.phase === 'dash' ? tr.dx : this.vx || tr.dx) : facing);
-    const flash = this.hurtTimer > 0.2;
-    const v = { outline: this.outline };
+    const face = this.swing || this.onFoot || throwing || !moving ? this.aim : Math.atan2(this.vy, this.vx);
+    // Sens de la planche : la course (trick), sinon le déplacement, sinon la visée.
+    const rideDir = tr
+      ? Math.atan2(tr.phase === 'dash' ? tr.dy : this.vy || tr.dy, tr.phase === 'dash' ? tr.dx : this.vx || tr.dx)
+      : moving
+        ? Math.atan2(this.vy, this.vx)
+        : this.aim;
+    const lift = 1 + z / 70;
 
-    if (tr && tr.phase === 'air') {
-      this.drawFlippingDeck(ctx, feetY - z * 0.9 - 1, tr);
-      this.blitPose(ctx, 'body', dir, 0, feetY - z - 3 * PX, v, flash);
-    } else if (this.swing) {
-      this.drawSwing(ctx, feetY, dir, v, flash);
-    } else if (this.onFoot) {
-      const frame = this.walkAnim > 0 ? Math.floor(this.walkAnim * 5) % 2 : 0;
-      this.blitPose(ctx, 'foot', dir, frame, feetY, v, flash);
-    } else {
-      // Sur la planche : l'image B passe de temps en temps (poussée), sinon il glisse.
-      const pushing = tr?.phase === 'push';
-      const frame = pushing || (moving && Math.floor(this.walkAnim * 2.2) % 3 === 2) ? 1 : 0;
-      const bob = moving ? Math.round(Math.sin(this.walkAnim * 9)) * 0.5 : 0;
-      if (throwing) {
-        const sh = this.blitPose(ctx, 'throw', dir, 0, feetY + 3 * PX + bob, v, flash);
-        this.drawThrowArm(ctx, sh.x, sh.y);
-      } else this.blitPose(ctx, 'ride', dir, frame, feetY + 3 * PX + bob, v, flash);
+    if (!this.onFoot) {
+      // La planche, sous ses pieds (au sol, ou qui tourne sous lui pendant le saut).
+      ctx.save();
+      ctx.translate(this.x, this.y);
+      ctx.scale(1 + z / 120, 1 + z / 120);
+      ctx.rotate(rideDir);
+      if (tr && tr.phase === 'air') this.flipDeck(ctx, tr);
+      else skaterDeck(ctx, 'top');
+      ctx.restore();
     }
-  }
-
-  /**
-   * Bras droit qui lance : armé derrière et au-dessus de l'épaule, fouetté vers la visée
-   * (le lancer part à cet instant), tenu un instant, puis il retombe le long du corps.
-   */
-  private drawThrowArm(ctx: CanvasRenderingContext2D, sx: number, sy: number): void {
-    const u = 1 - this.throwAnim / THROW_TIME; // 0 → 1
-    const L = 8 * PX;
-    const ax = Math.cos(this.aim);
-    const ay = Math.sin(this.aim);
-    const back = { x: sx - ax * L * 0.6, y: sy - ay * L * 0.4 - L * 0.7 };
-    // Visée vers le haut / le bas : le bras se tend devant le corps (vers son centre), sinon
-    // il se confondrait avec un bras pendant.
-    const front = { x: sx + ax * L + (this.x - sx) * 0.6 * (1 - Math.abs(ax)), y: sy + ay * L * 0.75 - L * 0.1 };
-    const rest = { x: sx + ax * L * 0.2, y: sy + L * 0.85 };
-    const lerp = (a: { x: number; y: number }, b: { x: number; y: number }, k: number) => ({ x: a.x + (b.x - a.x) * k, y: a.y + (b.y - a.y) * k });
-    let hand: { x: number; y: number };
-    if (u < 0.2) hand = lerp(back, front, 1 - (1 - u / 0.2) ** 2);
-    else if (u < 0.55) hand = front;
-    else hand = lerp(front, rest, (u - 0.55) / 0.45);
-    this.drawArm(ctx, sx, sy, hand.x, hand.y);
-    ctx.fillStyle = '#020202';
-    ctx.fillRect(hand.x - 2 * PX, hand.y - 2 * PX, 4 * PX, 4 * PX);
-    ctx.fillStyle = '#d8ae95';
-    ctx.fillRect(hand.x - 1.2 * PX, hand.y - 1.2 * PX, 2.4 * PX, 2.4 * PX);
-  }
-
-  /** Dessine une pose : `bottom` = bas de l'image (pieds ou roues). Retourne la 1re épaule (monde). */
-  private blitPose(
-    ctx: CanvasRenderingContext2D,
-    look: 'ride' | 'foot' | 'body' | 'throw',
-    dir: ReturnType<typeof dir8>,
-    frame: number,
-    bottom: number,
-    v: { outline: string },
-    flash: boolean,
-  ): { x: number; y: number } {
-    const f = skaterFrame(look, dir, frame, v);
-    const left = this.x - f.anchorX * PX;
-    const top = bottom + f.drop * PX - f.rows * PX;
     ctx.save();
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(f.img, left, top, f.img.width * PX, f.img.height * PX);
-    if (flash) {
-      const s = skaterFrame(look, dir, frame, { outline: v.outline, silhouette: '#ffffff' });
-      ctx.drawImage(s.img, left, top, s.img.width * PX, s.img.height * PX);
+    ctx.translate(this.x, this.y);
+    ctx.rotate(tr && tr.phase === 'air' ? rideDir : face);
+    ctx.scale(lift, lift);
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    const rot = tr && tr.phase === 'air' ? rideDir : face;
+    if (this.onFoot && this.swing) this.drawSwing(ctx, rot);
+    else {
+      if (!this.onFoot && (tr?.phase === 'push' || (moving && Math.floor(this.walkAnim * 2.2) % 3 === 2))) this.drawPushFoot(ctx, face, rideDir);
+      if (this.onFoot) this.drawCarriedDeck(ctx);
+      this.drawHead(ctx);
+      if (throwing) this.drawThrow(ctx, rot);
+      else if (this.onFoot) this.idleHands(ctx, R, SKIN, rot, { band: BAND });
+      else this.drawBalance(ctx, rot, moving);
+    }
+    if (this.hurtTimer > 0.2) {
+      ctx.globalAlpha = 0.7;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(0, 0, R, 0, TAU);
+      ctx.fill();
+      ctx.globalAlpha = 1;
     }
     ctx.restore();
-    const sh = f.shoulders[0];
-    return sh ? { x: left + (sh.x + 0.5) * PX, y: top + (sh.y + 0.5) * PX } : { x: this.x, y: top };
   }
 
-  /** Planche sous les pieds pendant un trick : elle roule (flip) et/ou pivote (shove-it). */
-  private drawFlippingDeck(ctx: CanvasRenderingContext2D, y: number, tr: TrickState): void {
-    const u = Math.min(1, tr.t / TRICK.airTime);
-    const kind = TRICKS[tr.variant];
-    const ease = u < 0.85 ? u / 0.85 : 1; // la planche est rattrapée un peu avant l'atterrissage
-    const roll = Math.cos(ease * TAU * Math.abs(kind.roll)); // 1 = grip dessus, -1 = dessous
-    const spin = ease * TAU * kind.spin;
-    let face: DeckFace = roll > 0.35 ? 'grip' : roll < -0.35 ? 'under' : 'edge';
-    if (kind.roll === 0) face = 'grip';
-    const img = deckImage(face);
-    const s = PX * 1.1; // même échelle que les poses (un poil plus grande pour bien lire le flip)
+  protected drawTop(ctx: CanvasRenderingContext2D, rot: number): void {
+    this.drawHead(ctx);
+    this.drawBalance(ctx, rot, false);
+  }
+
+  /** Tête : casque audio autour du cou, bonnet violet. */
+  private drawHead(ctx: CanvasRenderingContext2D): void {
+    cached(ctx, 'skater.head', R * 1.5, (c) => {
+      skaterHeadphones(c, R);
+      head(c, R, SKIN);
+      skaterBeanie(c, R);
+    });
+  }
+
+  /** Sur la planche : bras écartés pour l'équilibre, qui se balancent en roulant. */
+  private drawBalance(ctx: CanvasRenderingContext2D, rot: number, moving: boolean): void {
+    const sway = Math.sin(this.walkAnim * 5) * (moving ? 0.25 : 0.1);
+    hand(ctx, R * sway, R * 1.15, R * 0.3, SKIN, rot, { band: BAND });
+    hand(ctx, -R * sway, -R * 1.15, R * 0.3, SKIN, rot, { band: BAND });
+  }
+
+  /** Pied qui pousse sur le sol, à côté de la planche, derrière (repère tourné vers `face`). */
+  private drawPushFoot(ctx: CanvasRenderingContext2D, face: number, rideDir: number): void {
+    const a = rideDir - face;
+    const k = Math.sin(this.walkAnim * 14) * 0.5 + 0.5;
+    const fx = -Math.cos(a) * R * (0.6 + k * 0.8) - Math.sin(a) * R * 0.7;
+    const fy = -Math.sin(a) * R * (0.6 + k * 0.8) + Math.cos(a) * R * 0.7;
+    inked(ctx, '#f2f2f2', () => ctx.ellipse(fx, fy, R * 0.38, R * 0.22, a, 0, TAU), 1.6);
+    ctx.fillStyle = '#1c1c22';
+    ctx.beginPath();
+    ctx.ellipse(fx, fy, R * 0.26, R * 0.12, a, 0, TAU);
+    ctx.fill();
+  }
+
+  /** À pied, entre deux coups : la planche tenue le long du corps, côté droit. */
+  private drawCarriedDeck(ctx: CanvasRenderingContext2D): void {
     ctx.save();
-    ctx.imageSmoothingEnabled = false;
-    ctx.translate(this.x, y);
-    ctx.rotate(Math.sin(spin) * 0.6 + (kind.roll < 0 ? -0.15 : 0.15) * Math.sin(u * Math.PI));
-    ctx.scale(Math.cos(spin) >= 0 ? 1 : -1, face === 'edge' ? 1 : Math.max(0.35, Math.abs(roll)));
-    ctx.drawImage(img, (-img.width * s) / 2, (-img.height * s) / 2, img.width * s, img.height * s);
+    ctx.translate(R * 0.2, R * 1.25);
+    skaterDeck(ctx, 'bottom');
     ctx.restore();
   }
 
   /**
-   * Coup de planche : le corps (sans ses bras pendants) + des bras redessinés qui partent
-   * des épaules et tiennent la planche à deux mains par la queue ; la planche suit le coup.
+   * Coup de planche, tenue à deux mains par la queue : en travers (de droite à gauche, puis
+   * en revers), puis le fracas : levée (elle grossit, vue de dessus) et abattue devant lui.
    */
-  private drawSwing(ctx: CanvasRenderingContext2D, feetY: number, dir: ReturnType<typeof dir8>, v: { outline: string }, flash: boolean): void {
+  private drawSwing(ctx: CanvasRenderingContext2D, rot: number): void {
     const sw = this.swing!;
     const hit = COMBO.hits[sw.step];
     const u = Math.min(1, sw.t / COMBO.swingTime);
     const e = 1 - (1 - u) * (1 - u); // départ vif, fin amortie
-    const behind = dir === 'up' || dir === 'upLeft' || dir === 'upRight';
-
-    // Angle de la planche et hauteur des mains
-    let angle: number;
-    let lift = 0;
+    let a: number;
+    let up = 0;
     if (hit.sweep !== 0) {
-      angle = sw.aim + hit.sweep * (1.2 - 2.4 * e);
+      a = hit.sweep * (1.2 - 2.4 * e);
     } else {
-      // Fracas : planche levée au-dessus de la tête, puis abattue devant lui
-      const up = -Math.PI / 2;
-      if (u < 0.35) {
-        angle = up;
-        lift = (u / 0.35) * 7.7; // en pixels de sprite
-      } else {
-        const k = (u - 0.35) / 0.65;
-        const s2 = k * k; // accélère en descendant
-        angle = up + angleDiff(up, sw.aim) * s2;
-        lift = 7.7 * (1 - s2);
-      }
+      a = 0;
+      up = u < 0.35 ? u / 0.35 : 1 - ((u - 0.35) / 0.65) ** 2;
     }
-    const dx = Math.cos(angle);
-    const dy = Math.sin(angle);
-    const lean = Math.cos(sw.aim) * 2.3 * PX * e; // le corps accompagne le coup
-
-    const f = skaterFrame('swing', dir, 0, v);
-    const left = this.x + lean - f.anchorX * PX;
-    const top = feetY - f.rows * PX;
-    const shoulders = f.shoulders.map((s) => ({ x: left + (s.x + 0.5) * PX, y: top + (s.y + 0.5) * PX }));
-    const mid = shoulders.reduce((a, s) => ({ x: a.x + s.x / shoulders.length, y: a.y + s.y / shoulders.length }), { x: 0, y: 0 });
-    // Prise : à une longueur de bras des épaules, dans la direction de la planche
-    const grip = { x: mid.x + dx * 9.2 * PX, y: mid.y + dy * 7 * PX - lift * PX };
-
-    const drawBody = () => {
-      ctx.save();
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(f.img, left, top, f.img.width * PX, f.img.height * PX);
-      if (flash) {
-        const s = skaterFrame('swing', dir, 0, { outline: v.outline, silhouette: '#ffffff' });
-        ctx.drawImage(s.img, left, top, s.img.width * PX, s.img.height * PX);
-      }
-      ctx.restore();
-    };
-    const drawBoard = () => {
-      const img = deckImage('grip');
-      const s = PX * 1.1;
-      ctx.save();
-      ctx.imageSmoothingEnabled = false;
-      ctx.translate(grip.x, grip.y);
-      ctx.rotate(angle);
-      // Tenue par la queue : les mains sont à ~3 pixels du bout
-      ctx.drawImage(img, -3 * s, (-img.height * s) / 2, img.width * s, img.height * s);
-      ctx.restore();
-    };
-    const drawArms = () => {
-      for (const sh of shoulders) this.drawArm(ctx, sh.x, sh.y, grip.x, grip.y);
-      // Mains (peau, contour noir) par-dessus la planche
-      ctx.fillStyle = '#020202';
-      ctx.fillRect(grip.x - 2 * PX, grip.y - 2 * PX, 4 * PX, 4 * PX);
-      ctx.fillStyle = '#d8ae95';
-      ctx.fillRect(grip.x - 1.2 * PX, grip.y - 1.2 * PX, 2.4 * PX, 2.4 * PX);
-    };
-
-    if (behind) {
-      // De dos : bras et planche passent derrière le corps
-      drawBoard();
-      drawArms();
-      drawBody();
-    } else {
-      drawBody();
-      drawBoard();
-      drawArms();
-    }
+    const gx = Math.cos(a) * R * (1.0 - up * 0.4);
+    const gy = Math.sin(a) * R * (1.0 - up * 0.4);
+    ctx.save();
+    ctx.translate(gx, gy);
+    ctx.rotate(a);
+    ctx.scale(1 + up * 0.25, 1 + up * 0.25);
+    ctx.translate(DECK.L * 0.45 * (1 - up * 0.6), 0);
+    skaterDeck(ctx, 'bottom');
+    ctx.restore();
+    this.drawHead(ctx);
+    hand(ctx, gx, gy, R * 0.3, SKIN, rot, { band: BAND });
+    hand(ctx, gx + Math.cos(a) * R * 0.45, gy + Math.sin(a) * R * 0.45, R * 0.3, SKIN, rot, { band: BAND });
   }
 
-  /** Bras pixel art : manche grise (contour noir) de l'épaule jusqu'à la main. */
-  private drawArm(ctx: CanvasRenderingContext2D, x0: number, y0: number, x1: number, y1: number): void {
-    const len = Math.hypot(x1 - x0, y1 - y0);
-    const n = Math.max(2, Math.ceil(len / (PX * 0.7)));
-    ctx.save();
-    for (const pass of [0, 1]) {
-      ctx.fillStyle = pass === 0 ? '#020202' : '#c8caca';
-      const r = pass === 0 ? 1.6 * PX : 0.9 * PX;
-      for (let i = 0; i <= n; i++) {
-        const k = i / n;
-        const x = x0 + (x1 - x0) * k;
-        const y = y0 + (y1 - y0) * k;
-        if (pass === 1 && k > 0.55) ctx.fillStyle = '#b3a99d'; // ombre de la manche vers le poignet
-        ctx.fillRect(Math.round((x - r) / PX * 2) * PX / 2, Math.round((y - r) / PX * 2) * PX / 2, r * 2, r * 2);
-      }
-    }
-    ctx.restore();
+  /**
+   * Lancer d'équipement : la main droite part en arrière, fouette vers la visée (le lancer
+   * part à cet instant), reste tendue un instant, puis revient.
+   */
+  private drawThrow(ctx: CanvasRenderingContext2D, rot: number): void {
+    const u = 1 - this.throwAnim / THROW_TIME; // 0 → 1
+    const f = u < 0.2 ? -0.6 + 2 * (u / 0.2) : u < 0.55 ? 1.4 : 1.4 - 1.2 * ((u - 0.55) / 0.45);
+    hand(ctx, R * f, R * 0.85, R * 0.3, SKIN, rot, { band: BAND });
+    hand(ctx, 0, -R * 1.15, R * 0.3, SKIN, rot, { band: BAND });
+  }
+
+  /** Planche sous lui pendant un trick : elle roule (flip, on voit le dessous) et/ou pivote (shove-it). */
+  private flipDeck(ctx: CanvasRenderingContext2D, tr: TrickState): void {
+    const u = Math.min(1, tr.t / TRICK.airTime);
+    const kind = TRICKS[tr.variant];
+    const ease = u < 0.85 ? u / 0.85 : 1; // rattrapée un peu avant l'atterrissage
+    const roll = Math.cos(ease * TAU * Math.abs(kind.roll)); // 1 = dessus, -1 = dessous
+    ctx.rotate(ease * TAU * kind.spin);
+    ctx.scale(1, Math.max(0.2, Math.abs(roll)));
+    skaterDeck(ctx, kind.roll !== 0 && roll < 0 ? 'bottom' : 'top');
   }
 
   override drawOver(ctx: CanvasRenderingContext2D): void {
@@ -924,18 +862,6 @@ export class Skater extends Hero {
       ctx.stroke();
       ctx.restore();
     }
-  }
-
-  /** Haut du sprite : la plus haute de ses poses au sol (sur la planche ou à pied). */
-  protected override spriteTop(): number {
-    if (skaterHeight === 0) {
-      for (const d of DIRS8) {
-        const ride = skaterFrame('ride', d, 0, { outline: COLORS.ally });
-        const foot = skaterFrame('foot', d, 0, { outline: COLORS.ally });
-        skaterHeight = Math.max(skaterHeight, (ride.rows - ride.drop - 3) * PX, foot.rows * PX);
-      }
-    }
-    return this.y + this.hh - skaterHeight;
   }
 
   override drawOverlay(ctx: CanvasRenderingContext2D): void {

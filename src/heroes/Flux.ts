@@ -4,8 +4,7 @@ import { degToRad, lerp, randRange } from '../core/math';
 import { RingBuffer } from '../core/RingBuffer';
 import { Projectile } from '../entities/Projectile';
 import { t } from '../i18n';
-import { FLUX_SPRITE } from '../sprites/library';
-import type { SpriteLayout } from '../sprites/SpriteRenderer';
+import { blaster, cached, fluxHair, hand, head } from '../render/topdown';
 import { Hero, MOVE_SPEED_SCALE, type AbilitySlot, type WeaponHud } from './Hero';
 import { Magazine } from './Magazine';
 
@@ -21,6 +20,11 @@ export const WEAPON = {
 // 3 s par charge ; distance réduite comme la marche (170 → 119)
 export const BLINK = { maxCharges: 3, rechargeTime: 3, distance: 170 * MOVE_SPEED_SCALE };
 export const RECALL = { cooldown: 12, rewindSeconds: 3, animDuration: 0.5 };
+
+/** Rayon de la tête vue de dessus, peau, gants. */
+const R = 13;
+const SKIN = '#ffd9c0';
+const GLOVE = '#2a2f42';
 
 /** Un instantané enregistré à chaque frame pour le Rappel. */
 interface HistorySample {
@@ -42,6 +46,8 @@ export class Flux extends Hero {
   private fireTimer = 0;
   private muzzleSide = 1;
   private muzzleFlash = 0;
+  /** Recul de chaque blaster (gauche, droite), pour l'animation des mains. */
+  private recoil = [0, 0];
 
   private blinkCharges = BLINK.maxCharges;
   private blinkTimer = 0;
@@ -55,8 +61,7 @@ export class Flux extends Hero {
     super({
       name: 'Flux',
       maxHp: 175,
-      sprite: FLUX_SPRITE,
-      px: 1.8, // petit sprite = petite hitbox : fragile mais difficile à toucher
+      hitbox: { hw: 12.6, hh: 16.2 }, // petite hitbox : fragile mais difficile à toucher
       speed: 330,
       acceleration: 16,
       color: COLORS.accent,
@@ -85,6 +90,7 @@ export class Flux extends Hero {
 
   protected override tick(dt: number): void {
     this.muzzleFlash = Math.max(0, this.muzzleFlash - dt);
+    this.recoil = this.recoil.map((r) => Math.max(0, r - dt));
     if (this.blinkCharges < BLINK.maxCharges) {
       this.blinkTimer += dt;
       if (this.blinkTimer >= BLINK.rechargeTime) {
@@ -149,6 +155,7 @@ export class Flux extends Hero {
   private fire(ctx: GameContext): void {
     this.muzzleSide *= -1;
     this.muzzleFlash = 0.04;
+    this.recoil[this.muzzleSide > 0 ? 1 : 0] = 0.07;
     const muzzle = this.muzzlePosition(this.muzzleSide);
     const half = degToRad(WEAPON.spreadDeg) / 2;
 
@@ -269,19 +276,45 @@ export class Flux extends Hero {
     }
   }
 
-  // ------------------------------------------------------------ sprite
+  // ------------------------------------------------------------ rendu (boule)
 
+  protected headRadius(): number {
+    return R;
+  }
   protected override spriteTint(): { color: string; alpha: number } | undefined {
     return this.recall ? { color: COLORS.recall, alpha: 0.55 } : undefined;
   }
   protected override isWalking(): boolean {
     return this.recall !== null || super.isWalking();
   }
-  protected override drawSpriteExtras(ctx: CanvasRenderingContext2D, _l: SpriteLayout, front: boolean): void {
-    if (!front || this.muzzleFlash <= 0) return;
-    const m = this.muzzlePosition(this.muzzleSide);
-    ctx.fillStyle = 'rgba(255,240,180,0.95)';
-    ctx.fillRect(m.x - 3, m.y - 3, 6, 6);
+  /** Un blaster dans chaque main, pointés vers la visée ; la main qui tire recule (éclair au canon). */
+  protected drawTop(ctx: CanvasRenderingContext2D, rot: number): void {
+    if (this.meleeAnim > 0) {
+      cached(ctx, 'flux.head', R * 1.75, (c) => {
+        head(c, R, SKIN);
+        fluxHair(c, R);
+      });
+      this.idleHands(ctx, R, GLOVE, rot);
+      return;
+    }
+    const kicks = [-1, 1].map((side) => this.recoil[side > 0 ? 1 : 0] / 0.07);
+    [-1, 1].forEach((side, i) => {
+      ctx.save();
+      ctx.translate(R * (1.0 - kicks[i] * 0.3), side * R * 0.55);
+      cached(ctx, 'flux.blaster', R * 1.05, (c) => blaster(c, R));
+      if (kicks[i] > 0.4 && this.muzzleSide === side) {
+        ctx.fillStyle = 'rgba(255,240,180,0.95)';
+        ctx.beginPath();
+        ctx.arc(R * 1.05, 0, R * 0.25, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    });
+    cached(ctx, 'flux.head', R * 1.75, (c) => {
+      head(c, R, SKIN);
+      fluxHair(c, R);
+    });
+    [-1, 1].forEach((side, i) => hand(ctx, R * (1.0 - kicks[i] * 0.3), side * R * 0.55, R * 0.32, GLOVE, rot));
   }
 
   // ------------------------------------------------------------ HUD

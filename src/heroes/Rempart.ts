@@ -5,8 +5,7 @@ import { angleDiff, degToRad, rotateTowards } from '../core/math';
 import { hostile, type Combatant } from '../entities/Combatant';
 import { Projectile } from '../entities/Projectile';
 import { t } from '../i18n';
-import { HAMMER as HAMMER_GRID, HAMMER_PALETTE, REMPART_SPRITE } from '../sprites/library';
-import { drawProp, facingFromAngle, propImage, type SpriteLayout } from '../sprites/SpriteRenderer';
+import { cached, hand, head, knightHelmet, rempartHammer } from '../render/topdown';
 import { lineOfSight } from '../world/Visibility';
 import { Hero, MOVE_SPEED_SCALE, type AbilitySlot, type WeaponHud } from './Hero';
 
@@ -36,6 +35,10 @@ export const CHARGE = {
   bumpImpulse: 520,
 };
 
+/** Rayon de la tête vue de dessus. */
+const R = 24;
+const GAUNTLET = '#8e9bb0';
+
 interface ChargeState {
   /** Temps restant de préparation (> 0 : Rempart est immobile et ne peut pas attaquer). */
   windup: number;
@@ -63,6 +66,7 @@ export class Rempart extends Hero {
   private shieldHitFlash = 0;
 
   private fireCooldown = 0;
+  private fireAnim = 0;
   private chargeCooldown = 0;
   private charge: ChargeState | null = null;
   /** Latence après un plaquage contre un mur : Rempart ne peut ni bouger ni agir. */
@@ -72,8 +76,7 @@ export class Rempart extends Hero {
     super({
       name: 'Rempart',
       maxHp: 600,
-      sprite: REMPART_SPRITE,
-      px: 3, // très grande hitbox
+      hitbox: { hw: 30, hh: 31.5 }, // très grande hitbox
       speed: 220, // très lent
       acceleration: 10,
       mass: 2, // lourd : les reculs le déplacent deux fois moins
@@ -105,6 +108,7 @@ export class Rempart extends Hero {
     this.hammerTimer = Math.max(0, this.hammerTimer - dt);
     this.swingAnim = Math.max(0, this.swingAnim - dt);
     this.fireCooldown = Math.max(0, this.fireCooldown - dt);
+    this.fireAnim = Math.max(0, this.fireAnim - dt);
     this.chargeCooldown = Math.max(0, this.chargeCooldown - dt);
     this.shieldBroken = Math.max(0, this.shieldBroken - dt);
     this.shieldHitFlash = Math.max(0, this.shieldHitFlash - dt);
@@ -226,6 +230,7 @@ export class Rempart extends Hero {
 
   private fireStrike(ctx: GameContext): void {
     this.fireCooldown = FIRE.cooldown;
+    this.fireAnim = 0.3;
     const ox = this.x + Math.cos(this.aim) * (this.radius + 8);
     const oy = this.y + Math.sin(this.aim) * (this.radius + 8);
     ctx.spawnProjectile(
@@ -402,17 +407,35 @@ export class Rempart extends Hero {
     return this.charge && this.charge.windup <= 0 ? 2.2 : 1;
   }
 
-  /** Marteau pixel art : derrière le corps quand Rempart est de dos, devant sinon. */
-  protected override drawSpriteExtras(ctx: CanvasRenderingContext2D, l: SpriteLayout, front: boolean): void {
-    const facing = this.spriteFacingAngle();
-    const behind = facingFromAngle(facing) === 'up';
-    if (front === behind) return;
+  protected headRadius(): number {
+    return R;
+  }
+
+  /**
+   * Marteau tenu à deux mains : au repos en travers devant lui, tête à droite ; frappe : arc
+   * d'un côté à l'autre de la visée ; Onde de feu : projeté en avant d'un coup sec ; Charge :
+   * pointé devant.
+   */
+  protected drawTop(ctx: CanvasRenderingContext2D, rot: number): void {
     const swingT = 1 - this.swingAnim / 0.2;
-    const angle = this.swingAnim > 0 ? facing + this.swingSide * (1 - 2 * swingT) : facing + 0.9;
-    const img = propImage('hammer', HAMMER_GRID, HAMMER_PALETTE, { outline: '#141820' });
-    const px = l.px * 1.3;
-    // Pivot : bout du manche, tenu à hauteur des mains.
-    drawProp(ctx, img, this.x, this.y - this.radius * 0.1, angle, px, -this.radius * 0.25 / px, img.height / 2);
+    const fire = this.fireAnim > 0 ? Math.sin((1 - this.fireAnim / 0.3) * Math.PI) : 0;
+    let a = 0.75 - fire * 0.75;
+    if (this.swingAnim > 0) a = this.swingSide * (1 - 2 * swingT);
+    else if (this.charge && this.charge.windup <= 0) a = 0.3;
+    const hx = Math.cos(a);
+    const hy = Math.sin(a);
+    const push = 1 + fire * 0.35;
+    ctx.save();
+    ctx.translate(hx * R * 0.3 * push, hy * R * 0.3 * push);
+    ctx.rotate(a);
+    cached(ctx, 'rempart.hammer', R * 2.3, (c) => rempartHammer(c, R * 1.9, R * 0.85));
+    ctx.restore();
+    cached(ctx, 'rempart.head', R * 1.15, (c) => {
+      head(c, R, '#e8b493');
+      knightHelmet(c, R);
+    });
+    hand(ctx, hx * R * 0.95 * push, hy * R * 0.95 * push, R * 0.3, GAUNTLET, rot);
+    hand(ctx, hx * R * 1.35 * push, hy * R * 1.35 * push, R * 0.3, GAUNTLET, rot);
   }
 
   // ------------------------------------------------------------ HUD
