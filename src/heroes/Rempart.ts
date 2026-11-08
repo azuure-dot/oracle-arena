@@ -8,7 +8,7 @@ import { t } from '../i18n';
 import { HAMMER as HAMMER_GRID, HAMMER_PALETTE, REMPART_SPRITE } from '../sprites/library';
 import { drawProp, facingFromAngle, propImage, type SpriteLayout } from '../sprites/SpriteRenderer';
 import { lineOfSight } from '../world/Visibility';
-import { Hero, type AbilitySlot, type WeaponHud } from './Hero';
+import { Hero, MOVE_SPEED_SCALE, type AbilitySlot, type WeaponHud } from './Hero';
 
 export const HAMMER = { damage: 75, interval: 0.95, reach: 95, halfArc: degToRad(55), knockback: 160 };
 export const SHIELD = {
@@ -26,7 +26,7 @@ export const CHARGE = {
   cooldown: 7,
   windup: 0.6, // préparation : immobile et prévisible avant de foncer
   windupTurnRate: 3, // rad/s : on peut encore viser pendant la préparation
-  speed: 680,
+  speed: 680 * MOVE_SPEED_SCALE, // ralentie comme la marche (476)
   maxDuration: 1.6,
   turnRate: 1.3, // rad/s : léger contrôle de trajectoire
   wallDamage: 250, // ennemi épinglé écrasé contre un mur

@@ -49,6 +49,7 @@ export class PracticeMode extends GameMode {
 
   constructor(camera: Camera, input: Input, entry: HeroEntry) {
     super(PRACTICE_MAP, camera, input, entry);
+    this.countdown = 0; // champ de tir : on joue tout de suite
     this.player.team = ALLY;
     this.player.placeAt(PLAYER_SPAWN);
     this.world.player = this.player;

@@ -1,10 +1,12 @@
 import type { BotControls } from '../core/Controls';
 import { randRange } from '../core/math';
-import type { Combatant } from '../entities/Combatant';
+import { hostile, type Combatant } from '../entities/Combatant';
 import { Flux } from '../heroes/Flux';
 import type { Hero } from '../heroes/Hero';
 import { FIRE, HAMMER, Rempart } from '../heroes/Rempart';
+import { GEAR, Skater, TRICK } from '../heroes/Skater';
 import { BOOP, SONIC, Tempo } from '../heroes/Tempo';
+import { BOMB, SHELL, Turty, WATER_GUN } from '../heroes/Turty';
 import { HeroBrain, type BrainWorld, type TargetInfo } from './HeroBrain';
 import { pathClear } from './steering';
 
@@ -144,10 +146,173 @@ export class TempoBrain extends HeroBrain<Tempo> {
   }
 }
 
+/**
+ * Skater — colle sa cible pour enchaîner le combo, lance son équipement à mi-distance.
+ * Tricks sur l'ennemi pour fondre dessus et cumuler la vitesse, sur un allié blessé pour le soigner.
+ * Aura de Soin dès qu'un allié proche est blessé, sinon Vitesse.
+ */
+export class SkaterBrain extends HeroBrain<Skater> {
+  protected get preferredRange(): number {
+    return this.hero.comboReady || this.hero.inCombo ? 55 : 230;
+  }
+  protected override rangeBand = 40;
+  protected override strafeWeight = 0.5;
+  protected override projectileSpeed = GEAR.speed;
+  protected override turnRate = 8;
+
+  private trickDelay = randRange(0.5, 1.5);
+
+  protected override always(dt: number, w: BrainWorld): void {
+    const s = this.hero;
+    const c = this.controls;
+    this.trickDelay -= dt;
+    let hurt: Combatant | null = null;
+    for (const a of w.targets) {
+      if (a === s || !a.alive || hostile(s, a)) continue;
+      if (Math.hypot(a.x - s.x, a.y - s.y) > 450 || a.hp / a.maxHp >= 0.7) continue;
+      if (!hurt || a.hp / a.maxHp < hurt.hp / hurt.maxHp) hurt = a;
+    }
+    const want = hurt ? 'heal' : 'speed';
+    if (s.mode !== want) c.press('ability2');
+    // Aura de Soin : trick sur l'allié le plus proche dans l'aura, s'il a besoin de soin.
+    if (s.mode === 'heal' && s.charges > 0 && !s.isTricking && this.trickDelay <= 0) {
+      const ally = s.trickTarget(w);
+      if (ally && ally.hp / ally.maxHp < 0.75) {
+        c.press('ability1');
+        this.trickDelay = randRange(0.8, 1.6);
+      }
+    }
+  }
+
+  /** Hors combat : un trick dans le vide quand toutes les charges sont là, pour aller plus vite. */
+  protected override roam(): void {
+    const s = this.hero;
+    if (s.charges === TRICK.maxCharges && Math.hypot(s.vx, s.vy) > 200 && this.trickDelay <= 0) {
+      this.controls.press('ability1');
+      this.trickDelay = randRange(2, 4);
+    }
+  }
+
+  protected combat(_dt: number, w: BrainWorld, _t: Combatant, i: TargetInfo): void {
+    const s = this.hero;
+    const c = this.controls;
+    if (s.isTricking) return;
+    const reach = s.hw + s.meleeReach;
+    if (this.targetVisible && i.edge < reach * 0.85 && i.aimError < 0.6) {
+      if (s.comboReady) c.hold('primary');
+    } else if (this.canShoot(i, 0.1) && i.dist > 90 && i.dist < 650 && !s.inCombo) {
+      c.hold('secondary');
+    }
+    // Aura de Vitesse : trick sur l'ennemi le plus proche dans l'aura (dégâts + vitesse),
+    // plutôt quand il n'est pas déjà collé à lui (là, il frappe).
+    if (
+      s.mode === 'speed' &&
+      this.reaction <= 0 &&
+      s.charges > 0 &&
+      this.trickDelay <= 0 &&
+      (i.dist > 90 || !s.comboReady) &&
+      s.trickTarget(w)
+    ) {
+      c.press('ability1');
+      this.trickDelay = s.speedStacks > 0 ? randRange(0.4, 0.9) : randRange(1, 2.5);
+    }
+  }
+}
+
+/**
+ * Turty — tire à distance moyenne, lance sa bombe sur les cibles un peu loin,
+ * lance sa carapace quand la ligne est dégagée. Hors combat : arrose devant elle
+ * puis file en tortue sur l'eau qu'elle vient de répandre.
+ */
+export class TurtyBrain extends HeroBrain<Turty> {
+  protected readonly preferredRange = 330;
+  protected override rangeBand = 90;
+  protected override strafeWeight = 0.9;
+  protected override projectileSpeed = WATER_GUN.speed;
+  protected override turnRate = 7;
+
+  private bombDelay = randRange(0.5, 1.5);
+  private shellDelay = randRange(1, 2.5);
+  private formDelay = 0;
+  /** Forme voulue : clic D maintenu tant qu'elle veut rester en tortue. */
+  private turtle = false;
+
+  protected override always(dt: number): void {
+    this.bombDelay -= dt;
+    this.shellDelay -= dt;
+    this.formDelay -= dt;
+    if (this.turtle) this.controls.hold('secondary');
+  }
+
+  /** Change de forme (sans clignoter d'une forme à l'autre). */
+  private want(form: 'human' | 'turtle'): void {
+    const turtle = form === 'turtle';
+    if (this.turtle === turtle || this.formDelay > 0) return;
+    this.turtle = turtle;
+    if (turtle) this.controls.hold('secondary');
+    else this.controls.release('secondary');
+    this.formDelay = 0.4;
+  }
+
+  override reset(): void {
+    super.reset();
+    this.turtle = false;
+  }
+
+  /** Hors combat : sol mouillé devant → tortue ; sinon, forme humaine et on arrose devant soi. */
+  protected override roam(): void {
+    const h = this.hero;
+    const speed = Math.hypot(h.vx, h.vy);
+    const dx = speed > 20 ? h.vx / speed : 0;
+    const dy = speed > 20 ? h.vy / speed : 0;
+    if (h.wetAt(h.x + dx * 50, h.y + h.hh + dy * 50) && h.wetAt(h.x, h.y + h.hh - 4)) {
+      this.want('turtle');
+    } else {
+      this.want('human');
+      if (speed > 20 && !h.reloading && h.ammo > 8) this.controls.hold('primary');
+    }
+  }
+
+  protected combat(_dt: number, w: BrainWorld, t: Combatant, i: TargetInfo): void {
+    const h = this.hero;
+    const c = this.controls;
+    if (h.isShelling) return; // préparation : la visée suit la cible (oriente le lancer)
+
+    // Peu de PV : fuite en tortue si le sol est mouillé, sinon on se bat.
+    if (h.hp / h.maxHp < 0.3 && h.wetAt(h.x, h.y + h.hh - 4)) {
+      this.forcedMove = { x: -i.dir.x, y: -i.dir.y };
+      this.want('turtle');
+      return;
+    }
+    if (this.canShoot(i, 0.12) && i.dist < WATER_GUN.range - 40) c.hold('primary');
+    else if (h.form === 'turtle' && this.targetVisible) this.want('human');
+
+    if (!this.targetVisible || this.reaction > 0) return;
+    if (h.bombReady && this.bombDelay <= 0 && i.dist > 160 && i.dist < BOMB.range && i.aimError < 0.2) {
+      c.press('ability2'); // la bombe tombe au point visé (la visée de l'IA est à la distance de la cible)
+      this.bombDelay = randRange(1, 3);
+      return;
+    }
+    if (
+      h.shellReady &&
+      this.shellDelay <= 0 &&
+      i.dist > 90 &&
+      i.dist < SHELL.speed * 0.45 &&
+      i.aimError < 0.12 &&
+      pathClear(w.arena, h, t.x, t.y)
+    ) {
+      c.press('ability1');
+      this.shellDelay = randRange(1, 3);
+    }
+  }
+}
+
 /** L'IA adaptée au héros attribué au bot. */
 export function createBrain(hero: Hero, controls: BotControls): HeroBrain {
   if (hero instanceof Flux) return new FluxBrain(hero, controls);
   if (hero instanceof Rempart) return new RempartBrain(hero, controls);
   if (hero instanceof Tempo) return new TempoBrain(hero, controls);
+  if (hero instanceof Skater) return new SkaterBrain(hero, controls);
+  if (hero instanceof Turty) return new TurtyBrain(hero, controls);
   throw new Error(`Pas d'IA pour le héros ${hero.name}`);
 }

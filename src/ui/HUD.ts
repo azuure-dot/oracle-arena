@@ -335,6 +335,100 @@ export class HUD {
         ctx.textAlign = 'center';
         ctx.fillText('⇄', cx, cy + 6);
         break;
+      case 'gear':
+        // Casque de skate
+        ctx.beginPath();
+        ctx.arc(cx, cy + 4, 15, Math.PI, 0);
+        ctx.lineTo(cx + 15, cy + 8);
+        ctx.lineTo(cx - 15, cy + 8);
+        ctx.closePath();
+        ctx.stroke();
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(cx - 4, cy - 10);
+        ctx.lineTo(cx - 4, cy - 3);
+        ctx.moveTo(cx + 4, cy - 10);
+        ctx.lineTo(cx + 4, cy - 3);
+        ctx.stroke();
+        break;
+      case 'trick': {
+        // Planche en l'air qui tourne
+        ctx.save();
+        ctx.translate(cx, cy - 2);
+        ctx.rotate(-0.35);
+        ctx.beginPath();
+        ctx.roundRect(-17, -5, 34, 10, 5);
+        ctx.stroke();
+        ctx.restore();
+        for (const ox of [-9, 9]) {
+          ctx.beginPath();
+          ctx.arc(cx + ox, cy + 11 - ox * 0.35, 3.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(cx, cy - 2, 21, -2.6, -1.2);
+        ctx.stroke();
+        break;
+      }
+      case 'turtle': {
+        // Tortue vue de dessus : carapace, tête et pattes
+        ctx.beginPath();
+        ctx.ellipse(cx, cy + 2, 13, 11, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(cx, cy - 13, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+        for (const [ox, oy] of [[-13, -6], [13, -6], [-12, 11], [12, 11]]) {
+          ctx.beginPath();
+          ctx.arc(cx + ox, cy + oy, 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx - 7, cy + 2);
+        ctx.lineTo(cx + 7, cy + 2);
+        ctx.moveTo(cx, cy - 6);
+        ctx.lineTo(cx, cy + 10);
+        ctx.stroke();
+        break;
+      }
+      case 'shell': {
+        // Carapace qui ricoche sur un mur
+        ctx.beginPath();
+        ctx.arc(cx - 4, cy + 4, 10, Math.PI, 0);
+        ctx.closePath();
+        ctx.stroke();
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx + 16, cy - 16);
+        ctx.lineTo(cx + 16, cy + 14);
+        ctx.stroke();
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(cx + 6, cy);
+        ctx.lineTo(cx + 14, cy - 8);
+        ctx.lineTo(cx + 2, cy - 16);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        break;
+      }
+      case 'bomb': {
+        // Bombe à eau ronde avec sa mèche
+        ctx.beginPath();
+        ctx.arc(cx, cy + 4, 11, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillRect(cx - 3, cy - 10, 6, 5);
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - 10);
+        ctx.quadraticCurveTo(cx + 4, cy - 18, cx + 10, cy - 15);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.arc(cx - 4, cy + 1, 3, 0, Math.PI * 2);
+        ctx.fill();
+        break;
+      }
       case 'amp':
         ctx.lineWidth = 3;
         for (let i = 0; i < 4; i++) {

@@ -6,19 +6,20 @@ import { Projectile } from '../entities/Projectile';
 import { t } from '../i18n';
 import { FLUX_SPRITE } from '../sprites/library';
 import type { SpriteLayout } from '../sprites/SpriteRenderer';
-import { Hero, type AbilitySlot, type WeaponHud } from './Hero';
+import { Hero, MOVE_SPEED_SCALE, type AbilitySlot, type WeaponHud } from './Hero';
 import { Magazine } from './Magazine';
 
 export const WEAPON = {
   magSize: 40,
   fireRate: 20, // 40 balles vidées en 2 s
-  damage: 6,
+  damage: 6 * 1.3, // +30 % (7,8 par balle, 156 dégâts/s)
   spreadDeg: 7,
   bulletSpeed: 1700,
   range: 720,
   reloadTime: 1.15,
 };
-export const BLINK = { maxCharges: 3, rechargeTime: 3, distance: 170 }; // 3 s par charge
+// 3 s par charge ; distance réduite comme la marche (170 → 119)
+export const BLINK = { maxCharges: 3, rechargeTime: 3, distance: 170 * MOVE_SPEED_SCALE };
 export const RECALL = { cooldown: 12, rewindSeconds: 3, animDuration: 0.5 };
 
 /** Un instantané enregistré à chaque frame pour le Rappel. */

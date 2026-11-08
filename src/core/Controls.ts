@@ -92,6 +92,10 @@ export class BotControls implements HeroControls {
   press(action: Action): void {
     this.justPressed.add(action);
   }
+  /** Relâche une action maintenue plus tôt dans la frame. */
+  release(action: Action): void {
+    this.down.delete(action);
+  }
 
   held(action: Action): boolean {
     return this.down.has(action) || this.justPressed.has(action);

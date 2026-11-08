@@ -1,6 +1,8 @@
 import type { Effects } from '../effects/Effects';
 import type { Combatant } from '../entities/Combatant';
 import type { Projectile } from '../entities/Projectile';
+import type { WorldObject } from '../entities/WorldObject';
+import type { WetGround } from '../game/WetGround';
 import type { Hero } from '../heroes/Hero';
 import type { Arena } from '../world/Arena';
 import type { Vec2 } from './math';
@@ -19,6 +21,10 @@ export interface GameContext {
   /** Tout ce qui peut être touché (héros + bots), y compris le héros lui-même. */
   targets: readonly Combatant[];
   spawnProjectile(p: Projectile): void;
+  /** Objet autonome (bombe à eau...) : vit même si son lanceur meurt. */
+  spawnObject(o: WorldObject): void;
+  /** Sol mouillé (Turty). */
+  wet: WetGround;
   /** Inflige des dégâts (stats, hitmarker, score...). Retourne les dégâts réels. */
   damage(target: Combatant, amount: number, source: Hero | null, cause?: DamageCause): number;
   /** Où réapparaît ce héros après sa mort. */

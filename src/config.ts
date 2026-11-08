@@ -38,26 +38,38 @@ export const ZONES = {
 } as const;
 
 /**
- * Zone de vision : rectangle 16:9 centré sur le joueur (en unités monde).
+ * Rapprochement de la caméra par rapport à la zone de vision d'origine (1920 × 1080) :
+ * ×1,3 puis ×1,5. La zone de vision rétrécit d'autant (elle reste exactement l'écran
+ * d'un 16:9).
+ */
+export const CAMERA_ZOOM = 1.3 * 1.5;
+
+/**
+ * Zone de vision : rectangle 16:9 centré sur le joueur (en unités monde), la même
+ * pour tous — joueur et bots.
  * - Le zoom de la caméra est calculé pour que cette zone remplisse l'écran :
  *   même surface visible sur un écran 13" ou 27".
  * - Au-delà (bandes sur les écrans ultra-larges ou 4:3), tout est dans l'ombre
- *   et aucun ennemi n'est visible, même sans mur entre les deux.
+ *   et aucun ennemi n'est visible, même sans mur entre les deux : un écran plus
+ *   large ne montre pas plus de terrain.
  */
 export const VISION = {
-  width: 1920,
-  height: 1080,
+  width: Math.round(1920 / CAMERA_ZOOM), // 985
+  height: Math.round(1080 / CAMERA_ZOOM), // 554
   /** Assombrissement hors de la zone de vision. */
   outsideOpacity: 0.97,
   /** Dégradé d'ombre (unités monde) sur le bord intérieur de la zone. */
-  edgeFade: 70,
+  edgeFade: 24,
 } as const;
 
 export const FOG = {
   opacity: 0.86,
-  /** Le brouillard est calculé en demi-résolution : bords doux + moins cher. */
-  resolution: 0.5,
-  blurPx: 3,
+  /**
+   * Le calque d'ombre est calculé en quart de résolution puis agrandi avec lissage :
+   * les bords sont doux sans filtre de flou (le flou recalculé à chaque image coûtait
+   * ~3 ms et provoquait des pics de 15 ms+ sur une carte graphique intégrée).
+   */
+  resolution: 0.25,
 } as const;
 
 export const COLORS = {

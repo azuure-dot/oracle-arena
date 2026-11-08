@@ -2,7 +2,9 @@ import type { TKey } from '../i18n';
 import { Flux } from './Flux';
 import type { Hero, InputSlot } from './Hero';
 import { Rempart } from './Rempart';
+import { Skater } from './Skater';
 import { Tempo } from './Tempo';
+import { Turty } from './Turty';
 
 export type Role = 'tank' | 'damage' | 'support';
 
@@ -58,6 +60,22 @@ export const HEROES: HeroEntry[] = [
     create: () => new Flux(),
   },
   {
+    id: 'turty',
+    name: 'Turty',
+    role: 'damage',
+    hp: 200,
+    color: '#4fd1a5',
+    tagline: 'turty.tagline',
+    abilities: [
+      { input: 'primary', name: 'turty.weapon', desc: 'turty.weapon.desc' },
+      { input: 'secondary', name: 'turty.form', desc: 'turty.form.desc' },
+      { input: 'ability1', name: 'turty.shell', desc: 'turty.shell.desc' },
+      { input: 'ability2', name: 'turty.bomb', desc: 'turty.bomb.desc' },
+      { input: 'melee', name: 'melee.name', desc: 'melee.desc' },
+    ],
+    create: () => new Turty(),
+  },
+  {
     id: 'tempo',
     name: 'Tempo',
     role: 'support',
@@ -72,5 +90,20 @@ export const HEROES: HeroEntry[] = [
       { input: 'melee', name: 'melee.name', desc: 'melee.desc' },
     ],
     create: () => new Tempo(),
+  },
+  {
+    id: 'skater',
+    name: 'Skater',
+    role: 'support',
+    hp: 200,
+    color: '#c7a3ff',
+    tagline: 'skater.tagline',
+    abilities: [
+      { input: 'primary', name: 'skater.weapon', desc: 'skater.weapon.desc' },
+      { input: 'secondary', name: 'skater.gear', desc: 'skater.gear.desc' },
+      { input: 'ability1', name: 'skater.trick', desc: 'skater.trick.desc' },
+      { input: 'ability2', name: 'skater.mode', desc: 'skater.mode.desc' },
+    ],
+    create: () => new Skater(),
   },
 ];

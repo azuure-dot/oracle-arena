@@ -16,6 +16,7 @@ export interface ViewTransform {
  * - Le zoom est calculé pour que la zone de vision (VISION, 16:9) remplisse l'écran :
  *   tous les joueurs voient la même surface de monde, quelle que soit la taille de leur écran.
  */
+
 export class Camera {
   /** Centre de la caméra, en coordonnées monde. */
   cx = 0;
@@ -31,6 +32,7 @@ export class Camera {
   setViewport(w: number, h: number): void {
     this.viewW = w;
     this.viewH = h;
+    // La zone de vision (déjà réduite du zoom, voir CAMERA_ZOOM) remplit l'écran.
     this.zoom = Math.min(w / VISION.width, h / VISION.height);
   }
 

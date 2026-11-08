@@ -11,8 +11,14 @@ import type { MatchResult } from '../ui/screens/Scoreboard';
 import { Arena } from '../world/Arena';
 import type { MapDef } from '../world/maps';
 
-/** Compte à rebours avant le début de la partie, dans tous les modes (s). */
+/**
+ * Comptes à rebours de départ (s) :
+ * - Partie rapide (Contrôle, Escorte) : 10 s, portes des spawns fermées ;
+ *   en Contrôle, il revient au début de chaque manche.
+ * - Deathmatch : 3 s. Champ de tir : aucun.
+ */
 export const START_COUNTDOWN = 10;
+export const DEATHMATCH_COUNTDOWN = 3;
 
 export type ModeKind = 'practice' | 'deathmatch' | 'control' | 'escort';
 

@@ -17,7 +17,7 @@ import {
 } from '../ui/ControlHud';
 import type { MatchResult } from '../ui/screens/Scoreboard';
 import type { ControlPointDef, MapDef } from '../world/maps';
-import type { ScreenInfo } from './GameMode';
+import { START_COUNTDOWN, type ScreenInfo } from './GameMode';
 import { TeamMatchMode } from './TeamMatchMode';
 
 export const CONTROL = {
@@ -81,8 +81,12 @@ export class ControlMode extends TeamMatchMode {
     return this.map.spawns[team] ?? [this.point];
   }
 
-  /** Début de manche : point neutre, pourcentages à zéro, tout le monde au spawn, PV et compétences à neuf. */
+  /**
+   * Début de manche : point neutre, pourcentages à zéro, tout le monde au spawn, PV et
+   * compétences à neuf, et compte à rebours portes fermées (à chaque manche).
+   */
   private startRound(): void {
+    this.countdown = START_COUNTDOWN;
     this.owner = null;
     this.capturer = null;
     this.progress = 0;

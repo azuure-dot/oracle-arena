@@ -1,6 +1,7 @@
 import { BOT, COLORS, PLAYER_SPAWN, ZONES } from '../config';
 import { NO_CONTROLS, type HeroControls } from '../core/Controls';
 import type { GameContext } from '../core/GameContext';
+import { WET } from '../game/WetGround';
 import { boxExtent, boxInCone, distToBox, type Box } from '../core/geometry';
 import { damp, degToRad, type Vec2 } from '../core/math';
 import { hostile, type Combatant } from '../entities/Combatant';
@@ -31,9 +32,9 @@ export const INPUT_LABEL_KEYS: Record<InputSlot, TKey> = {
   melee: 'key.melee',
 };
 
-/** Soin passif de tous les héros : après 3 s sans subir de dégâts. */
+/** Soin passif de tous les héros : après 5 s sans subir de dégâts (0,5 s sur l'eau de Turty, voir WET). */
 export const PASSIVE_REGEN = {
-  delay: 3, // s sans dégâts
+  delay: 5, // s sans dégâts
   rate: 15, // PV/s
 };
 
@@ -47,6 +48,13 @@ export const LAVA = {
   /** Durée (s) pendant laquelle celui qui a poussé est crédité de la chute. */
   creditTime: 4,
 };
+
+/**
+ * Vitesse de marche de tous les héros : leurs vitesses de base (stats.speed) sont
+ * multipliées par ce facteur. Les compétences de déplacement (Charge, course du trick,
+ * carapace, distance du Transfert) utilisent aussi ce facteur dans leurs constantes.
+ */
+export const MOVE_SPEED_SCALE = 0.7 * 0.85; // -30 %, puis encore -15 % (≈ 0,6)
 
 /** Délai de réapparition par défaut (champ de tir, Deathmatch). La Partie rapide utilise 8 s. */
 export const RESPAWN_TIME = 3;
@@ -66,7 +74,7 @@ export const QUICK_MELEE = {
   knockback: 140,
 };
 
-export type AbilityIcon = 'blink' | 'recall' | 'shield' | 'fire' | 'charge' | 'boop' | 'swap' | 'amp';
+export type AbilityIcon = 'blink' | 'recall' | 'shield' | 'fire' | 'charge' | 'boop' | 'swap' | 'amp' | 'gear' | 'trick' | 'turtle' | 'shell' | 'bomb';
 
 /** Description d'une case de compétence pour le HUD (générique pour tous les héros). */
 export interface AbilitySlot {
@@ -95,8 +103,10 @@ export interface WeaponHud {
 export interface HeroStats {
   name: string;
   maxHp: number;
-  /** Sprite pixel art du héros. */
-  sprite: CharacterSprite;
+  /** Sprite pixel art du héros (absent si le héros dessine lui-même ses poses : Skater). */
+  sprite?: CharacterSprite;
+  /** Hitbox imposée (demi-largeur / demi-hauteur) ; par défaut, la taille du sprite. */
+  hitbox?: { hw: number; hh: number };
   /** Taille d'un pixel du sprite (unités monde) : fixe aussi la taille de la hitbox. */
   px: number;
   speed: number; // px/s
@@ -170,7 +180,7 @@ export abstract class Hero implements Combatant {
 
   constructor(readonly stats: HeroStats) {
     this.hp = stats.maxHp;
-    ({ hw: this.hw, hh: this.hh } = characterHalfSize(stats.sprite, stats.px));
+    ({ hw: this.hw, hh: this.hh } = stats.hitbox ?? characterHalfSize(stats.sprite!, stats.px));
   }
 
   get name(): string {
@@ -224,9 +234,9 @@ export abstract class Hero implements Combatant {
     this.stunTimer = Math.max(0, this.stunTimer - dt);
     this.pushCredit = Math.max(0, this.pushCredit - dt);
 
-    // Soin passif : au bout de 3 s sans dégâts.
+    // Soin passif : au bout de 5 s sans dégâts (plus tôt sur l'eau de son équipe, voir passiveRegenDelay).
     this.sinceDamage += dt;
-    if (this.sinceDamage >= PASSIVE_REGEN.delay) this.heal(PASSIVE_REGEN.rate * dt);
+    if (this.sinceDamage >= this.passiveRegenDelay(ctx)) this.heal(PASSIVE_REGEN.rate * dt);
 
     this.tick(dt, ctx);
     if (this.pinned) {
@@ -273,6 +283,8 @@ export abstract class Hero implements Combatant {
     return 1;
   }
   protected onDeath(_ctx: GameContext): void {}
+  /** Aura (Tempo, Skater) : appelée par le monde avant les déplacements de tous les héros. */
+  applyAura(_dt: number, _ctx: GameContext): void {}
   /** Début d'un étourdissement (ex. baisser le bouclier). */
   protected onStunned(): void {}
 
@@ -284,6 +296,14 @@ export abstract class Hero implements Combatant {
     this.onStunned();
   }
   protected onRespawn(_ctx: GameContext): void {}
+
+  /**
+   * Temps sans dégâts avant le soin passif : plus court debout sur l'eau mouillée par
+   * son équipe (alliés d'une Turty).
+   */
+  protected passiveRegenDelay(ctx: GameContext): number {
+    return ctx.wet.isWetFor(this.x, this.y + this.hh - 4, ctx.time, this.team) ? WET.regenDelay : PASSIVE_REGEN.delay;
+  }
 
   // ---------------------------------------------------------- mêlée rapide
 
@@ -330,7 +350,7 @@ export abstract class Hero implements Combatant {
   }
 
   protected move(dt: number, ctx: GameContext): void {
-    const speed = this.stats.speed * this.speedMultiplier() * this.auraSpeedMul;
+    const speed = this.stats.speed * MOVE_SPEED_SCALE * this.speedMultiplier() * this.auraSpeedMul;
     const accel = this.stats.acceleration ?? 16;
     this.vx = damp(this.vx, this.moveDir.x * speed, accel, dt);
     this.vy = damp(this.vy, this.moveDir.y * speed, accel, dt);
@@ -473,6 +493,7 @@ export abstract class Hero implements Combatant {
   draw(ctx: CanvasRenderingContext2D): void {
     if (this.dead) return;
     const def = this.stats.sprite;
+    if (!def) return;
     const layout = characterLayout(def, this.x, this.y, this.stats.px);
     drawGroundRing(ctx, this.x, layout.feetY, this.hw, this.outline, this.aim);
     this.drawSpriteExtras(ctx, layout, false);
@@ -500,12 +521,21 @@ export abstract class Hero implements Combatant {
   /** Au-dessus des entités (bouclier...). */
   drawOver(_ctx: CanvasRenderingContext2D): void {}
 
+  /**
+   * Haut du sprite (y monde, pose de base, sans saut ni rebond) : la barre de vie se place
+   * juste au-dessus. Par défaut le sprite est la hitbox (+ son contour) ; les héros dont le
+   * dessin dépasse de la hitbox (cheveux de Turty, Skater sur sa planche) le redéfinissent.
+   */
+  protected spriteTop(): number {
+    return this.y - this.hh - this.stats.px;
+  }
+
   /** Barre de vie (+ nom pour les bots) au-dessus du héros. */
   drawOverlay(ctx: CanvasRenderingContext2D): void {
     if (this.dead) return;
     const low = this.hp / this.maxHp < 0.35;
     const width = this.maxHp > 300 ? 84 : 60;
-    const barBottom = this.y - this.hh - this.stats.px - 4;
+    const barBottom = this.spriteTop() - 4;
     let color: string;
     if (this.isLocalPlayer) color = low ? COLORS.hpLow : COLORS.hpPlayer;
     else color = this.outline === COLORS.ally ? COLORS.hpAlly : COLORS.hpEnemy;

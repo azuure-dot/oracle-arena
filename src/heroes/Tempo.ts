@@ -85,7 +85,7 @@ export class Tempo extends Hero {
 
   // ------------------------------------------------------------ boucle
 
-  protected override tick(dt: number, ctx: GameContext): void {
+  protected override tick(dt: number): void {
     this.ampTimer = Math.max(0, this.ampTimer - dt);
     this.ampCooldown = Math.max(0, this.ampCooldown - dt);
     this.boopCooldown = Math.max(0, this.boopCooldown - dt);
@@ -93,12 +93,10 @@ export class Tempo extends Hero {
     this.pulse += dt;
 
     this.mag.update(dt);
-
-    this.applyAura(dt, ctx);
   }
 
   /** L'aura affecte Tempo et tous ses alliés dans son rayon (aucun en chacun pour soi). */
-  private applyAura(dt: number, ctx: GameContext): void {
+  override applyAura(dt: number, ctx: GameContext): void {
     const heal = (this.amped ? AURA.ampHeal : AURA.heal) * dt;
     const speedMul = 1 + (this.amped ? AURA.ampSpeedBonus : AURA.speedBonus);
     for (const bot of ctx.targets) {

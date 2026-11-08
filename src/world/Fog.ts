@@ -8,7 +8,8 @@ import type { VisPoint } from './Visibility';
  * 1. drawLineOfSight() — ombre des murs (masque Canvas) :
  *    on remplit un calque hors-écran en sombre, puis en mode `destination-out`
  *    on y découpe le polygone de visibilité, LIMITÉ à la zone de vision.
- *    Calque en demi-résolution + léger flou : bords doux et rendu moins coûteux.
+ *    Calque en quart de résolution, agrandi avec lissage : bords doux, sans filtre
+ *    de flou (trop coûteux à chaque image).
  *
  * 2. drawVisionLimit() — périmètre de vision :
  *    tout ce qui sort du rectangle 16:9 centré sur le joueur est quasi noir
@@ -44,7 +45,6 @@ export class Fog {
 
     g.setTransform(1, 0, 0, 1, 0, 0);
     g.globalCompositeOperation = 'source-over';
-    g.filter = 'none';
     g.clearRect(0, 0, this.canvas.width, this.canvas.height);
     g.fillStyle = `rgba(3,5,9,${FOG.opacity})`;
     g.fillRect(0, 0, this.canvas.width, this.canvas.height);
@@ -57,7 +57,6 @@ export class Fog {
       g.rect(eyeX - VISION.width / 2, eyeY - VISION.height / 2, VISION.width, VISION.height);
       g.clip();
       g.globalCompositeOperation = 'destination-out';
-      g.filter = `blur(${FOG.blurPx}px)`;
       g.beginPath();
       g.moveTo(poly[0].x, poly[0].y);
       for (let i = 1; i < poly.length; i++) g.lineTo(poly[i].x, poly[i].y);
@@ -65,12 +64,13 @@ export class Fog {
       g.fillStyle = '#000';
       g.fill();
       g.restore();
-      g.filter = 'none';
       g.globalCompositeOperation = 'source-over';
     }
 
+    ctx.save();
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(this.canvas, 0, 0, viewW, viewH);
+    ctx.restore();
   }
 
   /** Ombre au-delà du périmètre de vision (à dessiner APRÈS les murs pour les masquer aussi). */

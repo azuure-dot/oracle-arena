@@ -67,8 +67,11 @@ Le menu principal propose trois modes. En **Partie rapide**, c'est la carte qui 
   - À la fin du chrono : tableau des scores, puis « Rejouer » ou retour au menu.
 
 Départ de partie :
-- **Compte à rebours de 10 s** dans tous les modes.
-  - Champ de tir et Deathmatch : tout est figé pendant ce temps.
+- **Compte à rebours** :
+  - Champ de tir : aucun, on joue tout de suite.
+  - Deathmatch : 3 s.
+  - Partie rapide : 10 s. En Contrôle, il revient au début de chaque manche.
+  - Deathmatch : tout est figé pendant ce temps.
   - Contrôle et Escorte : les portes des spawns sont fermées. On peut bouger dans son spawn et changer de héros.
 - **Escorte** : la défense sort au bout de 10 s, l'attaque au bout de 30 s.
   La défense a donc 20 s pour se placer, et le chrono de 3:00 ne démarre qu'à la sortie de l'attaque.
@@ -76,13 +79,56 @@ Départ de partie :
 
 Commun à tous les modes :
 
-- **Soin passif** : après 3 s sans subir de dégâts, chaque héros récupère 15 PV/s.
+- **Soin passif** : après 5 s sans subir de dégâts, chaque héros récupère 15 PV/s (0,5 s sur l'eau de Turty, voir plus bas).
+- **Vitesse de marche** : celle de chaque héros est réduite de 30 % puis encore de 15 % (×0,6 au total,
+  `MOVE_SPEED_SCALE` dans `src/heroes/Hero.ts`) ;
+  les compétences de déplacement sont ralenties d'autant (Charge, course du trick, carapace ; distance du Transfert).
 - **Bots héros** : ils infligent 30 % de dégâts en moins que le joueur.
 - **Charge de Rempart contre un mur** : 250 dégâts et 2 s d'étourdissement pour la cible.
   Rempart lui-même reste bloqué 0,5 s après le plaquage.
-- **3 héros** : Rempart (tank), Flux (dégâts), Tempo (soutien).
+- **5 héros** : Rempart (tank), Flux (dégâts), Turty (dégâts), Tempo (soutien), Skater (soutien).
+- **Skater** : il se déplace sur sa planche, un peu plus vite que les autres.
+  - Clic G : combo de 3 coups de planche (30, 30 puis 50 dégâts), le 3e repousse ; puis 1,5 s de recharge.
+  - Clic D : il lance son équipement dans l'ordre (casque, genouillère, coudière, protège-poignet), 75 dégâts, toutes les 1,5 s.
+    On le voit armer puis lancer du bras droit.
+  - Espace : trick (3 charges, rechargées une par une en 8 s) sur le joueur le plus proche dans la zone de l'aura.
+    - Aura en mode Vitesse : sur un ennemi. Il fonce dessus (60 dégâts), rebondit, et gagne un palier de vitesse.
+    - Aura en mode Soin : sur un allié, +60 PV, et un palier de son aura de soin.
+    - Paliers enchaînés : 3 s après 1 trick, 5 s après 2, 8 s après 3 (chaque trick relance le chrono).
+    - Un trick dans les 2 s qui suivent le précédent vise forcément quelqu'un d'autre. Personne à portée : trick sur place (boost).
+  - Maj : mode d'aura Vitesse / Soin. L'aura bénéficie au Skater et à ses alliés proches (comme Tempo) : active de base, puis 3 paliers selon les tricks enchaînés.
+    - Vitesse des alliés : +8 % de base, puis +11 / +16 / +22 %. Soin : 8 PV/s de base, puis 10 / 13 / 18 PV/s.
+    - Vitesse du Skater lui-même avec les paliers de tricks sur des ennemis : +15 / +26 / +37 %.
+  - Ses sprites viennent de la planche dessinée par le joueur (`concept/skater-sheet.png`), convertie par
+    `python tools/extract_skater.py` ; le choix des poses par direction est dans `src/sprites/skater.ts`.
+    Sur la planche, il est goofy (pied droit devant) dans les 8 directions : les poses retournées en miroir
+    (qui passeraient en regular) et les poses vers le haut / le bas sont retouchées dans ce fichier.
+- **Turty** : deux formes, humaine (vitesse moyenne) pour se battre, tortue pour se déplacer.
+  - Clic G : pistolet à eau façon lanceur de base de Splatoon, 90 gouttes, 20 dégâts, 9 tirs/s. Tir peu précis
+    (dispersion 24°, 30° en marchant) ; chaque goutte sème des taches et des éclaboussures le long de sa course,
+    fines près de Turty et de plus en plus larges au loin : en rafale, l'eau forme un V ouvert devant elle.
+    Les gouttes touchent aussi loin que le pistolet de Flux, mais ne mouillent le sol que jusqu'à 340 px
+    (2 × l'aura du Skater). Le sol reste mouillé 15 s.
+  - Sur l'eau (dans les deux formes), son soin passif démarre après 0,5 s sans dégâts au lieu de 5 s.
+    Ses alliés aussi, sur l'eau de leur équipe : chaque case retient l'équipe qui l'a mouillée en dernier.
+  - Clic D maintenu : forme tortue (relâché : forme humaine). En tortue : ×0,5 sur le sec, ×1,8 sur l'eau ;
+    0,5 s sans compétence après la transformation. Clic G en tortue : elle se relève et tire aussitôt.
+  - Espace : elle rentre dans sa carapace, la fait tourner (on peut encore viser) puis se lance ; 2 rebonds max sur les murs
+    (les bords de lave font aussi rebondir), 75 dégâts à chaque ennemi touché. Recharge 12 s.
+  - Maj : bombe à eau lancée en l'air jusqu'au point visé (560 px max), au-dessus des murs et des joueurs.
+    Une zone d'ombre montre l'impact pendant tout le vol. 120 dégâts au centre → 60 au bord, et une grande flaque. Recharge 8 s.
+  - Ses sprites viennent des planches du joueur (`concept/turty-*.png`), converties par `python tools/extract_turty.py`.
+    La forme humaine vient de `concept/turty-human-combat.png` (grille nette de 4 px). Le jeu en tire une marche
+    en 4 temps (jambes levées tour à tour ; de profil, enjambée avec la jambe arrière) et une image de tir
+    (l'arme recule, un jet d'eau sort du canon) : voir `src/sprites/turty.ts` et la galerie `sprites.html`.
+    Les .webp d'origine sont convertis en .png par Windows (PowerShell + WIC).
 - **Ligne de vue** : les murs bloquent la vision (raycasting + brouillard de guerre).
-- **Zone de vision 16:9** identique pour tous les écrans ; caméra verrouillée sur le joueur.
+  L'ombre des murs est calculée en quart de résolution puis agrandie avec lissage : bords doux sans filtre
+  de flou, qui coûtait cher à chaque image sur une carte graphique intégrée.
+- **Zone de vision 16:9** identique pour tous les écrans (985 × 554 unités), caméra verrouillée sur le joueur.
+  Elle remplit exactement un écran 16:9 ; sur un écran plus large (ou 4:3), le surplus est dans l'ombre :
+  personne ne voit plus de terrain qu'un autre. Les bots voient la même zone que le joueur.
+  Le rapprochement de la caméra (×1,95 par rapport à 1920 × 1080) est `CAMERA_ZOOM` dans `src/config.ts`.
 - **Interface bilingue** FR / EN.
 
 ## Carte Route 66

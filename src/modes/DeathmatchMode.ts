@@ -10,7 +10,7 @@ import { drawCountdown } from '../ui/matchHud';
 import type { MatchResult } from '../ui/screens/Scoreboard';
 import { PRACTICE_MAP } from '../world/maps';
 import { inVisionRange, lineOfSight } from '../world/Visibility';
-import type { ScreenInfo } from './GameMode';
+import { DEATHMATCH_COUNTDOWN, type ScreenInfo } from './GameMode';
 import { BOT_NAMES, MatchMode, shuffle, type Participant } from './MatchMode';
 
 export interface DeathmatchConfig {
@@ -49,6 +49,7 @@ export class DeathmatchMode extends MatchMode {
 
   constructor(camera: Camera, input: Input, entry: HeroEntry, readonly config: DeathmatchConfig) {
     super(PRACTICE_MAP, camera, input, entry);
+    this.countdown = DEATHMATCH_COUNTDOWN;
     this.remaining = config.minutes * 60;
 
     // Chacun pour soi : une équipe par participant, tout le monde en rouge pour le joueur.

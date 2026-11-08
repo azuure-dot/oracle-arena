@@ -7,9 +7,11 @@ import { Effects } from '../effects/Effects';
 import type { Bot, BotContext } from '../entities/Bot';
 import { hostile, type Combatant } from '../entities/Combatant';
 import type { Projectile } from '../entities/Projectile';
+import type { WorldObject } from '../entities/WorldObject';
 import { RESPAWN_TIME, type Hero } from '../heroes/Hero';
 import type { Arena } from '../world/Arena';
 import type { Fog } from '../world/Fog';
+import { WetGround } from './WetGround';
 import { canSeeBox, computeVisibility, inVisionRange, lineOfSight, type VisPoint } from '../world/Visibility';
 
 export interface DamageEvent {
@@ -44,6 +46,10 @@ export class World {
   heroes: Hero[] = [];
   bots: Bot[] = [];
   projectiles: Projectile[] = [];
+  /** Objets autonomes (bombes à eau...). */
+  objects: WorldObject[] = [];
+  /** Sol mouillé par Turty (15 s). */
+  readonly wet: WetGround;
   /** Le héros du joueur (null = fond animé des menus). */
   player: Hero | null = null;
   time = 0;
@@ -61,6 +67,7 @@ export class World {
     private readonly hooks: WorldHooks,
   ) {
     const world = this;
+    this.wet = new WetGround(arena);
     this.ctx = {
       arena,
       effects: this.effects,
@@ -69,6 +76,8 @@ export class World {
         return world.targetList;
       },
       spawnProjectile: (p) => this.projectiles.push(p),
+      spawnObject: (o) => this.objects.push(o),
+      wet: this.wet,
       damage: (target, amount, source, cause) => this.damage(target, amount, source, cause),
       respawnPoint: (hero) => this.hooks.respawnPoint(hero),
       get respawnDelay() {
@@ -96,6 +105,8 @@ export class World {
       c.auraSpeedMul = 1;
     }
 
+    // Auras d'abord : chaque héros profite des bonus de la frame, quel que soit l'ordre de mise à jour.
+    for (const h of this.heroes) if (h.alive) h.applyAura(dt, this.ctx);
     for (const h of this.heroes) h.update(dt, this.ctx);
 
     const bctx: BotContext = {
@@ -108,6 +119,8 @@ export class World {
     for (const b of this.bots) b.update(dt, bctx);
 
     this.updateProjectiles(dt);
+    this.objects = this.objects.filter((o) => o.update(dt, this.ctx));
+    this.wet.update(dt, this.time);
     this.updateVisibility();
     this.effects.update(dt);
   }
@@ -115,7 +128,9 @@ export class World {
   /** Vide projectiles et effets (début de manche). */
   clearTransient(): void {
     this.projectiles = [];
+    this.objects = [];
     this.effects.clear();
+    this.wet.clear();
   }
 
   damage(target: Combatant, amount: number, source: Hero | null, cause?: DamageCause): number {
@@ -165,6 +180,8 @@ export class World {
         this.hitTargets(p);
         if (p.traveled >= p.maxRange) p.dead = true;
       }
+      p.onUpdate?.(p);
+      if (p.dead) p.onEnd?.(p);
     }
     this.projectiles = this.projectiles.filter((p) => !p.dead);
   }
@@ -234,8 +251,11 @@ export class World {
     // --- 1. Monde (sol, entités visibles, effets)
     toWorld();
     this.arena.drawFloor(ctx, this.time);
+    this.wet.draw(ctx);
     this.hooks.drawGround?.(ctx, this.time);
     this.effects.drawUnder(ctx);
+    const objects = this.objects.filter((o) => !eye || !hostile(o, eye) || this.seesPoint(eye, o.x, o.y));
+    for (const o of objects) o.drawUnder(ctx);
     for (const h of shown) h.drawUnder(ctx, this.time);
     for (const b of this.bots) if (b.visible) b.draw(ctx);
     for (const h of shown) h.draw(ctx);
@@ -250,6 +270,7 @@ export class World {
       }
       p.draw(ctx);
     }
+    for (const o of objects) o.drawOver(ctx);
     this.effects.drawOver(ctx);
     for (const h of shown) h.drawOver(ctx);
     if (showHitboxes) this.drawHitboxes(ctx, shown);
@@ -261,6 +282,7 @@ export class World {
     // --- 3. Murs par-dessus l'ombre (la map proche reste lisible)
     toWorld();
     this.arena.drawWalls(ctx);
+    for (const o of objects) o.drawSky?.(ctx);
 
     // --- 4. Périmètre de vision : au-delà, tout est dans l'ombre (murs compris)
     toScreen();
@@ -272,6 +294,11 @@ export class World {
     for (const h of shown) if (h !== eye) h.drawOverlay(ctx);
     eye?.drawOverlay(ctx);
     toScreen();
+  }
+
+  /** Le joueur voit-il ce point ? (périmètre + ligne de vue) */
+  private seesPoint(eye: Hero, x: number, y: number): boolean {
+    return inVisionRange(eye.x, eye.y, x, y) && lineOfSight(this.arena, eye.x, eye.y, x, y);
   }
 
   private drawHitboxes(ctx: CanvasRenderingContext2D, heroes: Hero[]): void {

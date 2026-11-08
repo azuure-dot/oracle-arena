@@ -51,6 +51,17 @@ interface Wedge {
   color: string;
 }
 
+/** Texte qui jaillit puis monte en s'effaçant (« KICKFLIP! », « +100 »). */
+interface FloatText {
+  x: number;
+  y: number;
+  text: string;
+  color: string;
+  life: number;
+  maxLife: number;
+  size: number;
+}
+
 /** Effets visuels purement cosmétiques (étincelles, chiffres de dégâts, traînées). */
 export class Effects {
   private particles: Particle[] = [];
@@ -58,8 +69,10 @@ export class Effects {
   private afterimages: Afterimage[] = [];
   private rings: Ring[] = [];
   private wedges: Wedge[] = [];
+  private texts: FloatText[] = [];
 
   clear(): void {
+    this.texts = [];
     this.particles = [];
     this.numbers = [];
     this.afterimages = [];
@@ -119,7 +132,16 @@ export class Effects {
     this.rings.push({ x, y, radius: 4, maxRadius, life, maxLife: life, color });
   }
 
+  text(x: number, y: number, text: string, color: string, size = 15, life = 0.9): void {
+    this.texts.push({ x, y, text, color, life, maxLife: life, size });
+  }
+
   update(dt: number): void {
+    for (const tx of this.texts) {
+      tx.y -= 45 * dt;
+      tx.life -= dt;
+    }
+    this.texts = this.texts.filter((tx) => tx.life > 0);
     for (const p of this.particles) {
       p.x += p.vx * dt;
       p.y += p.vy * dt;
@@ -160,6 +182,22 @@ export class Effects {
 
   /** Effets dessinés au-dessus des entités. */
   drawOver(ctx: CanvasRenderingContext2D): void {
+    for (const tx of this.texts) {
+      const age = tx.maxLife - tx.life;
+      const pop = 1 + Math.max(0, 0.12 - age) * 4; // petit « pop » à l'apparition
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, tx.life / 0.3);
+      ctx.translate(tx.x, tx.y);
+      ctx.scale(pop, pop);
+      ctx.font = `900 ${tx.size}px system-ui, sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = 'rgba(10,12,16,0.85)';
+      ctx.strokeText(tx.text, 0, 0);
+      ctx.fillStyle = tx.color;
+      ctx.fillText(tx.text, 0, 0);
+      ctx.restore();
+    }
     for (const w of this.wedges) {
       const t = w.life / w.maxLife; // 1 → 0
       const outer = w.outer * (0.75 + 0.25 * (1 - t));
