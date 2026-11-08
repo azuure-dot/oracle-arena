@@ -21,6 +21,15 @@ Galerie des sprites pixel art (pour travailler les designs) : http://localhost:5
 | `npm run preview`   | Sert le build de production                   |
 | `npm run typecheck` | Vérification TypeScript seule                 |
 
+## Version en ligne (GitHub Pages)
+
+À chaque push sur `main`, le workflow `.github/workflows/deploy.yml` compile le jeu et le publie sur
+https://azuure-dot.github.io/web-hero-shooter/ (galerie : `…/sprites.html`). Le build utilise des chemins
+relatifs (`base: './'` dans `vite.config.ts`), il marche donc dans ce sous-dossier.
+
+À faire une fois sur GitHub : Settings → Pages → Source : **GitHub Actions**. GitHub Pages demande un dépôt
+public (ou un abonnement payant pour un dépôt privé). Le suivi des déploiements est dans l'onglet Actions.
+
 ## Modes de jeu
 
 Le menu principal propose trois modes. En **Partie rapide**, c'est la carte qui décide du mode.
