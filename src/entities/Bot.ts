@@ -3,7 +3,7 @@ import type { Effects } from '../effects/Effects';
 import type { Hero } from '../heroes/Hero';
 import { angleDiff, rotateTowards } from '../core/math';
 import { t } from '../i18n';
-import { drawBuffIndicator, drawHealthBar, drawStunStars, type BuffKind } from '../ui/healthBar';
+import { drawBuffIndicators, drawHealthBar, drawStunStars, type BuffKind } from '../ui/healthBar';
 import type { Arena } from '../world/Arena';
 import type { Box } from '../core/geometry';
 import { canSeeBox } from '../world/Visibility';
@@ -81,7 +81,7 @@ export class Bot implements Combatant {
   stunTimer = 0;
   /** Bonus d'aura (remis à zéro chaque frame, appliqué par Tempo). */
   auraSpeedMul = 1;
-  buff: BuffKind | null = null;
+  buffs: BuffKind[] = [];
 
   private readonly spawnX: number;
   private readonly spawnY: number;
@@ -127,7 +127,7 @@ export class Bot implements Combatant {
 
   resetBuffs(): void {
     this.auraSpeedMul = 1;
-    this.buff = null;
+    this.buffs.length = 0;
   }
 
   /** Retourne les dégâts réellement infligés (0 pour un allié ou un bot mort). */
@@ -346,7 +346,7 @@ export class Bot implements Combatant {
     const barTop = this.y - this.hh - this.px - 4;
     const barWidth = 56;
     drawHealthBar(ctx, this.x, barTop, this.hp, this.maxHp, color, barWidth);
-    if (this.buff) drawBuffIndicator(ctx, this.x + barWidth / 2 + 12, barTop - 3.5, this.buff);
+    drawBuffIndicators(ctx, this.x + barWidth / 2 + 12, barTop - 3.5, this.buffs);
     if (this.stunTimer > 0) drawStunStars(ctx, this.x, this.y - this.hh * 0.4);
 
     const tag = !this.isEnemy

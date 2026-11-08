@@ -6,7 +6,9 @@ import { hostile, type Combatant } from '../entities/Combatant';
 import { Projectile } from '../entities/Projectile';
 import { t, type TKey } from '../i18n';
 import { deckImage, dir8, gearImage, GEAR as GEAR_GRIDS, skaterFrame, type DeckFace } from '../sprites/skater';
+import { addBuff } from '../ui/healthBar';
 import { lineOfSight } from '../world/Visibility';
+import { BLINK } from './Flux';
 import { Hero, MOVE_SPEED_SCALE, type AbilitySlot, type WeaponHud } from './Hero';
 
 /** Taille d'un pixel de la planche de sprites (unités monde) et hitbox du corps (sans la planche). */
@@ -28,10 +30,10 @@ export const SKATER = {
 export const COMBO = {
   hits: [
     // Portée réduite de 40 % (88 → 53, 100 → 60)
-    // Dégâts 30 - 30 - 50 (avant : 45 - 45 - 70)
-    { damage: 30, reach: 53, halfArc: degToRad(65), knockback: 140, sweep: 1 }, // coup en travers
-    { damage: 30, reach: 53, halfArc: degToRad(65), knockback: 140, sweep: -1 }, // revers
-    { damage: 50, reach: 60, halfArc: degToRad(45), knockback: 520, sweep: 0 }, // fracas vertical
+    // Dégâts 35 - 35 - 60
+    { damage: 35, reach: 53, halfArc: degToRad(65), knockback: 140, sweep: 1 }, // coup en travers
+    { damage: 35, reach: 53, halfArc: degToRad(65), knockback: 140, sweep: -1 }, // revers
+    { damage: 60, reach: 60, halfArc: degToRad(45), knockback: 520, sweep: 0 }, // fracas vertical
   ],
   /** Délai minimal entre deux coups. */
   interval: 0.34,
@@ -45,27 +47,35 @@ export const COMBO = {
 };
 
 /** Clic D : équipement lancé, toujours dans le même ordre (casque, genouillère, coudière, protège-poignet). */
-export const GEAR = { damage: 75, cooldown: 1.5, speed: 560, radius: 11, range: 760 };
+export const GEAR = { damage: 75, cooldown: 1, speed: 560, radius: 11, range: 760 };
 /** Animation du bras droit qui lance (s) : armé derrière l'épaule, lancé vers la visée, puis retombe. */
 const THROW_TIME = 0.34;
 const GEAR_NAMES: TKey[] = ['skater.gear.helmet', 'skater.gear.knee', 'skater.gear.elbow', 'skater.gear.wrist'];
 
 /**
  * Espace : trick sur le joueur le plus proche dans la zone de l'aura :
- * un allié si l'aura est en mode Soin (+60 PV), un ennemi en mode Vitesse (60 dégâts + vitesse cumulable).
- * Personne à portée → trick sur place (simple coup de boost).
+ * un allié si l'aura est en mode Soin (+75 PV), un ennemi en mode Vitesse (75 dégâts + vitesse cumulable).
+ * Personne à portée → poussée en avant sur la planche (même distance que le Transfert
+ * de Flux, mais parcourue en un quart de seconde au lieu d'une téléportation) + coup de boost.
  * Un nouveau trick dans les 2 s vise forcément quelqu'un d'autre que le précédent.
- * 3 charges, rechargées une par une (8 s chacune).
+ * 3 charges, rechargées une par une (6 s chacune).
  */
 export const TRICK = {
   maxCharges: 3,
-  rechargeTime: 8,
+  rechargeTime: 6,
   /** Pendant ce temps après un trick, la même cible ne peut pas être reprise. */
   sameTargetLock: 2,
   /** Course vers la cible, ralentie comme la marche (770). */
   dashSpeed: 1100 * MOVE_SPEED_SCALE,
-  /** Élan d'un trick sur place (sans cible). */
+  /** Élan quand la cible est perdue pendant la course. */
   soloSpeed: 300 * MOVE_SPEED_SCALE,
+  /**
+   * Trick sans cible : poussée en avant (direction du déplacement, sinon de la visée)
+   * en `pushTime` secondes, puis une courte glissade : au total, la distance du
+   * Transfert de Flux (la poussée en fait 88 %, la glissade le reste).
+   */
+  pushDistance: BLINK.distance * 0.88,
+  pushTime: 0.24,
   dashMax: 0.35,
   airTime: 0.42,
   jumpHeight: 26,
@@ -74,9 +84,9 @@ export const TRICK = {
    * pour que la cible reste à portée des coups de planche.
    */
   bounceSpeed: 120,
-  allyHeal: 60,
+  allyHeal: 75,
   /** Dégâts d'un trick sur un ennemi. */
-  enemyDamage: 60,
+  enemyDamage: 75,
   /**
    * Durée d'un palier (vitesse ou soin) selon le nombre de tricks enchaînés :
    * 1 trick → 3 s, 2 tricks → 5 s, 3 tricks → 8 s. Chaque trick relance le chrono.
@@ -96,11 +106,11 @@ export const TRICK_SPEED = [1, 1.15, 1.26, 1.37];
  */
 export const SKATE_AURA = {
   radius: 170,
-  // Réduits de 20 à 30 % (avant : vitesse +10/15/22/30 %, soin 10/14/18/24 PV/s) ;
-  // chaque palier reste au-dessus du précédent.
+  // Vitesse réduite de 20 à 30 % (avant : +10/15/22/30 %) ; soin réduit puis remonté de 20 %
+  // (8/10/13/18 → 9,6/12/15,6/21,6 PV/s). Chaque palier reste au-dessus du précédent.
   //          base  palier 1  palier 2  palier 3
   speedBonus: [0.08, 0.11, 0.16, 0.22],
-  heal: [8, 10, 13, 18], // PV/s
+  heal: [8, 10, 13, 18].map((h) => h * 1.2), // PV/s
   swapCooldown: 0.3,
 };
 
@@ -117,7 +127,8 @@ type AuraMode = 'speed' | 'heal';
 type TrickKind = 'enemy' | 'ally' | 'solo';
 
 interface TrickState {
-  phase: 'dash' | 'air';
+  /** dash : course vers la cible · air : saut du trick · push : poussée sans cible. */
+  phase: 'dash' | 'air' | 'push';
   t: number;
   target: Combatant | null;
   kind: TrickKind;
@@ -278,7 +289,7 @@ export class Skater extends Hero {
     for (const c of ctx.targets) {
       if (!c.alive || hostile(this, c)) continue;
       if (distToBox(this.x, this.y, c.box()) > SKATE_AURA.radius) continue;
-      c.buff = this.mode;
+      addBuff(c, this.mode);
       if (this.mode === 'heal') c.heal(SKATE_AURA.heal[tier] * dt);
       else c.auraSpeedMul = Math.max(c.auraSpeedMul, 1 + SKATE_AURA.speedBonus[tier]);
     }
@@ -445,9 +456,17 @@ export class Skater extends Hero {
         variant,
       };
     } else {
-      this.trick = { phase: 'air', t: 0, target: null, kind: 'solo', dx: 0, dy: 0, vx: this.vx, vy: this.vy, variant };
+      // Personne à portée : il se pousse vite sur sa planche, dans la direction où il va.
+      let dx = this.moveDir.x;
+      let dy = this.moveDir.y;
+      if (dx === 0 && dy === 0) {
+        dx = Math.cos(this.aim);
+        dy = Math.sin(this.aim);
+      }
+      const n = Math.hypot(dx, dy) || 1;
+      this.trick = { phase: 'push', t: 0, target: null, kind: 'solo', dx: dx / n, dy: dy / n, vx: 0, vy: 0, variant };
       this.boost();
-      ctx.effects.text(this.x, this.y - this.hh - 14, TRICKS[variant].name, '#e9eef5', 13, 0.7);
+      ctx.effects.text(this.x, this.spriteTop() - 22, 'PUSH', '#e9eef5', 13, 0.6); // au-dessus de la barre de vie
     }
     ctx.effects.ring(this.x, this.y + this.hh, '#e9eef5', 34, 0.25);
   }
@@ -487,6 +506,28 @@ export class Skater extends Hero {
       this.vx = tr.dx * TRICK.dashSpeed;
       this.vy = tr.dy * TRICK.dashSpeed;
       ctx.effects.afterimage(this.x, this.y + this.hh * 0.4, this.hw, '#e9eef5', 0.2);
+      return;
+    }
+    if (tr.phase === 'push') {
+      // Poussée : vitesse constante sur la distance du Transfert ; s'arrête contre un mur.
+      const speed = TRICK.pushDistance / TRICK.pushTime;
+      const step = speed * Math.min(dt, Math.max(0, TRICK.pushTime - (tr.t - dt)));
+      const px = this.x;
+      const py = this.y;
+      this.x += tr.dx * step;
+      this.y += tr.dy * step;
+      ctx.arena.resolveBox(this, this.hw, this.hh, this.team);
+      this.vx = tr.dx * speed;
+      this.vy = tr.dy * speed;
+      ctx.effects.afterimage(px, py + this.hh * 0.4, this.hw, '#e9eef5', 0.18);
+      const blocked = step > 0 && Math.hypot(this.x - px, this.y - py) < step / 3;
+      if (tr.t >= TRICK.pushTime || blocked) {
+        this.trick = null;
+        // Garde un peu d'élan : il glisse encore un instant au lieu de s'arrêter net.
+        this.vx = tr.dx * speed * 0.45;
+        this.vy = tr.dy * speed * 0.45;
+        ctx.effects.sparks(this.x, this.y + this.hh, '#cfd8e3', 5, 120);
+      }
       return;
     }
     // En l'air : le Skater continue sur sa lancée (rebond), puis retombe.
@@ -661,7 +702,8 @@ export class Skater extends Hero {
       this.blitPose(ctx, 'foot', dir, frame, feetY, v, flash);
     } else {
       // Sur la planche : l'image B passe de temps en temps (poussée), sinon il glisse.
-      const frame = moving && Math.floor(this.walkAnim * 2.2) % 3 === 2 ? 1 : 0;
+      const pushing = tr?.phase === 'push';
+      const frame = pushing || (moving && Math.floor(this.walkAnim * 2.2) % 3 === 2) ? 1 : 0;
       const bob = moving ? Math.round(Math.sin(this.walkAnim * 9)) * 0.5 : 0;
       if (throwing) {
         const sh = this.blitPose(ctx, 'throw', dir, 0, feetY + 3 * PX + bob, v, flash);

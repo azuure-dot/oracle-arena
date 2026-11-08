@@ -22,8 +22,8 @@ export interface Combatant {
   readonly safe?: boolean;
   /** Tenu par une Charge : sa position est pilotée par le Rempart qui charge. */
   pinned: boolean;
-  /** Buffs d'aura de Tempo : remis à zéro chaque frame par le monde. */
-  buff: BuffKind | null;
+  /** Buffs d'aura (Tempo, Skater), soin et vitesse pouvant se cumuler : remis à zéro chaque frame par le monde. */
+  buffs: BuffKind[];
   auraSpeedMul: number;
   box(): Box;
   /** Retourne les dégâts réellement infligés (0 si immunisé). */

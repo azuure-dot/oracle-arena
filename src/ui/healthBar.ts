@@ -1,7 +1,22 @@
 import { COLORS } from '../config';
 
-/** Buff d'aura reçu (Tempo) : affiché à côté de la barre de vie. */
+/** Buff d'aura reçu (Tempo, Skater) : affiché à côté de la barre de vie. */
 export type BuffKind = 'heal' | 'speed';
+
+/** Ajoute un buff pour cette frame (une seule fois par type, même avec plusieurs auras). */
+export function addBuff(c: { buffs: BuffKind[] }, kind: BuffKind): void {
+  if (!c.buffs.includes(kind)) c.buffs.push(kind);
+}
+
+/** Tous les buffs reçus, côte à côte à droite de la barre de vie (soin puis vitesse). */
+export function drawBuffIndicators(ctx: CanvasRenderingContext2D, x: number, cy: number, buffs: readonly BuffKind[]): void {
+  let i = 0;
+  for (const kind of ['heal', 'speed'] as const) {
+    if (!buffs.includes(kind)) continue;
+    drawBuffIndicator(ctx, x + i * 21, cy, kind);
+    i++;
+  }
+}
 
 /**
  * Barre de vie segmentée dessinée au-dessus d'une entité.
@@ -58,11 +73,12 @@ export function drawBuffIndicator(ctx: CanvasRenderingContext2D, cx: number, cy:
     ctx.lineWidth = 2.5;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
-    for (const ox of [-3.5, 2]) {
+    // Deux chevrons centrés dans le rond (de cx - 4,5 à cx + 4,5) : rien ne dépasse.
+    for (const ox of [-2, 2.5]) {
       ctx.beginPath();
-      ctx.moveTo(cx + ox - 2.5, cy - 4.5);
+      ctx.moveTo(cx + ox - 2.5, cy - 4);
       ctx.lineTo(cx + ox + 2, cy);
-      ctx.lineTo(cx + ox - 2.5, cy + 4.5);
+      ctx.lineTo(cx + ox - 2.5, cy + 4);
       ctx.stroke();
     }
   }

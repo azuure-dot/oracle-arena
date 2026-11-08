@@ -101,7 +101,7 @@ export class World {
 
     // Les buffs d'aura sont réappliqués à chaque frame par les Tempo.
     for (const c of this.targetList) {
-      c.buff = null;
+      c.buffs.length = 0;
       c.auraSpeedMul = 1;
     }
 

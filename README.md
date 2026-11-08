@@ -97,16 +97,18 @@ Commun à tous les modes :
   Rempart lui-même reste bloqué 0,5 s après le plaquage.
 - **5 héros** : Rempart (tank), Flux (dégâts), Turty (dégâts), Tempo (soutien), Skater (soutien).
 - **Skater** : il se déplace sur sa planche, un peu plus vite que les autres.
-  - Clic G : combo de 3 coups de planche (30, 30 puis 50 dégâts), le 3e repousse ; puis 1,5 s de recharge.
-  - Clic D : il lance son équipement dans l'ordre (casque, genouillère, coudière, protège-poignet), 75 dégâts, toutes les 1,5 s.
+  - Clic G : combo de 3 coups de planche (35, 35 puis 60 dégâts), le 3e repousse ; puis 1,5 s de recharge.
+  - Clic D : il lance son équipement dans l'ordre (casque, genouillère, coudière, protège-poignet), 75 dégâts, toutes les secondes.
     On le voit armer puis lancer du bras droit.
-  - Espace : trick (3 charges, rechargées une par une en 8 s) sur le joueur le plus proche dans la zone de l'aura.
-    - Aura en mode Vitesse : sur un ennemi. Il fonce dessus (60 dégâts), rebondit, et gagne un palier de vitesse.
-    - Aura en mode Soin : sur un allié, +60 PV, et un palier de son aura de soin.
+  - Espace : trick (3 charges, rechargées une par une en 6 s) sur le joueur le plus proche dans la zone de l'aura.
+    - Aura en mode Vitesse : sur un ennemi. Il fonce dessus (75 dégâts), rebondit, et gagne un palier de vitesse.
+    - Aura en mode Soin : sur un allié, +75 PV, et un palier de son aura de soin.
     - Paliers enchaînés : 3 s après 1 trick, 5 s après 2, 8 s après 3 (chaque trick relance le chrono).
-    - Un trick dans les 2 s qui suivent le précédent vise forcément quelqu'un d'autre. Personne à portée : trick sur place (boost).
+    - Un trick dans les 2 s qui suivent le précédent vise forcément quelqu'un d'autre. Personne à portée : il se pousse
+      en avant sur sa planche (direction du déplacement, sinon de la visée) sur la distance du Transfert de Flux,
+      en un quart de seconde, et garde son coup de boost.
   - Maj : mode d'aura Vitesse / Soin. L'aura bénéficie au Skater et à ses alliés proches (comme Tempo) : active de base, puis 3 paliers selon les tricks enchaînés.
-    - Vitesse des alliés : +8 % de base, puis +11 / +16 / +22 %. Soin : 8 PV/s de base, puis 10 / 13 / 18 PV/s.
+    - Vitesse des alliés : +8 % de base, puis +11 / +16 / +22 %. Soin : 9,6 PV/s de base, puis 12 / 15,6 / 21,6 PV/s.
     - Vitesse du Skater lui-même avec les paliers de tricks sur des ennemis : +15 / +26 / +37 %.
   - Ses sprites viennent de la planche dessinée par le joueur (`concept/skater-sheet.png`), convertie par
     `python tools/extract_skater.py` ; le choix des poses par direction est dans `src/sprites/skater.ts`.

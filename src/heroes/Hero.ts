@@ -18,7 +18,7 @@ import {
   walkFrame,
   type SpriteLayout,
 } from '../sprites/SpriteRenderer';
-import { drawBuffIndicator, drawHealthBar, drawStunStars, type BuffKind } from '../ui/healthBar';
+import { drawBuffIndicators, drawHealthBar, drawStunStars, type BuffKind } from '../ui/healthBar';
 import { lineOfSight } from '../world/Visibility';
 
 /** Emplacement de touche : le libellé affiché est traduit par le HUD (Clic D / RMB...). */
@@ -158,7 +158,7 @@ export abstract class Hero implements Combatant {
   /** Dans la zone de spawn de son équipe : invincible (mis à jour par le mode). */
   safe = false;
   /** Buff d'aura reçu cette frame (indicateur au-dessus de la tête). */
-  buff: BuffKind | null = null;
+  buffs: BuffKind[] = [];
   auraSpeedMul = 1;
   /** Direction de déplacement demandée (normalisée, ou 0). */
   protected moveDir: Vec2 = { x: 0, y: 0 };
@@ -453,7 +453,7 @@ export abstract class Hero implements Combatant {
     this.kvx = this.kvy = 0;
     this.pushedBy = null;
     this.pushCredit = 0;
-    this.buff = null;
+    this.buffs.length = 0;
     this.stunTimer = 0;
     this.sinceDamage = 0;
     this.pinned = false;
@@ -540,7 +540,7 @@ export abstract class Hero implements Combatant {
     if (this.isLocalPlayer) color = low ? COLORS.hpLow : COLORS.hpPlayer;
     else color = this.outline === COLORS.ally ? COLORS.hpAlly : COLORS.hpEnemy;
     drawHealthBar(ctx, this.x, barBottom, this.hp, this.maxHp, color, width);
-    if (this.buff) drawBuffIndicator(ctx, this.x + width / 2 + 12, barBottom - 3.5, this.buff);
+    drawBuffIndicators(ctx, this.x + width / 2 + 12, barBottom - 3.5, this.buffs);
     if (this.stunTimer > 0) drawStunStars(ctx, this.x, this.y - this.hh * 0.4);
     if (this.label) {
       ctx.fillStyle = this.outline;

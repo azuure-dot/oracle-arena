@@ -6,6 +6,7 @@ import { hostile } from '../entities/Combatant';
 import { Projectile } from '../entities/Projectile';
 import { t } from '../i18n';
 import { TEMPO_SPRITE } from '../sprites/library';
+import { addBuff } from '../ui/healthBar';
 import { lineOfSight } from '../world/Visibility';
 import { Hero, type AbilitySlot, type WeaponHud } from './Hero';
 import { Magazine } from './Magazine';
@@ -102,11 +103,11 @@ export class Tempo extends Hero {
     for (const bot of ctx.targets) {
       if (bot === this || !bot.alive || hostile(this, bot)) continue;
       if (distToBox(this.x, this.y, bot.box()) > AURA.radius) continue;
-      bot.buff = this.mode; // indicateur "+" ou ">>" au-dessus de la tête
+      addBuff(bot, this.mode); // indicateur "+" ou ">>" à côté de la barre de vie
       if (this.mode === 'heal') bot.heal(heal);
       else bot.auraSpeedMul = speedMul;
     }
-    this.buff = this.mode;
+    addBuff(this, this.mode);
     if (this.mode === 'heal') this.heal(heal);
   }
 
