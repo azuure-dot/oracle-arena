@@ -1,3 +1,8 @@
+import camelliaArt from '../../assets/heroes/camellia.webp';
+import fluxArt from '../../assets/heroes/flux.webp';
+import skaterArt from '../../assets/heroes/skater.webp';
+import thorArt from '../../assets/heroes/thor.webp';
+import turtyArt from '../../assets/heroes/turty.webp';
 import { INPUT_LABEL_KEYS } from '../../heroes/Hero';
 import { ROLE_KEYS, ROLE_ORDER, type HeroEntry, type Role } from '../../heroes/registry';
 import { t } from '../../i18n';
@@ -12,10 +17,38 @@ const ROLE_ICONS: Record<Role, string> = {
   support: '<path d="M9 3h6v6h6v6h-6v6H9v-6H3V9h6V3Z"/>',
 };
 
-/**
- * Sélection du héros, regroupés par rôle (clic ou touches 1/2/3).
- * Sert aux deux modes : seuls le titre et le pied de page changent.
- */
+/** Grandes illustrations des héros (détourées), par identifiant du registre. */
+const ART: Record<string, string> = {
+  thor: thorArt,
+  flux: fluxArt,
+  turty: turtyArt,
+  skater: skaterArt,
+  camellia: camelliaArt,
+};
+
+/** Vignettes : le héros tel qu'on le voit en jeu (vue de dessus), dessiné une fois puis gardé. */
+const tileCache = new Map<string, string>();
+function tileArt(h: HeroEntry): string {
+  let url = tileCache.get(h.id);
+  if (url) return url;
+  const size = 160;
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const g = c.getContext('2d')!;
+  const hero = h.create();
+  hero.outline = h.color;
+  hero.aim = -Math.PI / 2; // regard vers le haut
+  hero.x = 0;
+  hero.y = 0;
+  const scale = (size * 0.33) / hero.radius;
+  g.translate(size / 2, size / 2 + size * 0.04);
+  g.scale(scale, scale);
+  hero.draw(g);
+  url = c.toDataURL();
+  tileCache.set(h.id, url);
+  return url;
+}
+
 /** Changement de héros en cours de partie (au spawn) : héros interdits + rappels. */
 export interface SwapContext {
   /** Noms des héros déjà pris par les coéquipiers. */
@@ -25,6 +58,14 @@ export interface SwapContext {
   onClose(): void;
 }
 
+/**
+ * Sélection du héros, façon Overwatch / Valorant :
+ * - au fond, la carte de la partie, floutée (dessinée par le jeu derrière l'écran) ;
+ * - au centre, la grande illustration du héros sélectionné, son nom, son rôle, ses compétences ;
+ * - en bas, la grille des héros (vignettes = le héros vu en jeu), regroupés par rôle, et le
+ *   bouton « Prêt » qui lance la partie.
+ * Clic (ou touches 1-5) : sélectionner · double-clic, Entrée ou « Prêt » : jouer · Échap : retour.
+ */
 export class SelectScreen extends Screen {
   private readonly ordered: HeroEntry[];
   mode: ModeKind = 'practice';
@@ -32,6 +73,8 @@ export class SelectScreen extends Screen {
   map: MapDef | null = null;
   /** Défini pendant un changement de héros en jeu. */
   swap: SwapContext | null = null;
+  /** Héros sélectionné (affiché au centre), pas encore validé. */
+  private selected: HeroEntry;
 
   constructor(
     parent: HTMLElement,
@@ -41,71 +84,67 @@ export class SelectScreen extends Screen {
   ) {
     super(parent, 'select-screen');
     this.ordered = ROLE_ORDER.flatMap((role) => heroes.filter((h) => h.role === role));
+    this.selected = this.ordered[0];
+    this.root.addEventListener('dblclick', (e) => {
+      const el = (e.target as HTMLElement).closest<HTMLElement>('[data-hero]');
+      if (el) this.ready();
+    });
+  }
+
+  override show(): void {
+    // En changement de héros : on part d'un héros libre (pas celui qu'on joue déjà).
+    if (this.isTaken(this.selected)) this.selected = this.ordered.find((h) => !this.isTaken(h)) ?? this.selected;
+    super.show();
+  }
+
+  private title(): string {
+    if (this.swap) return t('select.swap');
+    if ((this.mode === 'control' || this.mode === 'escort') && this.map) {
+      return t('select.title.map', { map: t(this.map.nameKey), mode: t(this.map.modeKey) });
+    }
+    if (this.mode === 'deathmatch') return t('select.title.dm');
+    return t('select.title');
   }
 
   protected html(): string {
-    const columns = ROLE_ORDER.map((role) => {
-      const cards = this.ordered
-        .filter((h) => h.role === role)
-        .map((h) => this.cardHtml(h, this.ordered.indexOf(h) + 1))
-        .join('');
-      if (!cards) return '';
+    const h = this.selected;
+    const blocked = this.isTaken(h);
+    const grid = ROLE_ORDER.map((role) => {
+      const heroes = this.ordered.filter((x) => x.role === role);
+      if (!heroes.length) return '';
       return `
-        <section class="role-col role-${role}">
-          <h2 class="role-header">
+        <div class="hs-group role-${role}">
+          <div class="hs-group-head">
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">${ROLE_ICONS[role]}</svg>
             ${t(ROLE_KEYS[role])}
-          </h2>
-          ${cards}
-        </section>`;
+          </div>
+          <div class="hs-tiles">${heroes.map((x) => this.tileHtml(x)).join('')}</div>
+        </div>`;
     }).join('');
 
-    const key = { key: `<kbd>${t('key.escape')}</kbd>` };
-    let title: string;
-    let footer: string;
-    if (this.swap) {
-      title = t('select.swap');
-      footer = t('select.swap.footer', key);
-    } else if ((this.mode === 'control' || this.mode === 'escort') && this.map) {
-      title = t('select.title.map', { map: t(this.map.nameKey), mode: t(this.map.modeKey) });
-      footer = t('select.footer.dm', key);
-    } else if (this.mode === 'deathmatch') {
-      title = t('select.title.dm');
-      footer = t('select.footer.dm', key);
-    } else {
-      title = t('select.title');
-      footer = t('select.footer', key);
-    }
     return `
-      <h1>${title}</h1>
-      <p class="select-sub">${t('select.subtitle')} ${this.ordered.map((_, i) => `<kbd>${i + 1}</kbd>`).join(' ')}</p>
-      <div class="role-columns">${columns}</div>
-      <p class="select-foot">${footer}</p>
-      <div class="screen-actions">
-        <button type="button" class="btn" data-action="back"><kbd>${t('key.escape')}</kbd> ${t('ui.back')}</button>
-      </div>`;
-  }
-
-  private isTaken(h: HeroEntry): boolean {
-    return !!this.swap && (this.swap.taken.includes(h.name) || this.swap.current === h.name);
-  }
-
-  private cardHtml(h: HeroEntry, index: number): string {
-    const taken = this.isTaken(h);
-    const note = taken && this.swap?.current !== h.name ? `<span class="hero-taken">${t('select.taken')}</span>` : '';
-    return `
-      <button type="button" class="hero-card${taken ? ' is-taken' : ''}" data-action="pick" data-hero="${h.id}" style="--hero-color:${h.color}" ${taken ? 'disabled aria-disabled="true"' : ''}>
-        ${note}
-        <div class="hero-head">
-          <div class="hero-avatar">${h.name[0]}</div>
-          <div>
-            <div class="hero-name">${h.name}</div>
-            <div class="hero-role">${h.hp} ${t('unit.hp')}</div>
-          </div>
-          <span class="hero-index">${index}</span>
+      <header class="hs-top">
+        <button type="button" class="hs-back" data-action="back" aria-label="${t('ui.back')}">‹ <span>${t('ui.back')}</span></button>
+        <div class="hs-title">
+          <small>${t('select.pick')}</small>
+          <h1>${this.title()}</h1>
         </div>
-        <p class="hero-tagline">${t(h.tagline)}</p>
-        <ul class="hero-abilities">
+      </header>
+
+      <section class="hs-stage" style="--hero-color:${h.color}">
+        <div class="hs-info">
+          <div class="hs-role role-${h.role}">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">${ROLE_ICONS[h.role]}</svg>
+            ${t(ROLE_KEYS[h.role])} · ${h.hp} ${t('unit.hp')}
+          </div>
+          <h2 class="hs-name">${h.name}</h2>
+          <p class="hs-tagline">${t(h.tagline)}</p>
+        </div>
+        <div class="hs-art-wrap">
+          <div class="hs-art-glow"></div>
+          ${ART[h.id] ? `<img class="hs-art" src="${ART[h.id]}" alt="${h.name}" draggable="false">` : ''}
+        </div>
+        <ul class="hs-abilities">
           ${h.abilities
             .map(
               (a) =>
@@ -113,6 +152,32 @@ export class SelectScreen extends Screen {
             )
             .join('')}
         </ul>
+      </section>
+
+      <footer class="hs-bottom">
+        <div class="hs-grid">${grid}</div>
+        <button type="button" class="hs-ready" data-action="ready" style="--hero-color:${h.color}" ${blocked ? 'disabled' : ''}>
+          ${this.swap ? t('select.swap.ready') : t('select.ready')}
+        </button>
+      </footer>`;
+  }
+
+  private isTaken(h: HeroEntry): boolean {
+    return !!this.swap && (this.swap.taken.includes(h.name) || this.swap.current === h.name);
+  }
+
+  private tileHtml(h: HeroEntry): string {
+    const taken = this.isTaken(h);
+    const index = this.ordered.indexOf(h) + 1;
+    const note = taken ? `<span class="hs-taken">${this.swap?.current === h.name ? t('select.current') : t('select.takenShort')}</span>` : '';
+    const sel = h === this.selected;
+    return `
+      <button type="button" class="hs-tile${sel ? ' is-selected' : ''}${taken ? ' is-taken' : ''}" data-action="pick" data-hero="${h.id}"
+        style="--hero-color:${h.color}" aria-pressed="${sel}" title="${h.name}" ${taken ? 'aria-disabled="true"' : ''}>
+        <img src="${tileArt(h)}" alt="" draggable="false">
+        <span class="hs-tile-name">${h.name}</span>
+        <span class="hs-tile-key">${index}</span>
+        ${note}
       </button>`;
   }
 
@@ -121,7 +186,15 @@ export class SelectScreen extends Screen {
     else this.onBack();
   }
 
-  private pick(hero: HeroEntry): void {
+  private select(hero: HeroEntry): void {
+    if (hero === this.selected) return;
+    this.selected = hero;
+    this.render();
+  }
+
+  /** « Prêt » : lance la partie (ou change de héros en jeu) avec le héros sélectionné. */
+  private ready(): void {
+    const hero = this.selected;
     if (this.isTaken(hero)) return;
     if (this.swap) this.swap.onPick(hero);
     else this.onPick(hero);
@@ -129,9 +202,10 @@ export class SelectScreen extends Screen {
 
   protected override onAction(action: string, el: HTMLElement): void {
     if (action === 'back') return this.back();
+    if (action === 'ready') return this.ready();
     if (action !== 'pick') return;
     const hero = this.ordered.find((h) => h.id === el.dataset.hero);
-    if (hero) this.pick(hero);
+    if (hero) this.select(hero);
   }
 
   override handleKey(e: KeyboardEvent): boolean {
@@ -139,10 +213,14 @@ export class SelectScreen extends Screen {
       this.back();
       return true;
     }
+    if (e.code === 'Enter' || e.code === 'NumpadEnter' || e.code === 'Space') {
+      this.ready();
+      return true;
+    }
     const d = digitOf(e);
     const hero = d !== null ? this.ordered[d - 1] : undefined;
     if (!hero) return false;
-    this.pick(hero);
+    this.select(hero);
     return true;
   }
 }

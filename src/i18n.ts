@@ -202,6 +202,11 @@ const fr = {
   'select.title.control': '{map} · Contrôle',
   'select.swap': 'Changer de héros',
   'select.taken': 'Déjà pris par ton allié',
+  'select.pick': 'Choisis ton héros',
+  'select.ready': 'Prêt',
+  'select.swap.ready': 'Changer',
+  'select.current': 'Actuel',
+  'select.takenShort': 'Pris',
   'select.swap.footer': '{key} pour fermer · ton allié garde son héros',
 
   // Mode Contrôle
@@ -442,6 +447,11 @@ const en: Record<TKey, string> = {
   'select.title.control': '{map} · Control',
   'select.swap': 'Change hero',
   'select.taken': 'Already taken by your ally',
+  'select.pick': 'Pick your hero',
+  'select.ready': 'Ready',
+  'select.swap.ready': 'Swap',
+  'select.current': 'Current',
+  'select.takenShort': 'Taken',
   'select.swap.footer': '{key} to close · your ally keeps their hero',
 
   'control.neutral': 'NEUTRAL',

@@ -65,6 +65,12 @@ Le menu principal propose trois modes. En **Partie rapide**, c'est la carte qui 
     tu peux changer de héros (touche **C**). L'équipe adverse ne peut pas y entrer.
   - **Packs de soin** : +200 PV, réapparition au bout de 10 s.
 
+- **Sélection du héros** (avant chaque partie, et au spawn pour changer de héros), façon Overwatch / Valorant :
+  au fond, la carte de la partie floutée (lent travelling) ; au centre, la grande illustration du héros
+  sélectionné, son nom, son rôle et ses compétences ; en bas, la grille des héros regroupés par rôle
+  (vignettes = le héros tel qu'on le voit en jeu) et le bouton **Prêt**. Clic ou touches 1-5 pour
+  sélectionner, double-clic, Entrée ou Prêt pour jouer, Échap pour revenir. Au spawn, le héros joué et
+  ceux des alliés sont grisés. Illustrations détourées dans `src/assets/heroes/`.
 - **Champ de tir** : sélection du héros, puis entraînement sur des cibles, des patrouilles,
   des tourelles qui tirent quand elles voient le joueur et des alliés blessés (stats de DPS).
 - **Deathmatch** (chacun pour soi) : 1 à 7 bots, match de 1, 3 ou 5 minutes.
@@ -309,7 +315,8 @@ Comportements par héros :
 | C                 | Changer de héros (Contrôle, dans ton spawn) |
 | Échap             | Champ de tir : sélection du héros · autres modes : quitter la partie |
 
-Dans les menus : touches 1, 2, 3… pour choisir, Entrée pour valider, Échap pour revenir.
+Dans les menus : touches 1, 2, 3… pour choisir, Entrée pour valider, Échap pour revenir (sélection du héros :
+les touches sélectionnent, Entrée lance).
 
 
 ### Sur téléphone (commandes tactiles)

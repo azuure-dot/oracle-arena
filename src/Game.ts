@@ -51,6 +51,13 @@ export class Game {
   mode: GameMode | null = null;
   /** Monde animé derrière les menus (le champ de tir, sans joueur). */
   private readonly backdrop: World;
+  /**
+   * Fond de la sélection du héros : la carte de la partie à venir (floutée par l'écran).
+   * Une carte vide par carte de Partie rapide, créée à la première sélection.
+   */
+  private readonly mapBackdrops = new Map<MapDef, World>();
+  private backdropMap: MapDef = PRACTICE_MAP;
+  private backdropTime = 0;
   private pendingKind: ModeKind = 'practice';
   private pendingMap: MapDef = QUICKPLAY_MAPS[0];
   private dmConfig: DeathmatchConfig;
@@ -152,10 +159,13 @@ export class Game {
       case 'mapSelect':
       case 'dmSetup':
         this.mode = null;
+        this.backdropMap = PRACTICE_MAP;
         (scene === 'menu' ? this.mainMenu : scene === 'mapSelect' ? this.mapSelect : this.dmSetup).show();
         break;
       case 'select':
         this.mode = null;
+        // Fond : la carte de la partie (Partie rapide), sinon le champ de tir.
+        this.backdropMap = this.pendingKind === 'control' || this.pendingKind === 'escort' ? this.pendingMap : PRACTICE_MAP;
         this.selectScreen.mode = this.pendingKind;
         this.selectScreen.map = this.pendingMap;
         this.selectScreen.show();
@@ -212,6 +222,18 @@ export class Game {
     this.selectScreen.show();
   }
 
+  /** Monde affiché derrière les menus : le champ de tir animé, ou la carte de la partie à venir. */
+  private backdropWorld(): World {
+    const map = this.backdropMap;
+    if (map === PRACTICE_MAP) return this.backdrop;
+    let w = this.mapBackdrops.get(map);
+    if (!w) {
+      w = new World(new Arena(map), this.camera, { respawnPoint: () => PLAYER_SPAWN });
+      this.mapBackdrops.set(map, w);
+    }
+    return w;
+  }
+
   // ------------------------------------------------------------ boucle
 
   private resize(): void {
@@ -254,8 +276,12 @@ export class Game {
       }
       this.camera.centerOn(mode.player.x, mode.player.y); // caméra verrouillée sur le joueur
     } else if (!mode) {
-      this.backdrop.update(dt);
-      this.camera.centerOn(this.backdrop.arena.width / 2, this.backdrop.arena.height / 2);
+      const w = this.backdropWorld();
+      w.update(dt);
+      // Lent travelling sur la carte, derrière les menus.
+      this.backdropTime += dt;
+      const t = this.backdropTime * 0.06;
+      this.camera.centerOn(w.arena.width * (0.5 + Math.sin(t) * 0.18), w.arena.height * (0.5 + Math.sin(t * 1.7) * 0.12));
     }
     this.camera.update(dt);
   }
@@ -270,7 +296,7 @@ export class Game {
     const view = this.camera.transform();
     const mode = this.mode;
     if (!mode) {
-      this.backdrop.draw(ctx, dpr, view, this.viewW, this.viewH, this.fog, false);
+      this.backdropWorld().draw(ctx, dpr, view, this.viewW, this.viewH, this.fog, false);
       return;
     }
     mode.world.draw(ctx, dpr, view, this.viewW, this.viewH, this.fog, mode.showHitboxes);

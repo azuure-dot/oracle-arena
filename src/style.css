@@ -672,3 +672,385 @@ kbd {
     margin-top: 12px;
   }
 }
+
+/* ================================================================
+   Sélection du héros (façon Overwatch / Valorant)
+   Fond : la carte de la partie, floutée (dessinée par le jeu sous l'écran).
+   ================================================================ */
+.select-screen {
+  padding: 0;
+  background:
+    radial-gradient(ellipse 60% 70% at 50% 45%, rgba(13, 17, 23, 0.15), rgba(5, 7, 10, 0.75)),
+    linear-gradient(180deg, rgba(5, 7, 10, 0.55), rgba(5, 7, 10, 0) 25%, rgba(5, 7, 10, 0) 60%, rgba(5, 7, 10, 0.9));
+  backdrop-filter: blur(9px) saturate(1.15);
+  -webkit-backdrop-filter: blur(9px) saturate(1.15);
+  overflow: hidden;
+}
+.select-screen .screen-inner {
+  max-width: none;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  text-align: left;
+}
+.select-screen .lang-toggle {
+  top: 14px;
+  right: 18px;
+}
+
+/* --- haut : retour + titre */
+.hs-top {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 24px 0;
+}
+.hs-back {
+  padding: 8px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  background: rgba(10, 14, 20, 0.5);
+  color: #e9eef5;
+  font: 800 15px system-ui, sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+.hs-back:hover,
+.hs-back:focus-visible {
+  border-color: #fff;
+  outline: none;
+}
+.hs-title small {
+  display: block;
+  color: rgba(233, 238, 245, 0.6);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+.hs-title h1 {
+  font-size: 28px !important;
+  text-align: left;
+}
+
+/* --- centre : grande illustration, nom, compétences */
+.hs-stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  height: 100%;
+  min-height: 0;
+  padding: 0 32px;
+}
+.hs-info {
+  position: relative;
+  z-index: 1; /* un nom long passe au-dessus de l'illustration */
+  justify-self: end;
+  max-width: 400px;
+  animation: hs-in 0.35s ease-out;
+}
+.hs-role {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--hero-color);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.hs-role svg {
+  width: 18px;
+  height: 18px;
+}
+.hs-name {
+  margin: 4px 0 8px;
+  font-size: clamp(34px, 4.8vw, 82px);
+  font-weight: 900;
+  line-height: 0.95;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 4px 30px color-mix(in srgb, var(--hero-color) 60%, transparent);
+}
+.hs-tagline {
+  margin: 0;
+  color: rgba(233, 238, 245, 0.8);
+  font-size: 15px;
+  line-height: 1.45;
+}
+.hs-art-wrap {
+  position: relative;
+  align-self: stretch;
+  height: 100%;
+  min-height: 0;
+}
+.hs-art-glow {
+  position: absolute;
+  inset: 12% 8% 4%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--hero-color) 55%, transparent), transparent);
+  filter: blur(20px);
+  opacity: 0.75;
+}
+.hs-art {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center bottom;
+  filter: drop-shadow(0 18px 30px rgba(0, 0, 0, 0.6));
+  animation: hs-art-in 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  user-select: none;
+}
+.hs-abilities {
+  justify-self: start;
+  display: grid;
+  gap: 10px;
+  max-width: 360px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  animation: hs-in 0.35s ease-out;
+}
+.hs-abilities li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border-left: 3px solid var(--hero-color);
+  background: rgba(10, 14, 20, 0.55);
+  font-size: 13px;
+}
+.hs-abilities kbd {
+  flex: 0 0 auto;
+  min-width: 48px;
+}
+.hs-abilities b {
+  display: block;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.hs-abilities small {
+  color: rgba(233, 238, 245, 0.62);
+}
+@keyframes hs-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes hs-art-in {
+  from {
+    opacity: 0;
+    transform: translateY(24px) scale(0.96);
+  }
+}
+
+/* --- bas : grille des héros + Prêt */
+.hs-bottom {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 28px;
+  padding: 10px 24px 18px;
+}
+.hs-grid {
+  display: flex;
+  gap: 22px;
+  align-items: flex-end;
+}
+.hs-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px 4px;
+  color: rgba(233, 238, 245, 0.7);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.hs-group-head svg {
+  width: 13px;
+  height: 13px;
+}
+.hs-group.role-tank .hs-group-head {
+  color: #6fb2ff;
+}
+.hs-group.role-damage .hs-group-head {
+  color: #ff7b88;
+}
+.hs-group.role-support .hs-group-head {
+  color: #ffd84d;
+}
+.hs-tiles {
+  display: flex;
+  gap: 8px;
+}
+.hs-tile {
+  --hero-color: #ffb347;
+  position: relative;
+  width: 84px;
+  height: 84px;
+  padding: 0;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+  /* coin coupé en haut à droite, façon Valorant */
+  clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 0 100%);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(0, 0, 0, 0.25)),
+    rgba(16, 20, 28, 0.85);
+  box-shadow: inset 0 -4px 0 var(--hero-color);
+  cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    border-color 0.12s ease,
+    background 0.12s ease;
+}
+.hs-tile img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+.hs-tile-name {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 4px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-align: center;
+  text-transform: uppercase;
+  text-shadow: 0 1px 3px #000;
+}
+.hs-tile-key {
+  position: absolute;
+  top: 3px;
+  left: 5px;
+  color: rgba(233, 238, 245, 0.5);
+  font-size: 11px;
+  font-weight: 800;
+}
+.hs-tile:hover,
+.hs-tile:focus-visible {
+  border-color: rgba(255, 255, 255, 0.6);
+  transform: translateY(-3px);
+  outline: none;
+}
+.hs-tile.is-selected {
+  border-color: var(--hero-color);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--hero-color) 35%, transparent), rgba(0, 0, 0, 0.2)),
+    rgba(16, 20, 28, 0.9);
+  transform: translateY(-6px);
+}
+.hs-tile.is-taken {
+  filter: grayscale(1) brightness(0.6);
+  cursor: not-allowed;
+}
+.hs-taken {
+  position: absolute;
+  inset: 34% 0 auto;
+  padding: 2px 0;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+  text-transform: uppercase;
+}
+.hs-ready {
+  --hero-color: #ffb347;
+  min-width: 190px;
+  height: 64px;
+  padding: 0 34px;
+  border: 0;
+  clip-path: polygon(14px 0, 100% 0, calc(100% - 14px) 100%, 0 100%);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--hero-color) 85%, #fff), var(--hero-color));
+  color: #10141a;
+  font: 900 26px system-ui, sans-serif;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    transform 0.12s ease,
+    filter 0.12s ease;
+}
+.hs-ready:hover,
+.hs-ready:focus-visible {
+  transform: translateY(-2px);
+  filter: brightness(1.1);
+  outline: none;
+}
+.hs-ready:disabled {
+  filter: grayscale(1) brightness(0.6);
+  cursor: not-allowed;
+}
+
+/* Écran étroit : pas de liste des compétences, nom et illustration côte à côte */
+@media (max-width: 900px) {
+  .hs-stage {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    padding: 0 16px;
+  }
+  .hs-abilities {
+    display: none;
+  }
+  .hs-info {
+    justify-self: stretch;
+  }
+}
+/* Téléphone en paysage : tout plus compact */
+@media (max-height: 520px) {
+  .hs-top {
+    padding: 8px 14px 0;
+  }
+  .hs-back span {
+    display: none;
+  }
+  .hs-title h1 {
+    font-size: 18px !important;
+  }
+  .hs-title small {
+    font-size: 10px;
+  }
+  .hs-name {
+    font-size: 40px;
+  }
+  .hs-tagline {
+    font-size: 12px;
+  }
+  .hs-bottom {
+    gap: 14px;
+    padding: 4px 12px 10px;
+  }
+  .hs-grid {
+    gap: 10px;
+  }
+  .hs-tiles {
+    gap: 5px;
+  }
+  .hs-tile {
+    width: 58px;
+    height: 58px;
+  }
+  .hs-tile-key,
+  .hs-group-head {
+    display: none;
+  }
+  .hs-ready {
+    min-width: 120px;
+    height: 48px;
+    font-size: 19px;
+  }
+}
