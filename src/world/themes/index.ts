@@ -15,6 +15,8 @@ export interface MapTheme {
   renderWalls(arena: Arena): HTMLCanvasElement;
   /** Animations au sol, dessinées chaque frame en coordonnées monde (sous les entités). */
   drawLive?(ctx: CanvasRenderingContext2D, arena: Arena, time: number): void;
+  /** Libère les images propres à cette arène (fin de partie). */
+  dispose?(arena: Arena): void;
 }
 
 export const THEMES: Record<'volcano', MapTheme> = {

@@ -999,4 +999,10 @@ export const VOLCANO_THEME: MapTheme = {
   renderFloor,
   renderWalls,
   drawLive,
+  dispose(arena: Arena): void {
+    const live = liveCache.get(arena);
+    if (live) live.canvas.width = live.canvas.height = 0; // libère la mémoire graphique tout de suite
+    liveCache.delete(arena);
+    maskCache.delete(arena);
+  },
 };

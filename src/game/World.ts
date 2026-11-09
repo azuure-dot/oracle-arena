@@ -98,10 +98,21 @@ export class World {
 
   // ------------------------------------------------------------ simulation
 
+  /** Fin de partie : vide les listes et libère les images du décor (voir Arena.dispose). */
+  dispose(): void {
+    this.clearTransient();
+    this.arena.dispose();
+  }
+
   update(dt: number): void {
     this.time += dt;
     this.ctx.time = this.time;
-    this.targetList = [...this.bots, ...this.heroes, ...this.decoys];
+    // Liste réutilisée à chaque image (pas de nouveau tableau 60 fois par seconde).
+    const list = this.targetList;
+    list.length = 0;
+    for (const c of this.bots) list.push(c);
+    for (const c of this.heroes) list.push(c);
+    for (const c of this.decoys) list.push(c);
 
     // Les buffs d'aura sont réappliqués à chaque frame par les Tempo.
     for (const c of this.targetList) {

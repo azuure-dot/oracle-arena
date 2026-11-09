@@ -68,6 +68,12 @@ export class WetGround {
   private redrawTimer = 0;
   /** Temps de jeu de la dernière mise à jour (pour l'estompage). */
   private now = 0;
+  /**
+   * Tableaux de travail du calcul des flaques, réutilisés d'un calcul à l'autre (10 fois/s, une
+   * fois par couleur) au lieu d'être recréés : moins de déchets pour le ramasse-miettes.
+   */
+  private bufRaw = new Float32Array(0);
+  private bufTmp = new Float32Array(0);
 
   constructor(arena: Arena) {
     this.cols = Math.ceil(arena.width / WET.cell);
@@ -231,7 +237,12 @@ export class WetGround {
     rmin -= 2;
     const w = cmax + 2 - cmin + 1;
     const h = rmax + 2 - rmin + 1;
-    const raw = new Float32Array(w * h);
+    if (this.bufRaw.length < w * h) {
+      this.bufRaw = new Float32Array(w * h);
+      this.bufTmp = new Float32Array(w * h);
+    }
+    const raw = this.bufRaw.subarray(0, w * h);
+    raw.fill(0);
     const shine = new Path2D();
     for (const i of this.active) {
       if (!keep(this.owner[i])) continue;
@@ -250,7 +261,7 @@ export class WetGround {
       }
     }
     // Adoucissement séparable : horizontal puis vertical (1-2-1, total 16).
-    const tmp = new Float32Array(w * h);
+    const tmp = this.bufTmp.subarray(0, w * h);
     for (let y = 0; y < h; y++)
       for (let x = 0; x < w; x++) {
         const k = y * w + x;

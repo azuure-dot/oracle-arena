@@ -207,6 +207,12 @@ Commun à tous les modes :
     canon double) sont dessinés de la même façon, comme les projectiles (équipement d'Elio, bombe à eau) ;
   - chaque tête, arme et main est dessinée une seule fois en haute résolution puis recopiée (≈ 0,1 ms par héros
     et par image) ;
+- **Performances sur la durée** :
+  - sur un écran 120/144 Hz, le jeu ne dessine qu'une image sur deux (60-72 images/s) : moitié moins de
+    travail pour la carte graphique, qui chauffe moins et ne se bride plus après quelques parties ;
+  - en fin de partie, les grandes images du décor (sol, murs, lave) sont libérées tout de suite, ainsi que
+    les cartes floutées de la sélection au lancement d'une partie, au lieu d'attendre le ramasse-miettes ;
+  - les calculs qui tournent en continu (flaques d'eau, liste des cibles) réutilisent leurs tableaux.
   - galerie : `galerie.html` (chaque héros au repos, en action, et une version animée qui tourne et marche ;
     robots, tourelles, projectiles) ;
     croquis de référence dans `concept/` (Kora, Elio, Keraun).

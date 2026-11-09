@@ -204,6 +204,17 @@ export class Arena {
 
   // ---------------------------------------------------------------- rendu
 
+  /**
+   * Fin de partie : libère tout de suite les grandes images du décor (sol, murs, lave) au lieu
+   * d'attendre le ramasse-miettes. Sans ça, la mémoire graphique s'accumule d'une partie à
+   * l'autre. L'arène reste utilisable : les images seraient refaites au besoin.
+   */
+  dispose(): void {
+    for (const c of [this.floorCache, this.wallCache]) if (c) c.width = c.height = 0;
+    this.floorCache = this.wallCache = null;
+    this.theme?.dispose?.(this);
+  }
+
   drawFloor(ctx: CanvasRenderingContext2D, time = 0): void {
     // Le sol est mis en cache ; il contient des libellés traduits : on le refait si la langue change.
     if (!this.floorCache || this.floorLang !== getLang()) {

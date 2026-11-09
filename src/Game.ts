@@ -22,6 +22,12 @@ import { PRACTICE_MAP, QUICKPLAY_MAPS, type MapDef } from './world/maps';
 
 /** Delta max pour éviter les "téléportations" après un onglet en arrière-plan. */
 const MAX_DT = 1 / 20;
+/**
+ * Écart minimal entre deux images (ms). Sur un écran 120/144 Hz, le jeu ne dessine qu'une image
+ * sur deux (60-72 i/s) au lieu de toutes : moitié moins de travail pour la carte graphique, qui
+ * chauffe moins et ne se bride plus au bout de quelques parties. Écran 60 Hz : inchangé.
+ */
+const MIN_FRAME_MS = 11.5;
 
 /**
  * Enchaînement des scènes :
@@ -158,12 +164,12 @@ export class Game {
       case 'menu':
       case 'mapSelect':
       case 'dmSetup':
-        this.mode = null;
+        this.endMode();
         this.backdropMap = PRACTICE_MAP;
         (scene === 'menu' ? this.mainMenu : scene === 'mapSelect' ? this.mapSelect : this.dmSetup).show();
         break;
       case 'select':
-        this.mode = null;
+        this.endMode();
         // Fond : la carte de la partie (Partie rapide), sinon le champ de tir.
         this.backdropMap = this.pendingKind === 'control' || this.pendingKind === 'escort' ? this.pendingMap : PRACTICE_MAP;
         this.selectScreen.mode = this.pendingKind;
@@ -180,8 +186,18 @@ export class Game {
     }
   }
 
+  /** Quitte la partie en cours en libérant ses ressources (images du décor, listes du monde). */
+  private endMode(): void {
+    this.mode?.world.dispose();
+    this.mode = null;
+  }
+
   private startMode(entry: HeroEntry): void {
     this.lastEntry = entry;
+    this.endMode();
+    // Les cartes floutées derrière la sélection ne servent plus pendant la partie : on les libère.
+    for (const w of this.mapBackdrops.values()) w.dispose();
+    this.mapBackdrops.clear();
     switch (this.pendingKind) {
       case 'control':
         this.mode = new ControlMode(this.pendingMap, this.camera, this.input, entry);
@@ -247,6 +263,8 @@ export class Game {
   }
 
   private loop = (ts: number): void => {
+    requestAnimationFrame(this.loop);
+    if (ts - this.lastTs < MIN_FRAME_MS) return; // écran rapide : on saute cette image
     const dt = Math.min((ts - this.lastTs) / 1000, MAX_DT);
     this.lastTs = ts;
     if (dt > 0) this.fps = damp(this.fps, 1 / dt, 4, dt);
@@ -254,8 +272,6 @@ export class Game {
     this.update(dt);
     this.draw();
     this.input.endFrame();
-
-    requestAnimationFrame(this.loop);
   };
 
   update(dt: number): void {
