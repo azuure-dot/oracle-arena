@@ -213,16 +213,23 @@ Commun à tous les modes :
   - en fin de partie, les grandes images du décor (sol, murs, lave) sont libérées tout de suite, ainsi que
     les cartes floutées de la sélection au lancement d'une partie, au lieu d'attendre le ramasse-miettes ;
   - les calculs qui tournent en continu (flaques d'eau, liste des cibles) réutilisent leurs tableaux.
+  - collisions : les obstacles fixes sont rangés dans une grille, un test ne regarde que les cases
+    voisines (les bots en font des centaines par image) ;
+  - brouillard : le champ de vision ne lance des rayons que vers les coins de murs autour du joueur.
   - galerie : `galerie.html` (chaque héros au repos, en action, et une version animée qui tourne et marche ;
     robots, tourelles, projectiles) ;
     croquis de référence dans `concept/` (Kora, Elio, Keraun).
 - **Ligne de vue** : les murs bloquent la vision (raycasting + brouillard de guerre).
   L'ombre des murs est calculée en quart de résolution puis agrandie avec lissage : bords doux sans filtre
   de flou, qui coûtait cher à chaque image sur une carte graphique intégrée.
-- **Zone de vision 16:9** identique pour tous les écrans (985 × 554 unités), caméra verrouillée sur le joueur.
-  Elle remplit exactement un écran 16:9 ; sur un écran plus large (ou 4:3), le surplus est dans l'ombre :
-  personne ne voit plus de terrain qu'un autre. Les bots voient la même zone que le joueur.
-  Le rapprochement de la caméra (×1,95 par rapport à 1920 × 1080) est `CAMERA_ZOOM` dans `src/config.ts`.
+- **Cercle de vision** autour de chaque héros (rayon 340 unités, `VISION` dans `src/config.ts`), caméra
+  verrouillée sur le joueur. Chacun voit depuis sa propre position : son cercle, moins ce que les murs lui
+  cachent. Les bots ont exactement la même règle, chacun depuis son point de vue. La caméra est cadrée pour
+  que le cercle entier tienne à l'écran (dans sa hauteur en paysage) : personne ne voit plus de terrain qu'un
+  autre, et aucun ennemi ne peut te voir sans que tu puisses le voir. Au-delà du cercle, la carte est assombrie
+  et aucun ennemi n'est affiché.
+  Le brouillard ne lance des rayons que vers les coins des murs du carré qui contient le cercle ; les murs qui
+  sortent de ce carré y sont découpés, et leur point de sortie compte comme un coin (ombres justes au bord).
 - **Interface bilingue** FR / EN.
 
 ## Carte Route 66
@@ -235,27 +242,36 @@ Carte originale :
 
 ## Carte Volcan
 
-Carte de contrôle dessinée par le joueur : un camp scientifique installé dans un volcan.
-Elle est symétrique par rotation de 180°, comme Sanctuaire.
+Carte de contrôle dessinée par le joueur (2e version, d'après le croquis « Map Control Volcan ») : un camp
+scientifique installé dans un volcan. Elle est symétrique par rotation de 180°, comme Sanctuaire.
 
 - **Spawns** : des laboratoires d'analyse avec paillasses et console.
   Chacun s'ouvre par deux portes sur une cour avec un héliport.
-- **Accès au point** : un couloir longe les bâtiments du camp jusqu'à l'entrée nord ;
-  un autre descend vers une grande salle latérale, avec une cuve de magma comme couvert.
-- **Le point** : il est posé sur une passerelle en tôle perforée au-dessus du cratère.
-  - On y entre par quatre accès : nord, sud, est et ouest.
-  - Il est entouré de quatre fosses de lave. Leurs côtés extérieurs sont fermés
-    par des garde-corps ; elles sont ouvertes côté point.
+- **Accès au point** (couloirs allongés par rapport à la 1re version) :
+  - à l'ouest, un long couloir étroit longe les bâtiments du camp jusqu'à l'entrée nord ;
+  - à l'est, un passage étroit mène à une petite salle intermédiaire (un mur au milieu pour se
+    couvrir, un pack de soin), puis un couloir descend vers la grande salle latérale.
+- **Les grandes salles latérales** : chacune a une cuve ronde comme couvert, placée du côté de
+  l'équipe qui y arrive (et non du côté de ceux qui la prennent à revers).
+- **Le point** : il est posé sur une plateforme en tôle au-dessus du cratère.
+  - Deux murs en arc de cercle couvrent ses extrémités nord et sud : on contourne l'arc pour entrer.
+  - Il est entouré de quatre fosses de lave au bord arrondi, tourné vers le point. Leurs côtés
+    extérieurs sont fermés par des garde-corps.
 - **La lave** :
-  - Impossible d'y entrer en marchant : on s'arrête au bord, marqué d'une bande jaune et noire.
+  - Impossible d'y entrer en marchant : on s'arrête au bord.
   - Un recul (marteau et ruée de Keraun, bombe à eau, coup de planche, mêlée) peut y projeter un héros.
     Il meurt dès que son centre passe au-dessus de la lave. Keraun, lui, s'arrête au bord pendant sa ruée.
   - La chute est créditée au dernier héros qui a poussé la victime (dans les 4 s).
     Le fil des éliminations affiche « LAVE ».
-- **Rendu pixel art** (`src/world/themes/volcano.ts`) : 1 pixel du décor = 4 unités.
-  - Roche veinée de lave, toits équipés (panneaux solaires, clims, paraboles, cheminées),
-    façades éclairées, garde-corps rayés.
-  - La lave des fosses est animée, avec une lueur et des braises.
+- **Formes arrondies** (fosses, arcs, cuves) : décrites telles qu'on les voit (`shapes` dans
+  `src/world/maps.ts`) ; leurs collisions sont des bandes de 12 unités générées à partir de ces formes.
+- **Rendu vectoriel vu de dessus** (`src/world/themes/volcano.ts`), dans le style des personnages :
+  aplats, contour d'encre, lumière fixe venant du haut à gauche.
+  - Sol en cache (basalte cendré, fissures, cratère roussi, lueur des fosses, tôles du camp, héliport,
+    ombres des murs).
+  - Murs dessinés à chaque image, nets à tout zoom : roche veinée de lave, bâtiments en tôle rivetée,
+    mobilier du labo, garde-corps rayés jaune et noir, arcs en béton, cuves cerclées.
+  - Animé : lave qui bouillonne dans les fosses, plateforme en caillebotis sous le point.
 
 ## Carte Sanctuaire
 

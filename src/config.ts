@@ -37,29 +37,27 @@ export const ZONES = {
   healHps: 60,
 } as const;
 
-/**
- * Rapprochement de la caméra par rapport à la zone de vision d'origine (1920 × 1080) :
- * ×1,3 puis ×1,5. La zone de vision rétrécit d'autant (elle reste exactement l'écran
- * d'un 16:9).
- */
-export const CAMERA_ZOOM = 1.3 * 1.5;
 
 /**
- * Zone de vision : rectangle 16:9 centré sur le joueur (en unités monde), la même
- * pour tous — joueur et bots.
- * - Le zoom de la caméra est calculé pour que cette zone remplisse l'écran :
- *   même surface visible sur un écran 13" ou 27".
- * - Au-delà (bandes sur les écrans ultra-larges ou 4:3), tout est dans l'ombre
- *   et aucun ennemi n'est visible, même sans mur entre les deux : un écran plus
- *   large ne montre pas plus de terrain.
+ * Zone de vision : cercle centré sur chaque héros (en unités monde), le même rayon pour tous —
+ * joueur et bots. Chacun voit depuis sa propre position (son point de vue) : ce cercle, moins ce
+ * que les murs lui cachent.
+ * - Le zoom de la caméra est calculé pour que le cercle entier tienne à l'écran (dans sa hauteur
+ *   sur un écran en paysage) : personne ne peut voir un ennemi resté hors de son écran, et la
+ *   surface visible est la même sur un écran 13" ou 27".
+ * - Au-delà du cercle, la carte reste devinable (assombrie) mais aucun ennemi n'y est visible,
+ *   même sans mur entre les deux.
  */
+const VISION_RADIUS = 340;
 export const VISION = {
-  width: Math.round(1920 / CAMERA_ZOOM), // 985
-  height: Math.round(1080 / CAMERA_ZOOM), // 554
-  /** Assombrissement hors de la zone de vision. */
-  outsideOpacity: 0.97,
-  /** Dégradé d'ombre (unités monde) sur le bord intérieur de la zone. */
-  edgeFade: 24,
+  radius: VISION_RADIUS,
+  /** Cadre de la caméra : le carré qui contient le cercle. */
+  width: VISION_RADIUS * 2,
+  height: VISION_RADIUS * 2,
+  /** Assombrissement hors du cercle (la carte reste devinable, pas les ennemis). */
+  outsideOpacity: 0.6,
+  /** Dégradé d'ombre (unités monde) sur le bord intérieur du cercle. */
+  edgeFade: 46,
 } as const;
 
 export const FOG = {

@@ -42,6 +42,17 @@ export interface ControlPointDef {
   r: number;
 }
 
+/**
+ * Forme arrondie dessinée telle quelle par le thème (ses collisions sont générées à part) :
+ * - pit : fosse de lave = rectangles `outer` moins le disque de centre (x, y) et de rayon r ;
+ * - arc : mur en arc de cercle (couronne entre rIn et rOut, de l'angle a0 à a1) ;
+ * - plates : sol de tôle (camp).
+ */
+export type MapShape =
+  | { kind: 'pit'; outer: Rect[]; x: number; y: number; r: number }
+  | { kind: 'arc'; x: number; y: number; rIn: number; rOut: number; a0: number; a1: number }
+  | { kind: 'plates'; rect: Rect };
+
 /** Élément de décor dessiné par le thème de la carte (cuves, héliports...). */
 export interface Decor {
   kind: 'tank' | 'helipad';
@@ -63,9 +74,11 @@ export interface MapDef {
   water?: Rect[];
   /** Lave : infranchissable en marchant, mortelle si un recul y projette un héros. */
   lava?: Rect[];
-  /** Habillage pixel art (src/world/themes). Sans thème : rendu par défaut. */
+  /** Habillage propre à la carte (src/world/themes). Sans thème : rendu par défaut. */
   theme?: 'volcano';
   decor?: Decor[];
+  /** Formes arrondies du décor (fosses, arcs...), dessinées par le thème. */
+  shapes?: MapShape[];
   zones: Zone[];
   safeZones: SafeZone[];
   /** Points d'apparition par équipe. */
@@ -432,50 +445,130 @@ export const ROUTE66_MAP: MapDef = {
 // ------------------------------------------------------------------ Volcan
 
 /**
- * VOLCAN (Contrôle) — carte dessinée par le joueur : un camp scientifique installé
- * dans un volcan. Symétrique par rotation de 180° autour du point (même terrain pour
- * chaque équipe). On décrit la moitié nord (spawn rouge) ; le sud est généré.
+ * VOLCAN (Contrôle) — carte dessinée par le joueur (croquis « Map Control Volcan ») : un camp
+ * scientifique installé dans un volcan. Symétrique par rotation de 180° autour du point (même
+ * terrain pour chaque équipe). On décrit la moitié nord (spawn rouge) ; le sud est généré.
  *
  * - Le spawn (laboratoire) s'ouvre par deux portes sur une cour (héliport).
- * - Deux chemins vers le centre : le couloir ouest qui longe les bâtiments, puis
- *   l'entrée nord entre les fosses ; ou le couloir est qui descend vers la grande salle.
- * - Le point est sur une passerelle en ferraille au-dessus du cratère, entourée de
- *   quatre fosses de lave ouvertes côté point : un recul bien placé y précipite l'adversaire.
- * - Quatre entrées vers le point (nord, sud, est, ouest) ; une cuve ronde fait couvert
- *   dans chaque grande salle latérale.
+ * - Couloir ouest, long et étroit, qui longe les bâtiments jusqu'à l'entrée nord du point.
+ * - Côté est : un passage étroit, puis une petite salle intermédiaire (un mur au milieu, un pack
+ *   de soin), puis le couloir qui descend vers la grande salle est.
+ * - Le point est une plateforme au-dessus du cratère, entourée de quatre fosses de lave au bord
+ *   arrondi tourné vers lui : un recul bien placé y précipite l'adversaire. Deux murs en arc de
+ *   cercle couvrent ses extrémités nord et sud.
+ * - Dans chaque grande salle latérale, une cuve ronde fait couvert du côté de l'équipe qui y
+ *   arrive (et non du côté de ceux qui la prennent à revers).
  *
- * Toutes les coordonnées sont des multiples de 4 (1 pixel du décor = 4 unités).
+ * Les formes arrondies (fosses, arcs, cuves) sont décrites telles qu'on les voit (`shapes`) ;
+ * leurs collisions sont des bandes horizontales générées à partir de ces formes.
  */
 const VW = 2120;
-const VH = 3160;
+const VH = 4200;
+const VC = { x: VW / 2, y: VH / 2 };
 const vRect = <T extends Rect>(r: T): T => ({ ...r, x: VW - r.x - r.w, y: VH - r.y - r.h });
 const vPt = (p: Vec2): Vec2 => ({ x: VW - p.x, y: VH - p.y });
 const vSeg = (s: Segment): Segment => ({ ax: VW - s.ax, ay: VH - s.ay, bx: VW - s.bx, by: VH - s.by });
+const vShape = (s: MapShape): MapShape => {
+  switch (s.kind) {
+    case 'pit':
+      return { ...s, outer: s.outer.map(vRect), ...vPt(s) };
+    case 'arc':
+      return { ...s, ...vPt(s), a0: s.a0 + Math.PI, a1: s.a1 + Math.PI };
+    case 'plates':
+      return { ...s, rect: vRect(s.rect) };
+  }
+};
 
-/** Obstacle rond (cuve) : cercle approché par trois rectangles en escalier. */
-function roundObstacle(x: number, y: number, r: number): WallRect[] {
-  const q = (v: number) => Math.round(v / 4) * 4;
-  const box = (hw: number, hh: number): WallRect => ({
-    x: x - q(hw),
-    y: y - q(hh),
-    w: q(hw) * 2,
-    h: q(hh) * 2,
-    style: 'tank',
-  });
-  return [box(r * 0.92, r * 0.38), box(r * 0.71, r * 0.71), box(r * 0.38, r * 0.92)];
+/**
+ * Bandes horizontales (hauteur `cell`) qui couvrent une forme : collisions des formes arrondies.
+ * Chaque cellule est testée en son centre ; les cellules voisines d'une rangée sont fusionnées,
+ * puis les rangées identiques empilées.
+ */
+function rasterize<T extends Rect>(inside: (x: number, y: number) => boolean, box: Rect, cell: number, extra: Omit<T, keyof Rect>): T[] {
+  const out: T[] = [];
+  let prev: T[] = [];
+  for (let y = box.y; y < box.y + box.h; y += cell) {
+    const row: T[] = [];
+    let start = -1;
+    for (let x = box.x; x <= box.x + box.w; x += cell) {
+      const inn = x < box.x + box.w && inside(x + cell / 2, y + cell / 2);
+      if (inn && start < 0) start = x;
+      if (!inn && start >= 0) {
+        row.push({ ...extra, x: start, y, w: x - start, h: cell } as T);
+        start = -1;
+      }
+    }
+    // Rangée identique à la précédente : on allonge les bandes du dessus.
+    if (row.length && row.length === prev.length && row.every((r, i) => r.x === prev[i].x && r.w === prev[i].w)) {
+      for (const r of prev) r.h += cell;
+      continue;
+    }
+    out.push(...row);
+    prev = row;
+  }
+  return out;
 }
 
+const inRects = (rs: Rect[], x: number, y: number) => rs.some((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h);
+const bounds = (rs: Rect[]): Rect => {
+  const x = Math.min(...rs.map((r) => r.x));
+  const y = Math.min(...rs.map((r) => r.y));
+  return { x, y, w: Math.max(...rs.map((r) => r.x + r.w)) - x, h: Math.max(...rs.map((r) => r.y + r.h)) - y };
+};
+
+/** Collisions d'une forme arrondie (voir MapShape). */
+function shapeRects(s: MapShape): WallRect[] {
+  if (s.kind === 'pit') {
+    return rasterize<WallRect>((x, y) => inRects(s.outer, x, y) && Math.hypot(x - s.x, y - s.y) >= s.r, bounds(s.outer), 12, {});
+  }
+  if (s.kind === 'arc') {
+    const inside = (x: number, y: number) => {
+      const d = Math.hypot(x - s.x, y - s.y);
+      if (d < s.rIn || d > s.rOut) return false;
+      let a = Math.atan2(y - s.y, x - s.x) - s.a0;
+      a = ((a % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+      return a <= s.a1 - s.a0;
+    };
+    const box = { x: s.x - s.rOut, y: s.y - s.rOut, w: s.rOut * 2, h: s.rOut * 2 };
+    return rasterize<WallRect>(inside, box, 12, { style: 'arc' });
+  }
+  return [];
+}
+
+/** Cuve ronde : obstacle circulaire (collision en bandes). */
+function tankRects(d: Decor): WallRect[] {
+  const box = { x: d.x - d.r, y: d.y - d.r, w: d.r * 2, h: d.r * 2 };
+  return rasterize<WallRect>((x, y) => Math.hypot(x - d.x, y - d.y) <= d.r, box, 12, { style: 'tank' });
+}
+
+/** Allongement des couloirs entre la cour du spawn et le centre (par rapport à la 1re version). */
+const STRETCH = 520;
+/** Fosses de lave : bord arrondi, à cette distance du centre du point. */
+const PIT_R = 340;
+
+const VOLCANO_HALF_SHAPES: MapShape[] = [
+  // Fosses nord-ouest et nord-est
+  { kind: 'pit', outer: [{ x: 744, y: 1612, w: 192, h: 48 }, { x: 672, y: 1660, w: 264, h: 300 }], ...VC, r: PIT_R },
+  { kind: 'pit', outer: [{ x: 1128, y: 1600, w: 336, h: 324 }], ...VC, r: PIT_R },
+  // Mur en arc au nord du point (le sud est généré par symétrie)
+  { kind: 'arc', ...VC, rIn: 232, rOut: 262, a0: -Math.PI / 2 - 0.63, a1: -Math.PI / 2 + 0.63 },
+  // Sols de tôle : laboratoire du spawn et cour
+  { kind: 'plates', rect: { x: 1392, y: 24, w: 672, h: 256 } },
+  { kind: 'plates', rect: { x: 1368, y: 320, w: 696, h: 480 } },
+];
+
+const VOLCANO_HALF_DECOR: Decor[] = [
+  { kind: 'helipad', x: 1716, y: 560, r: 112 },
+  // Cuve de la grande salle est, côté nord (là où arrive l'équipe rouge)
+  { kind: 'tank', x: 1732, y: 1983, r: 80 },
+];
+
+const S = STRETCH;
 const VOLCANO_HALF_WALLS: WallRect[] = [
-  // Roche : tout ce qui est hors du camp
+  // Roche : tout ce qui est hors du camp (haut de la carte)
   { x: 0, y: 0, w: 1392, h: 372, style: 'rock' },
   { x: 1392, y: 0, w: 672, h: 24, style: 'rock' },
-  { x: 0, y: 372, w: 948, h: 300, style: 'rock' },
-  { x: 0, y: 672, w: 720, h: 128, style: 'rock' },
-  { x: 0, y: 800, w: 264, h: 316, style: 'rock' },
-  { x: 0, y: 1116, w: 72, h: 464, style: 'rock' },
-  { x: 2064, y: 0, w: 56, h: 804, style: 'rock' },
-  { x: 1848, y: 804, w: 272, h: 300, style: 'rock' },
-  { x: 2040, y: 1104, w: 80, h: 476, style: 'rock' },
+  { x: 2064, y: 0, w: 56, h: 800, style: 'rock' },
   // Laboratoire (spawn) : façade à deux portes, paillasses et console au fond
   { x: 1392, y: 280, w: 144, h: 40, style: 'lab' },
   { x: 1716, y: 280, w: 96, h: 40, style: 'lab' },
@@ -483,66 +576,78 @@ const VOLCANO_HALF_WALLS: WallRect[] = [
   { x: 1440, y: 24, w: 176, h: 52, style: 'lab' },
   { x: 1680, y: 24, w: 100, h: 64, style: 'lab' },
   { x: 1840, y: 24, w: 176, h: 52, style: 'lab' },
-  // Bâtiments du camp : bloc nord (entre le couloir et le point) et station ouest
+  // Couloir ouest (long et étroit) : roche à gauche, bâtiment puis roche à droite
+  { x: 0, y: 372, w: 948, h: 300 + S, style: 'rock' },
   { x: 1104, y: 492, w: 264, h: 180, style: 'building' },
-  { x: 1200, y: 672, w: 168, h: 132, style: 'building' },
-  { x: 1200, y: 804, w: 384, h: 276, style: 'building' },
-  { x: 528, y: 952, w: 216, h: 80, style: 'building' },
-  { x: 432, y: 1032, w: 312, h: 108, style: 'building' },
+  { x: 1104, y: 672, w: 264, h: S, style: 'rock' },
+  // Sortie de la cour vers l'est : passage étroit, puis la salle intermédiaire
+  { x: 1368, y: 800, w: 268, h: 80, style: 'rock' },
+  { x: 1880, y: 800, w: 64, h: 80, style: 'rock' },
+  { x: 1944, y: 800, w: 176, h: 524, style: 'rock' },
+  { x: 1368, y: 880, w: 152, h: 444, style: 'rock' },
+  { x: 1724, y: 960, w: 88, h: 240, style: 'building' }, // mur au milieu de la salle intermédiaire
+  // Au-delà : le centre de la carte (première version décalée de STRETCH vers le sud)
+  { x: 0, y: 672 + S, w: 720, h: 128, style: 'rock' },
+  { x: 0, y: 800 + S, w: 264, h: 316, style: 'rock' },
+  { x: 0, y: 1116 + S, w: 72, h: 464, style: 'rock' },
+  { x: 1848, y: 804 + S, w: 272, h: 300, style: 'rock' },
+  { x: 2040, y: 1104 + S, w: 80, h: 476, style: 'rock' },
+  { x: 1200, y: 672 + S, w: 168, h: 132, style: 'building' },
+  { x: 1200, y: 804 + S, w: 384, h: 276, style: 'building' },
+  { x: 528, y: 952 + S, w: 216, h: 80, style: 'building' },
+  { x: 432, y: 1032 + S, w: 312, h: 108, style: 'building' },
   // Garde-corps des fosses (côtés fermés)
-  { x: 744, y: 1068, w: 216, h: 24, style: 'barrier' },
-  { x: 936, y: 1092, w: 24, h: 180, style: 'barrier' },
-  { x: 648, y: 1140, w: 24, h: 300, style: 'barrier' },
-  { x: 1104, y: 1068, w: 24, h: 156, style: 'barrier' },
-  { x: 1128, y: 1068, w: 72, h: 24, style: 'barrier' },
-  { x: 1464, y: 1080, w: 24, h: 324, style: 'barrier' },
-  // Cuve (grande salle ouest)
-  ...roundObstacle(368, 1460, 80),
+  { x: 744, y: 1068 + S, w: 216, h: 24, style: 'barrier' },
+  { x: 936, y: 1092 + S, w: 24, h: 180, style: 'barrier' },
+  { x: 648, y: 1140 + S, w: 24, h: 300, style: 'barrier' },
+  { x: 1104, y: 1068 + S, w: 24, h: 156, style: 'barrier' },
+  { x: 1128, y: 1068 + S, w: 72, h: 24, style: 'barrier' },
+  { x: 1464, y: 1080 + S, w: 24, h: 324, style: 'barrier' },
+  // Murs arrondis : arc du point et cuve
+  ...VOLCANO_HALF_SHAPES.filter((s) => s.kind === 'arc').flatMap(shapeRects),
+  ...VOLCANO_HALF_DECOR.filter((d) => d.kind === 'tank').flatMap(tankRects),
 ];
 
-/** Fosses nord-ouest et nord-est : escaliers qui suivent le bord arrondi tourné vers le point. */
-const VOLCANO_HALF_LAVA: Rect[] = [
-  { x: 744, y: 1092, w: 192, h: 48 },
-  { x: 672, y: 1140, w: 264, h: 120 },
-  { x: 672, y: 1260, w: 208, h: 60 },
-  { x: 672, y: 1320, w: 120, h: 60 },
-  { x: 672, y: 1380, w: 48, h: 60 },
-  { x: 1128, y: 1080, w: 336, h: 144 },
-  { x: 1200, y: 1224, w: 264, h: 60 },
-  { x: 1296, y: 1284, w: 168, h: 60 },
-  { x: 1392, y: 1344, w: 72, h: 60 },
-];
+const VOLCANO_HALF_LAVA: Rect[] = VOLCANO_HALF_SHAPES.filter((s) => s.kind === 'pit').flatMap(shapeRects);
 
 const VOLCANO_HALF_NAV: Vec2[] = [
   { x: 1626, y: 170 }, // labo, face aux portes
   { x: 1890, y: 170 },
   { x: 1626, y: 400 }, // cour
   { x: 1890, y: 400 },
-  { x: 1716, y: 600 },
+  { x: 1716, y: 640 },
   { x: 1460, y: 432 }, // couloir ouest
   { x: 1200, y: 432 },
   { x: 1026, y: 432 },
-  { x: 1026, y: 600 },
-  { x: 1026, y: 760 },
-  { x: 860, y: 880 },
-  { x: 1152, y: 940 },
-  { x: 600, y: 880 },
-  { x: 348, y: 900 },
-  { x: 348, y: 1080 }, // passage vers la grande salle ouest
-  { x: 500, y: 1250 },
-  { x: 180, y: 1300 },
-  { x: 180, y: 1460 }, // autour de la cuve
-  { x: 556, y: 1460 },
-  { x: 1032, y: 1180 }, // entrée nord
-  { x: 1060, y: 1350 },
-  { x: 840, y: 1500 },
-  { x: 1290, y: 1460 },
-  { x: 740, y: 1560 }, // entrée ouest
-  { x: 1716, y: 950 }, // couloir est
-  { x: 1650, y: 1180 }, // grande salle est
-  { x: 1950, y: 1300 },
-  { x: 1600, y: 1480 },
-  { x: 1900, y: 1540 },
+  { x: 1026, y: 700 },
+  { x: 1026, y: 1000 },
+  { x: 1026, y: 760 + S },
+  { x: 1760, y: 840 }, // passage est puis salle intermédiaire (autour du mur)
+  { x: 1600, y: 960 },
+  { x: 1880, y: 1080 },
+  { x: 1600, y: 1240 },
+  { x: 1880, y: 1250 },
+  { x: 1716, y: 950 + S }, // couloir est
+  { x: 860, y: 880 + S },
+  { x: 1152, y: 940 + S },
+  { x: 600, y: 880 + S },
+  { x: 348, y: 900 + S },
+  { x: 348, y: 1080 + S }, // passage vers la grande salle ouest
+  { x: 500, y: 1250 + S },
+  { x: 180, y: 1300 + S },
+  { x: 180, y: 1460 + S },
+  { x: 556, y: 1460 + S },
+  { x: 1032, y: 1180 + S }, // entrée nord, puis autour de l'arc
+  { x: 880, y: 1880 },
+  { x: 1240, y: 1880 },
+  { x: 1060, y: 1960 },
+  { x: 840, y: 1500 + S },
+  { x: 1290, y: 1460 + S },
+  { x: 740, y: 1560 + S }, // entrée ouest
+  { x: 1650, y: 1180 + S }, // grande salle est (autour de la cuve)
+  { x: 1950, y: 1300 + S },
+  { x: 1560, y: 2000 },
+  { x: 1920, y: 2040 },
 ];
 
 const volcanoRedSpawns: Vec2[] = [
@@ -569,29 +674,25 @@ export const VOLCANO_MAP: MapDef = {
   walls: withMirror(VOLCANO_HALF_WALLS, vRect),
   lava: withMirror(VOLCANO_HALF_LAVA, vRect),
   theme: 'volcano',
-  decor: withMirror<Decor>(
-    [
-      { kind: 'tank', x: 368, y: 1460, r: 80 },
-      { kind: 'helipad', x: 1716, y: 560, r: 112 },
-    ],
-    (d) => ({ ...d, ...vPt(d) }),
-  ),
+  decor: withMirror<Decor>(VOLCANO_HALF_DECOR, (d) => ({ ...d, ...vPt(d) })),
+  shapes: withMirror(VOLCANO_HALF_SHAPES, vShape),
   zones: [],
   safeZones: [
     volcanoRedSafe,
     { team: ALLY, rect: vRect(volcanoRedSafe.rect), doors: volcanoRedSafe.doors.map(vSeg) },
   ],
   spawns: { [ENEMY]: volcanoRedSpawns, [ALLY]: volcanoRedSpawns.map(vPt) },
-  control: { x: VW / 2, y: VH / 2, r: 190 },
+  control: { x: VC.x, y: VC.y, r: 190 },
   healthPacks: withMirror(
     [
-      { x: 336, y: 896 },
-      { x: 840, y: 1000 },
-      { x: 1980, y: 1192 },
+      { x: 336, y: 896 + S },
+      { x: 840, y: 1000 + S },
+      { x: 1980, y: 1192 + S },
+      { x: 1880, y: 930 }, // salle intermédiaire
     ],
     vPt,
   ),
-  nav: [...withMirror(VOLCANO_HALF_NAV, vPt), { x: VW / 2, y: VH / 2 }],
+  nav: [...withMirror(VOLCANO_HALF_NAV, vPt), { ...VC }],
 };
 
 /** Cartes jouables en Partie rapide (la carte détermine le mode). */

@@ -12,7 +12,7 @@ import type { VisPoint } from './Visibility';
  *    de flou (trop coûteux à chaque image).
  *
  * 2. drawVisionLimit() — périmètre de vision :
- *    tout ce qui sort du rectangle 16:9 centré sur le joueur est quasi noir
+ *    tout ce qui sort du cercle de vision centré sur le joueur est assombri
  *    (murs compris), avec un dégradé sur le bord intérieur.
  */
 export class Fog {
@@ -52,9 +52,9 @@ export class Fog {
     if (poly.length >= 3) {
       g.save();
       g.setTransform(s * view.scale, 0, 0, s * view.scale, s * view.tx, s * view.ty);
-      // On ne révèle que l'intérieur de la zone de vision.
+      // On ne révèle que l'intérieur du cercle de vision.
       g.beginPath();
-      g.rect(eyeX - VISION.width / 2, eyeY - VISION.height / 2, VISION.width, VISION.height);
+      g.arc(eyeX, eyeY, VISION.radius, 0, Math.PI * 2);
       g.clip();
       g.globalCompositeOperation = 'destination-out';
       g.beginPath();
@@ -73,7 +73,7 @@ export class Fog {
     ctx.restore();
   }
 
-  /** Ombre au-delà du périmètre de vision (à dessiner APRÈS les murs pour les masquer aussi). */
+  /** Ombre au-delà du cercle de vision (à dessiner APRÈS les murs pour les assombrir aussi). */
   drawVisionLimit(
     ctx: CanvasRenderingContext2D,
     view: ViewTransform,
@@ -82,33 +82,26 @@ export class Fog {
     viewW: number,
     viewH: number,
   ): void {
-    const x0 = (eyeX - VISION.width / 2) * view.scale + view.tx;
-    const y0 = (eyeY - VISION.height / 2) * view.scale + view.ty;
-    const w = VISION.width * view.scale;
-    const h = VISION.height * view.scale;
-    const dark = (a: number) => `rgba(3,5,9,${a})`;
+    const cx = eyeX * view.scale + view.tx;
+    const cy = eyeY * view.scale + view.ty;
+    const r = VISION.radius * view.scale;
+    const f = VISION.edgeFade * view.scale;
+    const dark = (a: number) => 'rgba(3,5,9,' + a + ')';
 
-    // Extérieur de la zone : écran entier moins le rectangle (règle evenodd).
+    // Extérieur du cercle : écran entier moins le disque (règle evenodd).
     ctx.fillStyle = dark(VISION.outsideOpacity);
     ctx.beginPath();
     ctx.rect(0, 0, viewW, viewH);
-    ctx.rect(x0, y0, w, h);
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.fill('evenodd');
 
     // Dégradé sur le bord intérieur : la vision "s'éteint" progressivement.
-    const f = VISION.edgeFade * view.scale;
-    const edges: [number, number, number, number, number, number, number, number][] = [
-      [x0, y0, w, f, x0, y0, x0, y0 + f], // haut
-      [x0, y0 + h - f, w, f, x0, y0 + h, x0, y0 + h - f], // bas
-      [x0, y0, f, h, x0, y0, x0 + f, y0], // gauche
-      [x0 + w - f, y0, f, h, x0 + w, y0, x0 + w - f, y0], // droite
-    ];
-    for (const [rx, ry, rw, rh, gx0, gy0, gx1, gy1] of edges) {
-      const grad = ctx.createLinearGradient(gx0, gy0, gx1, gy1);
-      grad.addColorStop(0, dark(VISION.outsideOpacity * 0.85));
-      grad.addColorStop(1, dark(0));
-      ctx.fillStyle = grad;
-      ctx.fillRect(rx, ry, rw, rh);
-    }
+    const grad = ctx.createRadialGradient(cx, cy, Math.max(0, r - f), cx, cy, r);
+    grad.addColorStop(0, dark(0));
+    grad.addColorStop(1, dark(VISION.outsideOpacity));
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fill();
   }
 }

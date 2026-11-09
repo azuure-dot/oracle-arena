@@ -21,7 +21,7 @@ export interface Segment {
 }
 
 /** Habillage d'un mur (cartes à thème) : roche, toit de bâtiment, paillasse de labo, barrière, cuve. */
-export type WallStyle = 'rock' | 'building' | 'lab' | 'barrier' | 'tank';
+export type WallStyle = 'rock' | 'building' | 'lab' | 'barrier' | 'tank' | 'arc';
 
 export interface WallRect extends Rect {
   style?: WallStyle;
@@ -47,6 +47,9 @@ function doorRect(s: Segment): Rect {
  * La map : bords, murs, zones spéciales, zones de spawn protégées et rendu du sol.
  * Le contenu vient d'une MapDef (src/world/maps.ts).
  */
+/** Taille des cases de la grille de recherche des obstacles (unités monde). */
+const GRID_CELL = 160;
+
 export class Arena {
   readonly width: number;
   readonly height: number;
@@ -71,6 +74,13 @@ export class Arena {
   readonly segments: Segment[];
   /** Sommets vers lesquels on lance les rayons de visibilité. */
   readonly corners: { x: number; y: number }[];
+
+  /**
+   * Grille de recherche des obstacles fixes (murs + eau, et lave à part) : un test de collision
+   * ne regarde que les rectangles des cases touchées, au lieu de toute la carte. Les bots en
+   * font des centaines par image (évitement des murs).
+   */
+  private readonly grid: { cols: number; rows: number; solid: Rect[][]; lava: Rect[][] };
 
   private floorCache: HTMLCanvasElement | null = null;
   private floorLang = '';
@@ -105,6 +115,35 @@ export class Arena {
       }
       this.corners.push(...pts);
     }
+
+    const cols = Math.ceil(this.width / GRID_CELL);
+    const rows = Math.ceil(this.height / GRID_CELL);
+    const bucket = (list: Rect[]): Rect[][] => {
+      const cells: Rect[][] = Array.from({ length: cols * rows }, () => []);
+      for (const r of list) {
+        const c0 = Math.max(0, Math.floor(r.x / GRID_CELL));
+        const c1 = Math.min(cols - 1, Math.floor((r.x + r.w) / GRID_CELL));
+        const r0 = Math.max(0, Math.floor(r.y / GRID_CELL));
+        const r1 = Math.min(rows - 1, Math.floor((r.y + r.h) / GRID_CELL));
+        for (let j = r0; j <= r1; j++) for (let i = c0; i <= c1; i++) cells[j * cols + i].push(r);
+      }
+      return cells;
+    };
+    this.grid = { cols, rows, solid: bucket([...this.walls, ...this.water]), lava: bucket(this.lava) };
+  }
+
+  /** Le cercle touche-t-il un rectangle de cette grille ? (seulement les cases qu'il couvre) */
+  private gridHit(cells: Rect[][], x: number, y: number, r: number): boolean {
+    const { cols, rows } = this.grid;
+    const c0 = Math.max(0, Math.floor((x - r) / GRID_CELL));
+    const c1 = Math.min(cols - 1, Math.floor((x + r) / GRID_CELL));
+    const r0 = Math.max(0, Math.floor((y - r) / GRID_CELL));
+    const r1 = Math.min(rows - 1, Math.floor((y + r) / GRID_CELL));
+    for (let j = r0; j <= r1; j++)
+      for (let i = c0; i <= c1; i++) {
+        for (const w of cells[j * cols + i]) if (circleHitsRect(x, y, r, w)) return true;
+      }
+    return false;
   }
 
   /**
@@ -144,12 +183,20 @@ export class Arena {
    */
   circleCollides(x: number, y: number, r: number, team?: Team, overLava = false): boolean {
     if (x - r < 0 || y - r < 0 || x + r > this.width || y + r > this.height) return true;
-    return this.blockers(team, overLava).some((w) => circleHitsRect(x, y, r, w));
+    // Même règle que blockers(), sans recopier de liste : murs et eau, lave, obstacles mobiles,
+    // spawns adverses et portes fermées de sa propre équipe.
+    if (this.gridHit(this.grid.solid, x, y, r)) return true;
+    if (!overLava && this.gridHit(this.grid.lava, x, y, r)) return true;
+    for (const w of this.dynamicRects) if (circleHitsRect(x, y, r, w)) return true;
+    if (team === undefined) return false;
+    for (const z of this.safeZones) if (z.team !== team && circleHitsRect(x, y, r, z.rect)) return true;
+    for (const d of this.lockedDoors) if (d.team === team && circleHitsRect(x, y, r, d.rect)) return true;
+    return false;
   }
 
   /** Ce point est-il au-dessus de la lave ? (un héros y tombe si son centre y passe) */
   lavaAt(x: number, y: number): boolean {
-    return this.lava.some((r) => pointInRect(x, y, r));
+    return this.gridHit(this.grid.lava, x, y, 0.001);
   }
 
   /** Arrête les projectiles : murs et obstacles mobiles (pas l'eau). */
@@ -221,9 +268,9 @@ export class Arena {
       this.floorCache = this.renderFloor();
       this.floorLang = getLang();
     }
-    // Cartes à thème : cache en basse résolution (1 pixel = 4 unités), agrandi sans lissage.
+    // Cartes à thème : sol en cache à la résolution du thème, agrandi avec ou sans lissage.
     ctx.save();
-    ctx.imageSmoothingEnabled = false;
+    ctx.imageSmoothingEnabled = !!this.theme?.smooth;
     ctx.drawImage(this.floorCache, 0, 0, this.width, this.height);
     ctx.restore();
     this.theme?.drawLive?.(ctx, this, time);
@@ -252,7 +299,11 @@ export class Arena {
       ctx.lineWidth = 2;
       ctx.strokeRect(r.x + 1, r.y + 1, r.w - 2, r.h - 2);
     }
-    if (this.theme) {
+    if (this.theme?.drawWalls) {
+      this.theme.drawWalls(ctx, this);
+      return;
+    }
+    if (this.theme?.renderWalls) {
       this.wallCache ??= this.theme.renderWalls(this);
       ctx.save();
       ctx.imageSmoothingEnabled = false;
