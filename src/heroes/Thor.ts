@@ -1,5 +1,5 @@
 import type { GameContext } from '../core/GameContext';
-import { boxesOverlap, boxExtent, boxInCone, distToBox } from '../core/geometry';
+import { circleInCone, circlesOverlap, distToCircle } from '../core/geometry';
 import { angleDiff, clamp, degToRad, randRange, TAU } from '../core/math';
 import { hostile, type Combatant } from '../entities/Combatant';
 import type { Projectile } from '../entities/Projectile';
@@ -12,11 +12,10 @@ import { BLINK } from './Flux';
 import { Hero, MOVE_SPEED_SCALE, type AbilitySlot, type WeaponHud } from './Hero';
 import { HAMMER as REMPART_HAMMER, SHIELD as REMPART_SHIELD } from './Rempart';
 
-/** Rayon de la tête vue de dessus, peau, bandages des mains. */
-const R = 21;
+/** Rayon de la boule (= hitbox), peau, bandages des mains. */
+const R = 23;
 const SKIN = '#e9b48f';
 const WRAP = { color: '#d8c7a5', lines: '#b9a47e' };
-const HITBOX = { hw: 20, hh: 30 };
 /** Marteau : longueur du manche et taille de la tête (unités monde). */
 const HAMMER_LEN = 26;
 const HAMMER_HEAD = 17;
@@ -27,19 +26,14 @@ function thorHammer(ctx: CanvasRenderingContext2D): void {
 
 /**
  * Démarche lourde : Thor se dandine. Sur un cycle de deux pas (u de 0 à 1) :
- * - jambe gauche de l'image levée autour de u = 0,25, droite autour de 0,75 ;
- * - le poids passe sur la jambe posée : tout le corps se décale et penche de ce côté,
- *   le haut du buste un peu plus (pixels décalés) ;
- * - il monte quand une jambe se lève et retombe lourdement au pas suivant (u = 0 et 0,5) :
- *   léger écrasement à l'impact, poussière sous le pied ;
+ * - le poids passe d'un pied sur l'autre : la boule se décale de côté et penche un peu ;
+ * - à chaque pas posé (u = 0 et 0,5), elle s'écrase légèrement et soulève de la poussière ;
  * - le marteau tenu balance au rythme des pas.
  */
 const WADDLE = {
   stride: 140, // distance parcourue par cycle de deux pas (≈ 1,05 s à vitesse normale)
-  bob: 3, // hauteur du rebond (unités)
   sway: 2.5, // décalage latéral du corps
-  tilt: 0.055, // inclinaison (rad) vers la jambe posée
-  topShift: 1.6, // décalage du haut du buste (pixels de sprite, arrondi)
+  tilt: 0.055, // inclinaison (rad) vers le pied posé
   squash: 0.05, // écrasement à l'impact du pied
   impactWindow: 0.09, // durée de l'écrasement (fraction de cycle)
   hammerSwing: 0.12, // balancement du marteau (rad)
@@ -153,7 +147,7 @@ export class Thor extends Hero {
     super({
       name: 'Thor',
       maxHp: 600,
-      hitbox: HITBOX,
+      radius: R,
       speed: 220,
       acceleration: 10,
       mass: 2,
@@ -215,8 +209,10 @@ export class Thor extends Hero {
   private footfall(ctx: GameContext): void {
     const u = this.walkCycle % 1;
     const side = u < 0.5 ? 1 : -1;
-    const fx = this.x + side * this.hw * 0.45;
-    const fy = this.y + this.hh - 2;
+    // De part et d'autre de la boule, perpendiculairement à la marche.
+    const m = Math.atan2(this.vy, this.vx) + (side * Math.PI) / 2;
+    const fx = this.x + Math.cos(m) * this.radius * 0.8;
+    const fy = this.y + Math.sin(m) * this.radius * 0.8;
     ctx.effects.sparks(fx, fy, '#8d8273', 5, WADDLE.dustSpeed);
     ctx.effects.sparks(fx, fy, '#b3a894', 3, WADDLE.dustSpeed * 0.6);
   }
@@ -298,12 +294,12 @@ export class Thor extends Hero {
     let hit = false;
     for (const c of ctx.targets) {
       if (!c.alive || !hostile(this, c)) continue;
-      if (!boxInCone(this.x, this.y, this.aim, a.halfArc, reach, c.box())) continue;
+      if (!circleInCone(this.x, this.y, this.aim, a.halfArc, reach, c.circle())) continue;
       if (!lineOfSight(ctx.arena, this.x, this.y, c.x, c.y)) continue; // pas de coup à travers un mur
       ctx.damage(c, a.damage, this);
       const d = Math.hypot(c.x - this.x, c.y - this.y) || 1;
       c.applyImpulse(((c.x - this.x) / d) * a.knockback, ((c.y - this.y) / d) * a.knockback, this);
-      if (!punch) ctx.effects.bolt(this.x, this.y - 10, c.x, c.y, LIGHTNING, 0.14, 2, 10);
+      if (!punch) ctx.effects.bolt(this.x, this.y, c.x, c.y, LIGHTNING, 0.14, 2, 10);
       hit = true;
     }
     if (hit) ctx.shake(punch ? 1.5 : 3, this);
@@ -349,7 +345,7 @@ export class Thor extends Hero {
     this.dash = { t: 0, dir, toHammer, traveled: 0, trail: 0 };
     this.swing = null;
     this.vx = this.vy = 0;
-    ctx.effects.ring(this.x, this.y + this.hh * 0.6, LIGHTNING, 46, 0.25);
+    ctx.effects.ring(this.x, this.y, LIGHTNING, 46, 0.25);
     ctx.effects.bolt(this.x, this.y, this.x - Math.cos(dir) * 50, this.y - Math.sin(dir) * 50, LIGHTNING, 0.2, 2, 10);
   }
 
@@ -374,7 +370,7 @@ export class Thor extends Hero {
       const nx = this.x + (dx * dist) / steps;
       const ny = this.y + (dy * dist) / steps;
       // Murs et bords de lave arrêtent la ruée.
-      if (ctx.arena.boxCollides(nx, ny, this.hw - 0.5, this.hh - 0.5, this.team)) {
+      if (ctx.arena.circleCollides(nx, ny, this.radius - 0.5, this.team)) {
         if (!d.toHammer) this.smash(ctx);
         return this.endDash(ctx);
       }
@@ -392,10 +388,10 @@ export class Thor extends Hero {
     d.trail -= dt;
     if (d.trail <= 0) {
       d.trail = 0.025;
-      ctx.effects.afterimage(this.x, this.y + this.hh * 0.2, this.hw, LIGHTNING_DEEP, 0.22);
+      ctx.effects.afterimage(this.x, this.y, this.radius, LIGHTNING_DEEP, 0.22);
       if (Math.random() < 0.5) {
-        const bx = this.x - dx * this.hw + randRange(-8, 8);
-        const by = this.y - dy * this.hh + randRange(-10, 10);
+        const bx = this.x - dx * this.radius + randRange(-8, 8);
+        const by = this.y - dy * this.radius + randRange(-8, 8);
         ctx.effects.bolt(bx, by, bx - dx * 34 + randRange(-10, 10), by - dy * 34 + randRange(-10, 10), LIGHTNING, 0.12, 1.6, 6);
       }
     }
@@ -408,7 +404,7 @@ export class Thor extends Hero {
   private bumpsEnemy(ctx: GameContext, dx: number, dy: number): boolean {
     for (const c of ctx.targets) {
       if (!c.alive || !hostile(this, c)) continue;
-      if (!boxesOverlap(this.box(), c.box(), 4)) continue;
+      if (!circlesOverlap(this.circle(), c.circle(), 4)) continue;
       const ox = c.x - this.x;
       const oy = c.y - this.y;
       if ((ox * dx + oy * dy) / (Math.hypot(ox, oy) || 1) > 0.2) return true;
@@ -419,14 +415,14 @@ export class Thor extends Hero {
   /** Coup de marteau au bout de la ruée : cône devant Thor, gros recul. */
   private smash(ctx: GameContext): void {
     const dir = this.dash!.dir;
-    const reach = boxExtent(this, Math.cos(dir), Math.sin(dir)) + SMASH.reach;
+    const reach = this.radius + SMASH.reach;
     this.swingSide = this.swingSide === 1 ? -1 : 1;
     this.swing = { t: SWING.anim * 0.35, side: this.swingSide, dir, punch: false };
     ctx.effects.wedge(this.x, this.y, dir, SMASH.halfArc, reach, LIGHTNING, 0.25, this.radius * 0.5);
     let hit = false;
     for (const c of ctx.targets) {
       if (!c.alive || !hostile(this, c)) continue;
-      if (!boxInCone(this.x, this.y, dir, SMASH.halfArc, reach, c.box())) continue;
+      if (!circleInCone(this.x, this.y, dir, SMASH.halfArc, reach, c.circle())) continue;
       if (!lineOfSight(ctx.arena, this.x, this.y, c.x, c.y)) continue;
       ctx.damage(c, SMASH.damage, this);
       c.applyImpulse(Math.cos(dir) * SMASH.knockback, Math.sin(dir) * SMASH.knockback, this);
@@ -443,7 +439,7 @@ export class Thor extends Hero {
     this.hammer = null;
     for (const c of ctx.targets) {
       if (!c.alive || !hostile(this, c)) continue;
-      if (distToBox(this.x, this.y, c.box()) > SMASH.pickupRadiusAoe) continue;
+      if (distToCircle(this.x, this.y, c.circle()) > SMASH.pickupRadiusAoe) continue;
       if (!lineOfSight(ctx.arena, this.x, this.y, c.x, c.y)) continue;
       ctx.damage(c, SMASH.pickupDamage, this);
       const ax = c.x - this.x;
@@ -452,8 +448,8 @@ export class Thor extends Hero {
       c.applyImpulse((ax / n) * SMASH.pickupKnockback, (ay / n) * SMASH.pickupKnockback, this);
       ctx.effects.bolt(this.x, this.y, c.x, c.y, LIGHTNING, 0.25, 2.5, 14);
     }
-    ctx.effects.lightningBurst(this.x, this.y + 6, SMASH.pickupRadiusAoe, LIGHTNING, 9, 0.3);
-    ctx.effects.ring(this.x, this.y + 6, LIGHTNING, SMASH.pickupRadiusAoe, 0.35);
+    ctx.effects.lightningBurst(this.x, this.y, SMASH.pickupRadiusAoe, LIGHTNING, 9, 0.3);
+    ctx.effects.ring(this.x, this.y, LIGHTNING, SMASH.pickupRadiusAoe, 0.35);
     ctx.shake(7, this);
     this.endDash(ctx);
   }
@@ -463,7 +459,7 @@ export class Thor extends Hero {
     this.dash = null;
     this.dashCooldown = SMASH.cooldown;
     this.vx = this.vy = 0;
-    ctx.arena.resolveBox(this, this.hw, this.hh, this.team);
+    ctx.arena.resolveCircle(this, this.radius, this.team);
   }
 
   // ------------------------------------------------------------ Lancer
@@ -487,7 +483,7 @@ export class Thor extends Hero {
       ex = px;
       ey = py;
     }
-    this.hammer = new ThrownHammer(this, this.x, this.y - 8, ex, ey);
+    this.hammer = new ThrownHammer(this, this.x, this.y, ex, ey);
     ctx.spawnObject(this.hammer);
     this.throwAnim = 0.25;
     this.swing = null;
@@ -513,16 +509,12 @@ export class Thor extends Hero {
     const d = this.dash;
     const left = Math.max(0, SMASH.distance - d.traveled);
     ctx.save();
-    ctx.translate(this.x, this.y + this.hh * 0.6);
+    ctx.translate(this.x, this.y);
     ctx.rotate(d.dir);
     ctx.globalAlpha = 0.18;
     ctx.fillStyle = LIGHTNING;
-    ctx.fillRect(0, -this.hw * 0.8, left + SMASH.reach, this.hw * 1.6);
+    ctx.fillRect(0, -this.radius * 0.8, left + SMASH.reach, this.radius * 1.6);
     ctx.restore();
-  }
-
-  protected headRadius(): number {
-    return R;
   }
 
   override draw(ctx: CanvasRenderingContext2D): void {
@@ -769,7 +761,7 @@ export class ThrownHammer implements WorldObject {
       // Retour vers Thor, à travers les murs.
       const o = this.owner;
       const dx = o.x - this.x;
-      const dy = o.y - 6 - this.y;
+      const dy = o.y - this.y;
       const d = Math.hypot(dx, dy);
       const step = THROW.recallSpeed * dt;
       this.spin -= dt * 26;
@@ -782,7 +774,7 @@ export class ThrownHammer implements WorldObject {
       this.y += (dy / d) * step;
       for (const c of ctx.targets) {
         if (!c.alive || !hostile(this, c) || this.hit.has(c)) continue;
-        if (distToBox(this.x, this.y, c.box()) > THROW.recallHitRadius) continue;
+        if (distToCircle(this.x, this.y, c.circle()) > THROW.recallHitRadius) continue;
         this.hit.add(c);
         ctx.damage(c, THROW.recallDamage, o);
         ctx.effects.sparks(c.x, c.y, LIGHTNING, 10, 260);
@@ -799,7 +791,7 @@ export class ThrownHammer implements WorldObject {
     this.y = this.toY;
     for (const c of ctx.targets) {
       if (!c.alive || !hostile(this, c)) continue;
-      const d = distToBox(this.x, this.y, c.box());
+      const d = distToCircle(this.x, this.y, c.circle());
       if (d > THROW.radius) continue;
       if (!lineOfSight(ctx.arena, this.x, this.y, c.x, c.y)) continue;
       const k = d / THROW.radius;
@@ -835,7 +827,7 @@ export class ThrownHammer implements WorldObject {
       ctx.globalAlpha = 0.3;
       ctx.fillStyle = '#000';
       ctx.beginPath();
-      ctx.ellipse(this.x, this.y + 8, 14, 5, 0, 0, TAU);
+      ctx.arc(this.x + 4, this.y + 6, 12, 0, TAU);
       ctx.fill();
     } else {
       // Au sol : lueur électrique
@@ -843,7 +835,7 @@ export class ThrownHammer implements WorldObject {
       ctx.globalAlpha = 0.18 + 0.12 * pulse;
       ctx.fillStyle = LIGHTNING;
       ctx.beginPath();
-      ctx.ellipse(this.x, this.y + 4, 30, 13, 0, 0, TAU);
+      ctx.arc(this.x, this.y, 26, 0, TAU);
       ctx.fill();
     }
     ctx.restore();

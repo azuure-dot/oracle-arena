@@ -2,7 +2,7 @@ import { BOT, COLORS, PLAYER_SPAWN, ZONES } from '../config';
 import { NO_CONTROLS, type HeroControls } from '../core/Controls';
 import type { GameContext } from '../core/GameContext';
 import { WET } from '../game/WetGround';
-import { boxExtent, boxInCone, distToBox, type Box } from '../core/geometry';
+import { type Circle, circleInCone, distToCircle } from '../core/geometry';
 import { damp, degToRad, type Vec2 } from '../core/math';
 import { hostile, type Combatant } from '../entities/Combatant';
 import type { Projectile } from '../entities/Projectile';
@@ -57,7 +57,7 @@ export const RESPAWN_TIME = 3;
 export const QUICK_MELEE = {
   damage: 40,
   cooldown: 1, // s entre deux coups
-  /** Portée au-delà du bord de la hitbox du héros, dans la direction visée. */
+  /** Portée au-delà du bord de la boule du héros, dans la direction visée. */
   reach: 12,
   halfArc: degToRad(50),
   /** Pendant ce temps le héros ne peut pas tirer (coup en cours). */
@@ -94,8 +94,8 @@ export interface WeaponHud {
 export interface HeroStats {
   name: string;
   maxHp: number;
-  /** Hitbox (demi-largeur / demi-hauteur) : dégâts reçus et collisions avec les murs. */
-  hitbox: { hw: number; hh: number };
+  /** Rayon de la boule (tête vue de dessus) : c'est aussi la hitbox (dégâts reçus, collisions avec les murs). */
+  radius: number;
   speed: number; // px/s
   acceleration?: number;
   /** Résistance au recul (2 = reculs deux fois plus courts). */
@@ -119,7 +119,7 @@ export abstract class Hero implements Combatant {
   controls: HeroControls = NO_CONTROLS;
   /** true pour le héros du joueur : aperçus réservés au joueur, couleur de la barre de vie. */
   isLocalPlayer = false;
-  /** Contour du sprite vu par le joueur : bleu = lui / allié, rouge = adversaire. */
+  /** Liseré de la boule vu par le joueur : bleu = lui / allié, rouge = adversaire. */
   outline: string = COLORS.ally;
   /** Nom affiché au-dessus de la barre de vie (bots du Deathmatch). */
   label: string | null = null;
@@ -163,25 +163,21 @@ export abstract class Hero implements Combatant {
   private pushedBy: Hero | null = null;
   private pushCredit = 0;
 
-  /** Hitbox rectangulaire = le dessin du sprite (demi-largeur / demi-hauteur). */
-  readonly hw: number;
-  readonly hh: number;
+  /** Rayon de la boule = hitbox ronde (dégâts reçus + collisions avec les murs). */
+  readonly radius: number;
 
   constructor(readonly stats: HeroStats) {
     this.hp = stats.maxHp;
-    ({ hw: this.hw, hh: this.hh } = stats.hitbox);
+    this.radius = stats.radius;
   }
 
   get name(): string {
     return this.stats.name;
   }
   /** Taille approximative (demi-largeur) pour placer effets et projectiles. */
-  get radius(): number {
-    return this.hw;
-  }
   /** Hitbox courante (dégâts reçus + collisions avec les murs). */
-  box(): Box {
-    return { x: this.x, y: this.y, hw: this.hw, hh: this.hh };
+  circle(): Circle {
+    return { x: this.x, y: this.y, r: this.radius };
   }
   get maxHp(): number {
     return this.stats.maxHp;
@@ -255,7 +251,7 @@ export abstract class Hero implements Combatant {
     this.animTime = this.isWalking() ? this.animTime + dt * this.animRate() : 0;
   }
 
-  /** Le sprite doit-il jouer l'animation de marche ? */
+  /** Le héros marche-t-il (mains qui se balancent, pas...) ? */
   protected isWalking(): boolean {
     return Math.hypot(this.vx, this.vy) > 30 || this.pinned;
   }
@@ -298,7 +294,7 @@ export abstract class Hero implements Combatant {
    * son équipe (alliés d'une Turty).
    */
   protected passiveRegenDelay(ctx: GameContext): number {
-    return ctx.wet.isWetFor(this.x, this.y + this.hh - 4, ctx.time, this.team) ? WET.regenDelay : PASSIVE_REGEN.delay;
+    return ctx.wet.isWetFor(this.x, this.y, ctx.time, this.team) ? WET.regenDelay : PASSIVE_REGEN.delay;
   }
 
   // ---------------------------------------------------------- mêlée rapide
@@ -322,7 +318,7 @@ export abstract class Hero implements Combatant {
     const dx = Math.cos(this.aim);
     const dy = Math.sin(this.aim);
     // Portée mesurée depuis le bord de la hitbox : il faut être collé à la cible.
-    const reach = boxExtent(this, dx, dy) + QUICK_MELEE.reach;
+    const reach = this.radius + QUICK_MELEE.reach;
     ctx.effects.wedge(this.x, this.y, this.aim, QUICK_MELEE.halfArc, reach + 6, '#ffffff', 0.15, reach * 0.55);
 
     // Un seul ennemi touché : le plus proche dans le cône, sans mur entre les deux.
@@ -330,9 +326,9 @@ export abstract class Hero implements Combatant {
     let best = Infinity;
     for (const c of ctx.targets) {
       if (!c.alive || !hostile(this, c)) continue;
-      if (!boxInCone(this.x, this.y, this.aim, QUICK_MELEE.halfArc, reach, c.box())) continue;
+      if (!circleInCone(this.x, this.y, this.aim, QUICK_MELEE.halfArc, reach, c.circle())) continue;
       if (!lineOfSight(ctx.arena, this.x, this.y, c.x, c.y)) continue;
-      const d = distToBox(this.x, this.y, c.box());
+      const d = distToCircle(this.x, this.y, c.circle());
       if (d < best) {
         best = d;
         target = c;
@@ -341,7 +337,7 @@ export abstract class Hero implements Combatant {
     if (!target) return;
     ctx.damage(target, QUICK_MELEE.damage, this);
     target.applyImpulse(dx * QUICK_MELEE.knockback, dy * QUICK_MELEE.knockback, this);
-    ctx.effects.sparks(target.x - dx * target.hw, target.y - dy * target.hh, '#ffffff', 8, 200);
+    ctx.effects.sparks(target.x - dx * target.radius, target.y - dy * target.radius, '#ffffff', 8, 200);
     ctx.shake(2, this);
   }
 
@@ -365,7 +361,7 @@ export abstract class Hero implements Combatant {
     } else {
       this.kvx = this.kvy = 0;
     }
-    ctx.arena.resolveBox(this, this.hw, this.hh, this.team, knocked);
+    ctx.arena.resolveCircle(this, this.radius, this.team, knocked);
   }
 
   applyImpulse(ix: number, iy: number, source?: Hero): void {
@@ -473,19 +469,17 @@ export abstract class Hero implements Combatant {
 
   // ---- rendu : vue de dessus (voir src/render/topdown.ts) ----
 
-  /** Rayon de la tête vue de dessus (unités monde). */
-  protected abstract headRadius(): number;
   /**
    * Dessine le héros dans son propre repère : origine au centre, regard vers +x (le repère
-   * est déjà tourné vers `spriteFacingAngle`). `rot` = cette rotation (pour la lumière fixe).
+   * est déjà tourné vers `facingAngle`). `rot` = cette rotation (pour la lumière fixe).
    */
   protected abstract drawTop(ctx: CanvasRenderingContext2D, rot: number): void;
   /** Direction du regard (la visée par défaut) : tout le personnage tourne avec. */
-  protected spriteFacingAngle(): number {
+  protected facingAngle(): number {
     return this.aim;
   }
   /** Voile coloré sur la tête (Rappel de Flux...). */
-  protected spriteTint(): { color: string; alpha: number } | undefined {
+  protected bodyTint(): { color: string; alpha: number } | undefined {
     return undefined;
   }
 
@@ -504,8 +498,8 @@ export abstract class Hero implements Combatant {
 
   draw(ctx: CanvasRenderingContext2D): void {
     if (this.dead) return;
-    const R = this.headRadius();
-    const face = this.spriteFacingAngle();
+    const R = this.radius;
+    const face = this.facingAngle();
     drawTeamMarker(ctx, this.x, this.y, R, this.outline);
     ctx.save();
     ctx.translate(this.x, this.y);
@@ -514,7 +508,7 @@ export abstract class Hero implements Combatant {
     ctx.lineCap = 'round';
     this.drawTop(ctx, face);
     // Flash des dégâts / voile du Rappel, sur la tête
-    const tint = this.hurtTimer > 0.2 ? { color: '#ffffff', alpha: 0.7 } : this.spriteTint();
+    const tint = this.hurtTimer > 0.2 ? { color: '#ffffff', alpha: 0.7 } : this.bodyTint();
     if (tint) {
       ctx.globalAlpha = tint.alpha;
       ctx.fillStyle = tint.color;
@@ -528,7 +522,9 @@ export abstract class Hero implements Combatant {
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 2;
       ctx.setLineDash([4, 3]);
-      ctx.strokeRect(this.x - this.hw - 4, this.y - this.hh - 4, this.hw * 2 + 8, this.hh * 2 + 8);
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, this.radius + 6, 0, Math.PI * 2);
+      ctx.stroke();
       ctx.setLineDash([]);
     }
   }
@@ -540,8 +536,8 @@ export abstract class Hero implements Combatant {
    * Haut du dessin (y monde) : la barre de vie se place juste au-dessus. Par défaut : le haut
    * de la tête et de ses cheveux (qui débordent un peu).
    */
-  protected spriteTop(): number {
-    return this.y - this.headRadius() * 1.4;
+  protected bodyTop(): number {
+    return this.y - this.radius * 1.4;
   }
 
   /** Barre de vie (+ nom pour les bots) au-dessus du héros. */
@@ -549,13 +545,13 @@ export abstract class Hero implements Combatant {
     if (this.dead) return;
     const low = this.hp / this.maxHp < 0.35;
     const width = this.maxHp > 300 ? 84 : 60;
-    const barBottom = this.spriteTop() - 4;
+    const barBottom = this.bodyTop() - 4;
     let color: string;
     if (this.isLocalPlayer) color = low ? COLORS.hpLow : COLORS.hpPlayer;
     else color = this.outline === COLORS.ally ? COLORS.hpAlly : COLORS.hpEnemy;
     drawHealthBar(ctx, this.x, barBottom, this.hp, this.maxHp, color, width);
     drawBuffIndicators(ctx, this.x + width / 2 + 12, barBottom - 3.5, this.buffs);
-    if (this.stunTimer > 0) drawStunStars(ctx, this.x, this.y - this.hh * 0.4);
+    if (this.stunTimer > 0) drawStunStars(ctx, this.x, this.y - this.radius * 0.4);
     if (this.label) {
       ctx.fillStyle = this.outline;
       ctx.font = 'bold 12px system-ui, sans-serif';

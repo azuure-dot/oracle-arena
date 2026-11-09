@@ -10,10 +10,10 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      // Deux pages : le jeu et la galerie de sprites (chemins relatifs à la racine du projet).
+      // Deux pages : le jeu et la galerie des personnages (chemins relatifs à la racine du projet).
       input: {
         main: 'index.html',
-        sprites: 'sprites.html',
+        galerie: 'galerie.html',
       },
     },
   },

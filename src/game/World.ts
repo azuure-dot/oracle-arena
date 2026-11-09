@@ -1,7 +1,7 @@
 import { COLORS } from '../config';
 import type { Camera } from '../core/Camera';
 import type { DamageCause, GameContext } from '../core/GameContext';
-import { circleIntersectsBox } from '../core/geometry';
+import { circleTouches } from '../core/geometry';
 import { clamp, type Vec2 } from '../core/math';
 import { Effects } from '../effects/Effects';
 import type { Bot, BotContext } from '../entities/Bot';
@@ -12,7 +12,7 @@ import { RESPAWN_TIME, type Hero } from '../heroes/Hero';
 import type { Arena } from '../world/Arena';
 import type { Fog } from '../world/Fog';
 import { WetGround } from './WetGround';
-import { canSeeBox, computeVisibility, inVisionRange, lineOfSight, type VisPoint } from '../world/Visibility';
+import { canSeeCircle, computeVisibility, inVisionRange, lineOfSight, type VisPoint } from '../world/Visibility';
 
 export interface DamageEvent {
   target: Combatant;
@@ -141,7 +141,7 @@ export class World {
     const killed = wasAlive && !target.alive;
     // Chiffres de dégâts : seulement ceux infligés par le joueur (lisibilité).
     if (source && source === this.player && source !== target) {
-      this.effects.damageNumber(target.x, target.y - target.hh, dealt);
+      this.effects.damageNumber(target.x, target.y - target.radius, dealt);
     }
     if (killed) {
       this.effects.sparks(target.x, target.y, COLORS.enemy, 26, 320);
@@ -201,7 +201,7 @@ export class World {
   private hitTargets(p: Projectile): void {
     for (const c of this.targetList) {
       if (!c.alive || !hostile(c, p)) continue;
-      if (!circleIntersectsBox(p.x, p.y, p.radius, c.box())) continue;
+      if (!circleTouches(p.x, p.y, p.radius, c.circle())) continue;
       if (p.pierce) {
         if (p.hits.has(c)) continue;
         p.hits.add(c);
@@ -226,7 +226,7 @@ export class World {
     }
     this.visibility = computeVisibility(eye.x, eye.y, this.arena);
     const sees = (c: Combatant) =>
-      inVisionRange(eye.x, eye.y, c.x, c.y, c.hw, c.hh) && canSeeBox(this.arena, eye.x, eye.y, c.box());
+      inVisionRange(eye.x, eye.y, c.x, c.y, c.radius) && canSeeCircle(this.arena, eye.x, eye.y, c.circle());
     for (const b of this.bots) b.visible = sees(b);
     // Les alliés restent toujours affichés (comme leurs contours dans un hero shooter).
     for (const h of this.heroes) h.visible = h === eye || (h.alive && (!hostile(h, eye) || sees(h)));
@@ -305,11 +305,15 @@ export class World {
     ctx.save();
     ctx.lineWidth = 1.5;
     ctx.strokeStyle = '#00ff9c';
-    const boxes = [
-      ...heroes.filter((h) => h.alive).map((h) => h.box()),
-      ...this.bots.filter((b) => b.visible && b.alive).map((b) => b.box()),
+    const circles = [
+      ...heroes.filter((h) => h.alive).map((h) => h.circle()),
+      ...this.bots.filter((b) => b.visible && b.alive).map((b) => b.circle()),
     ];
-    for (const b of boxes) ctx.strokeRect(b.x - b.hw, b.y - b.hh, b.hw * 2, b.hh * 2);
+    for (const c of circles) {
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, c.r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
     ctx.restore();
   }
 }

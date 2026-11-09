@@ -7,7 +7,7 @@ import { pathClear, type Mover } from './steering';
  * Graphe de navigation léger pour les cartes à salles (Contrôle).
  * - Les nœuds sont placés à la main dans la carte (portes, couloirs, salles).
  * - Les liaisons sont calculées automatiquement : deux nœuds sont reliés si la plus
- *   grosse hitbox (Rempart) peut aller de l'un à l'autre en ligne droite.
+ *   grosse boule (Rempart) peut aller de l'un à l'autre en ligne droite.
  * - route() : Dijkstra sur une vingtaine de nœuds, puis le bot "coupe" les virages
  *   dès qu'il voit plus loin sur le chemin (voir HeroBrain.navigate).
  */
@@ -17,14 +17,14 @@ export class NavGraph {
   constructor(
     private readonly arena: Arena,
     readonly nodes: readonly Vec2[],
-    probe = { hw: 31, hh: 33 },
+    probe = { radius: 31 },
   ) {
     this.adj = nodes.map(() => []);
     for (let i = 0; i < nodes.length; i++) {
       for (let j = i + 1; j < nodes.length; j++) {
         const a = nodes[i];
         const b = nodes[j];
-        if (!pathClear(arena, { x: a.x, y: a.y, hw: probe.hw, hh: probe.hh }, b.x, b.y)) continue;
+        if (!pathClear(arena, { x: a.x, y: a.y, radius: probe.radius }, b.x, b.y)) continue;
         const cost = Math.hypot(b.x - a.x, b.y - a.y);
         this.adj[i].push({ to: j, cost });
         this.adj[j].push({ to: i, cost });
@@ -86,7 +86,7 @@ export class NavGraph {
       const p = this.nodes[i];
       const total = dist[i] + Math.hypot(to.x - p.x, to.y - p.y);
       if (total >= bestCost) continue;
-      if (!pathClear(arena, { x: p.x, y: p.y, hw: from.hw, hh: from.hh, team: from.team }, to.x, to.y)) continue;
+      if (!pathClear(arena, { x: p.x, y: p.y, radius: from.radius, team: from.team }, to.x, to.y)) continue;
       best = i;
       bestCost = total;
     }

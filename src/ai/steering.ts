@@ -3,7 +3,7 @@ import type { Team } from '../entities/Team';
 import type { Arena } from '../world/Arena';
 
 /**
- * Déplacement des bots SANS pathfinding : de simples "raycasts" de hitbox.
+ * Déplacement des bots SANS pathfinding : de simples "raycasts" de leur boule.
  * On teste 16 directions autour de la direction voulue ; chacune est notée
  * selon (1) son accord avec la direction voulue et (2) la distance libre devant
  * elle avant un mur ou une zone de dégâts. Le bot contourne ainsi les obstacles.
@@ -14,15 +14,15 @@ const DIRECTIONS = 16;
 export interface Mover {
   x: number;
   y: number;
-  hw: number;
-  hh: number;
+  /** Rayon de la boule (hitbox). */
+  radius: number;
   /** Équipe : les zones de spawn adverses sont infranchissables. */
   team?: Team;
 }
 
-/** Une boîte posée en (x, y) est-elle bloquée (mur, bord, spawn adverse, zone de dégâts) ? */
-function blocked(arena: Arena, x: number, y: number, hw: number, hh: number, team?: Team): boolean {
-  if (arena.boxCollides(x, y, hw, hh, team)) return true;
+/** Une boule posée en (x, y) est-elle bloquée (mur, bord, spawn adverse, zone de dégâts) ? */
+function blocked(arena: Arena, x: number, y: number, r: number, team?: Team): boolean {
+  if (arena.circleCollides(x, y, r, team)) return true;
   return arena.zoneAt(x, y)?.kind === 'hazard';
 }
 
@@ -31,12 +31,12 @@ export function clearance(arena: Arena, m: Mover, dx: number, dy: number, dist: 
   const steps = Math.max(2, Math.ceil(dist / 12));
   for (let s = 1; s <= steps; s++) {
     const d = (dist * s) / steps;
-    if (blocked(arena, m.x + dx * d, m.y + dy * d, m.hw - 1, m.hh - 1, m.team)) return (s - 1) / steps;
+    if (blocked(arena, m.x + dx * d, m.y + dy * d, m.radius - 1, m.team)) return (s - 1) / steps;
   }
   return 1;
 }
 
-/** Le trajet en ligne droite de la hitbox jusqu'au point est-il entièrement libre ? */
+/** Le trajet en ligne droite de la boule jusqu'au point est-il entièrement libre ? */
 export function pathClear(arena: Arena, m: Mover, tx: number, ty: number): boolean {
   const dx = tx - m.x;
   const dy = ty - m.y;
@@ -78,7 +78,7 @@ export function randomFreePoint(arena: Arena, m: Mover, margin = 60): Vec2 {
   for (let i = 0; i < 40; i++) {
     const x = margin + Math.random() * (arena.width - margin * 2);
     const y = margin + Math.random() * (arena.height - margin * 2);
-    if (!blocked(arena, x, y, m.hw + 20, m.hh + 20, m.team)) return { x, y };
+    if (!blocked(arena, x, y, m.radius + 20, m.team)) return { x, y };
   }
   return { x: arena.width / 2, y: arena.height / 2 };
 }

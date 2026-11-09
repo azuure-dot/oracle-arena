@@ -31,21 +31,6 @@ export interface HeroEntry {
 /** Héros jouables, triés par rôle (Tank → Dégâts → Soutien). Touches 1/2/3 = cet ordre. */
 export const HEROES: HeroEntry[] = [
   {
-    id: 'rempart',
-    name: 'Rempart',
-    role: 'tank',
-    hp: 600,
-    color: '#a9b8c9',
-    tagline: 'rempart.tagline',
-    abilities: [
-      { input: 'primary', name: 'rempart.weapon', desc: 'rempart.weapon.desc' },
-      { input: 'secondary', name: 'rempart.shield', desc: 'rempart.shield.desc' },
-      { input: 'ability1', name: 'rempart.fire', desc: 'rempart.fire.desc' },
-      { input: 'ability2', name: 'rempart.charge', desc: 'rempart.charge.desc' },
-    ],
-    create: () => new Rempart(),
-  },
-  {
     id: 'thor',
     name: 'Thor',
     role: 'tank',
@@ -92,6 +77,43 @@ export const HEROES: HeroEntry[] = [
     create: () => new Turty(),
   },
   {
+    id: 'skater',
+    name: 'Skater',
+    role: 'support',
+    hp: 200,
+    color: '#c7a3ff',
+    tagline: 'skater.tagline',
+    abilities: [
+      { input: 'primary', name: 'skater.weapon', desc: 'skater.weapon.desc' },
+      { input: 'secondary', name: 'skater.gear', desc: 'skater.gear.desc' },
+      { input: 'ability1', name: 'skater.trick', desc: 'skater.trick.desc' },
+      { input: 'ability2', name: 'skater.mode', desc: 'skater.mode.desc' },
+    ],
+    create: () => new Skater(),
+  },
+];
+
+/**
+ * Héros retirés de la sélection (plus jouables, ni par le joueur ni par les bots), gardés
+ * dans le code au cas où : pour en remettre un, déplacer son entrée dans HEROES.
+ */
+export const RETIRED_HEROES: HeroEntry[] = [
+  {
+    id: 'rempart',
+    name: 'Rempart',
+    role: 'tank',
+    hp: 600,
+    color: '#a9b8c9',
+    tagline: 'rempart.tagline',
+    abilities: [
+      { input: 'primary', name: 'rempart.weapon', desc: 'rempart.weapon.desc' },
+      { input: 'secondary', name: 'rempart.shield', desc: 'rempart.shield.desc' },
+      { input: 'ability1', name: 'rempart.fire', desc: 'rempart.fire.desc' },
+      { input: 'ability2', name: 'rempart.charge', desc: 'rempart.charge.desc' },
+    ],
+    create: () => new Rempart(),
+  },
+  {
     id: 'tempo',
     name: 'Tempo',
     role: 'support',
@@ -106,20 +128,5 @@ export const HEROES: HeroEntry[] = [
       { input: 'melee', name: 'melee.name', desc: 'melee.desc' },
     ],
     create: () => new Tempo(),
-  },
-  {
-    id: 'skater',
-    name: 'Skater',
-    role: 'support',
-    hp: 200,
-    color: '#c7a3ff',
-    tagline: 'skater.tagline',
-    abilities: [
-      { input: 'primary', name: 'skater.weapon', desc: 'skater.weapon.desc' },
-      { input: 'secondary', name: 'skater.gear', desc: 'skater.gear.desc' },
-      { input: 'ability1', name: 'skater.trick', desc: 'skater.trick.desc' },
-      { input: 'ability2', name: 'skater.mode', desc: 'skater.mode.desc' },
-    ],
-    create: () => new Skater(),
   },
 ];

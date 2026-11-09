@@ -12,7 +12,7 @@ npm run dev
 
 Puis ouvrir http://localhost:5173.
 
-Galerie des personnages (pour travailler les designs) : http://localhost:5173/sprites.html
+Galerie des personnages (pour travailler les designs) : http://localhost:5173/galerie.html
 
 | Commande            | Rôle                                          |
 | ------------------- | --------------------------------------------- |
@@ -24,7 +24,7 @@ Galerie des personnages (pour travailler les designs) : http://localhost:5173/sp
 ## Version en ligne (GitHub Pages)
 
 À chaque push sur `main`, le workflow `.github/workflows/deploy.yml` compile le jeu et le publie sur
-https://azuure-dot.github.io/web-hero-shooter/ (galerie : `…/sprites.html`). Le build utilise des chemins
+https://azuure-dot.github.io/web-hero-shooter/ (galerie : `…/galerie.html`). Le build utilise des chemins
 relatifs (`base: './'` dans `vite.config.ts`), il marche donc dans ce sous-dossier.
 
 À faire une fois sur GitHub : Settings → Pages → Source : **GitHub Actions**. GitHub Pages demande un dépôt
@@ -88,18 +88,19 @@ Départ de partie :
 
 Commun à tous les modes :
 
-- **Soin passif** : après 5 s sans subir de dégâts, chaque héros récupère 15 PV/s (0,5 s sur l'eau de Turty, voir plus bas). Il ne se cumule pas avec les autres soins (aura de Skater ou de Tempo, zone de soin) : seul le plus fort des deux s'applique.
+- **Soin passif** : après 5 s sans subir de dégâts, chaque héros récupère 15 PV/s (0,5 s sur l'eau de Turty, voir plus bas). Il ne se cumule pas avec les autres soins (aura du Skater, zone de soin) : seul le plus fort des deux s'applique.
 - **Vitesse de marche** : celle de chaque héros est réduite de 30 % puis encore de 15 % (×0,6 au total,
   `MOVE_SPEED_SCALE` dans `src/heroes/Hero.ts`) ;
   les compétences de déplacement sont ralenties d'autant (Charge, course du trick, carapace ; distance du Transfert).
 - **Bots héros** : ils infligent 30 % de dégâts en moins que le joueur.
-- **Charge de Rempart contre un mur** : 250 dégâts et 2 s d'étourdissement pour la cible.
-  Rempart lui-même reste bloqué 0,5 s après le plaquage.
-- **6 héros** : Rempart (tank), Thor (tank), Flux (dégâts), Turty (dégâts), Tempo (soutien), Skater (soutien).
-- **Thor** : tank de mêlée au marteau de foudre, pensé pour remplacer Rempart (600 PV, même vitesse, même poids).
-  - Clic G : coup de marteau en arc (75 dégâts, même portée que Rempart), de droite à gauche puis de gauche
+- **4 héros** : Thor (tank), Flux (dégâts), Turty (dégâts), Skater (soutien).
+  Rempart (tank) et Tempo (soutien) sont retirés de la sélection : ni le joueur ni les bots ne les jouent plus,
+  mais leur code reste en place (`RETIRED_HEROES` dans `src/heroes/registry.ts` : déplacer une entrée dans
+  `HEROES` pour le remettre).
+- **Thor** : tank de mêlée au marteau de foudre (600 PV).
+  - Clic G : coup de marteau en arc (75 dégâts), de droite à gauche puis de gauche
     à droite au coup suivant. Marteau lancé : petits coups de poing (25 dégâts).
-  - Clic D maintenu : mur de foudre droit, face à Thor (1200 PV, bloque les tirs ennemis, ralentit comme le bouclier de Rempart).
+  - Clic D maintenu : mur de foudre droit, face à Thor (1200 PV, bloque les tirs ennemis, ralentit Thor de 30 %).
   - Espace : ruée en avant sur la distance du Transfert de Flux, coup de marteau au bout ou sur le premier ennemi
     percuté (70 dégâts, gros recul). Marteau lancé : il fonce vers le marteau (même s'il revient), le ramasse
     et déclenche une décharge de 70 dégâts autour de lui. Recharge 6 s.
@@ -119,7 +120,7 @@ Commun à tous les modes :
     - Un trick dans les 2 s qui suivent le précédent vise forcément quelqu'un d'autre. Personne à portée : il se pousse
       en avant sur sa planche (direction du déplacement, sinon de la visée) sur la distance du Transfert de Flux,
       en un quart de seconde, et garde son coup de boost.
-  - Maj : mode d'aura Vitesse / Soin. L'aura bénéficie au Skater et à ses alliés proches (comme Tempo) : active de base, puis 3 paliers selon les tricks enchaînés.
+  - Maj : mode d'aura Vitesse / Soin. L'aura bénéficie au Skater et à ses alliés proches : active de base, puis 3 paliers selon les tricks enchaînés.
     - Vitesse des alliés : +8 % de base, puis +11 / +16 / +22 %. Soin : 9,6 PV/s de base, puis 12 / 15,6 / 21,6 PV/s.
     - Vitesse du Skater lui-même avec les paliers de tricks sur des ennemis : +15 / +26 / +37 %.
 - **Turty** : deux formes, humaine (vitesse moyenne) pour se battre, tortue pour se déplacer.
@@ -128,6 +129,9 @@ Commun à tous les modes :
     fines près de Turty et de plus en plus larges au loin : en rafale, l'eau forme un V ouvert devant elle.
     Les gouttes touchent aussi loin que le pistolet de Flux, mais ne mouillent le sol que jusqu'à 340 px
     (2 × l'aura du Skater). Le sol reste mouillé 15 s.
+    Rendu des flaques : contour calculé 10 fois par seconde (« marching squares » sur un niveau d'eau adouci entre
+    cases voisines) puis dessiné en vectoriel : bords arrondis et nets à tout zoom, liseré clair, quelques reflets ;
+    une flaque qui sèche rétrécit avant de disparaître (`src/game/WetGround.ts`).
   - Sur l'eau (dans les deux formes), son soin passif démarre après 0,5 s sans dégâts au lieu de 5 s.
     Ses alliés aussi, sur l'eau de leur équipe : chaque case retient l'équipe qui l'a mouillée en dernier.
   - Clic D maintenu : forme tortue (relâché : forme humaine). En tortue : ×0,5 sur le sec, ×1,8 sur l'eau ;
@@ -140,16 +144,20 @@ Commun à tous les modes :
   - la caméra est juste au-dessus des têtes : chaque héros est une boule (sa tête vue d'en haut) qu'on reconnaît
     à ses cheveux ou à son couvre-chef, avec deux mains rondes qui tiennent l'arme et l'animent (recul au tir,
     arcs de marteau, coups de poing, lancers) ; tout le personnage tourne avec la souris ;
-  - Rempart : casque de chevalier, grand marteau · Thor : cheveux bleus, barbe tressée, mains bandées, marteau
-    à runes lumineuses · Flux : cheveux roux en pointes, lunettes, deux blasters · Tempo : casque audio aux couleurs
-    de l'aura, canon sonique · Turty : afro bouclée et bandana orange, peau verte, carapace à autocollants sur le dos,
+  - Thor : cheveux bleus, barbe tressée, mains bandées, marteau
+    à runes lumineuses · Flux : cheveux roux en pointes, lunettes, deux blasters · Turty : afro bouclée et bandana orange, peau verte, carapace à autocollants sur le dos,
     pistolet à eau-bouteille ; en tortue, carapace ronde avec tête et pattes · Skater : bonnet violet à pompon (qui
     cache ses cheveux), casque audio au cou, planche (qui tourne pendant les tricks, et sert d'arme à pied) ;
   - liseré aux couleurs de l'équipe autour de la tête, ombre au sol décalée, lumière fixe à l'écran ;
+  - **hitbox ronde** : la boule dessinée est exactement la hitbox (dégâts reçus et collisions avec les murs, qui font
+    glisser le long des parois et contourner les coins). Rayons : Thor 23, Turty 15,
+    Skater 15, Flux 13 (petite boule : fragile mais difficile à toucher) ; robots 17, tourelles 18 ;
+  - les robots d'entraînement (dôme d'acier, visière aux couleurs de l'équipe) et les tourelles (socle boulonné,
+    canon double) sont dessinés de la même façon, comme les projectiles (équipement du Skater, bombe à eau) ;
   - chaque tête, arme et main est dessinée une seule fois en haute résolution puis recopiée (≈ 0,1 ms par héros
     et par image) ;
-  - les robots d'entraînement, tourelles et projectiles (équipement du Skater, bombe de Turty) sont encore en pixel art ;
-  - galerie : `sprites.html` (chaque héros au repos, en action, et une version animée qui tourne et marche) ;
+  - galerie : `galerie.html` (chaque héros au repos, en action, et une version animée qui tourne et marche ;
+    robots, tourelles, projectiles) ;
     croquis de référence dans `concept/` (Turty, Skater, Thor).
 - **Ligne de vue** : les murs bloquent la vision (raycasting + brouillard de guerre).
   L'ombre des murs est calculée en quart de résolution puis agrandie avec lissage : bords doux sans filtre
@@ -183,10 +191,8 @@ Elle est symétrique par rotation de 180°, comme Sanctuaire.
     par des garde-corps ; elles sont ouvertes côté point.
 - **La lave** :
   - Impossible d'y entrer en marchant : on s'arrête au bord, marqué d'une bande jaune et noire.
-  - Un recul (Onde de choc, marteau, mêlée, bousculade de Charge) peut y projeter un héros.
-    Il meurt dès que son centre passe au-dessus de la lave.
-  - Une Charge de Rempart qui épingle un ennemi le lâche au-dessus de la fosse ;
-    Rempart, lui, s'arrête au bord.
+  - Un recul (marteau et ruée de Thor, bombe à eau, coup de planche, mêlée) peut y projeter un héros.
+    Il meurt dès que son centre passe au-dessus de la lave. Thor, lui, s'arrête au bord pendant sa ruée.
   - La chute est créditée au dernier héros qui a poussé la victime (dans les 4 s).
     Le fil des éliminations affiche « LAVE ».
 - **Rendu pixel art** (`src/world/themes/volcano.ts`) : 1 pixel du décor = 4 unités.
@@ -217,7 +223,7 @@ Un bot joue donc exactement les mêmes héros que le joueur, avec les mêmes rè
 L'IA (`src/ai/`) est une machine à états simple :
 
 - **ROAM** : patrouille vers des points aléatoires. Les murs et la zone de dégâts sont
-  évités par raycasts de hitbox (pas de pathfinding). Un bot coincé repart dans une direction libre.
+  évités par raycasts de leur boule (pas de pathfinding). Un bot coincé repart dans une direction libre.
 - **ATTACK** : dès qu'il voit un adversaire (même test de vue que le joueur) ou qu'il est touché.
   - Il garde la distance idéale de son héros et se déplace en latéral.
   - Il vise avec un temps de réaction et une rotation limitée.
@@ -238,9 +244,7 @@ Comportements par héros :
 | Héros   | Comportement |
 | ------- | ------------ |
 | Flux    | Distance moyenne, tire dès qu'il a la cible en vue. Sous 40 % de PV : Rappel, sinon Transfert pour fuir. Esquive parfois en Transfert latéral. |
-| Rempart | Fonce au corps à corps. Lève le bouclier s'il est touché de loin. Onde de feu à distance. Charge si la ligne est dégagée. |
 | Thor    | Fonce au corps à corps. Mur de foudre s'il est touché de loin. Lance son marteau à mi-distance, puis fonce le ramasser s'il est tombé près de la cible, sinon le rappelle. Ruée pour coller une cible un peu éloignée. |
-| Tempo   | Aura de Vitesse en patrouille, de Soin dès qu'il perd des PV. Tir continu, Onde de choc au contact, Surrégime quand il est en danger. |
 
 ## Commandes
 
@@ -251,7 +255,7 @@ Comportements par héros :
 | Clic gauche       | Arme principale                     |
 | Clic droit        | Compétence 1                        |
 | Espace / Maj      | Compétences 2 et 3                  |
-| Clic molette      | Mêlée rapide (sauf Rempart et Thor) |
+| Clic molette      | Mêlée rapide (sauf Thor et Skater)  |
 | R                 | Recharger                           |
 | H                 | Aide                                |
 | X                 | Afficher les hitbox                 |
@@ -274,7 +278,6 @@ src/
   core/            entrées, commandes joueur / IA, caméra, maths
   heroes/          classe Hero + un fichier par héros + registre
   render/          personnages vus de dessus : têtes, cheveux, mains et armes (topdown.ts)
-  sprites/         pixel art restant : robots d'entraînement, tourelles, projectiles
   entities/        bots du champ de tir, projectiles, interface Combatant
   world/           cartes (maps.ts), arène, ligne de vue, brouillard, thèmes pixel art (themes/)
   ui/              HUD, HUD du Deathmatch, écrans HTML (menus, sélection, scores)

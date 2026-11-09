@@ -1,8 +1,9 @@
 import { COLORS } from '../config';
+import { cached, skaterGear } from '../render/topdown';
 import type { Hero } from '../heroes/Hero';
 import type { Team } from './Team';
 
-export type ProjectileStyle = 'bullet' | 'sonic' | 'fire' | 'enemy' | 'sprite' | 'water';
+export type ProjectileStyle = 'bullet' | 'sonic' | 'fire' | 'enemy' | 'gear' | 'water';
 
 export interface ProjectileSpec {
   x: number;
@@ -18,8 +19,8 @@ export interface ProjectileSpec {
   /** Traverse les cibles (chacune n'est touchée qu'une fois). S'arrête quand même sur les murs. */
   pierce?: boolean;
   style?: ProjectileStyle;
-  /** Style 'sprite' : image pixel art (contour compris), taille d'un pixel, rotation (rad/px parcouru). */
-  sprite?: { img: HTMLCanvasElement; px: number; spin: number };
+  /** Style 'gear' : pièce d'équipement du Skater (0 casque, 1 genouillère, 2 coudière, 3 protège-poignet), rotation (rad/px parcouru). */
+  gear?: { index: number; spin: number };
   /** Appelé après chaque déplacement (ex. goutte d'eau qui mouille le sol sur son passage). */
   onUpdate?: (p: Projectile) => void;
   /** Appelé une fois, quand le projectile s'arrête (mur, cible, bouclier, portée). */
@@ -38,7 +39,7 @@ export class Projectile {
   readonly radius: number;
   readonly pierce: boolean;
   readonly style: ProjectileStyle;
-  readonly sprite: ProjectileSpec['sprite'] | null;
+  readonly gear: ProjectileSpec['gear'] | null;
   readonly onUpdate: ProjectileSpec['onUpdate'];
   readonly onEnd: ProjectileSpec['onEnd'];
   /** Cibles déjà touchées (projectiles perforants). */
@@ -58,7 +59,7 @@ export class Projectile {
     this.radius = spec.radius ?? 2;
     this.pierce = spec.pierce ?? false;
     this.style = spec.style ?? 'bullet';
-    this.sprite = spec.sprite ?? null;
+    this.gear = spec.gear ?? null;
     this.onUpdate = spec.onUpdate;
     this.onEnd = spec.onEnd;
   }
@@ -84,38 +85,42 @@ export class Projectile {
     const dy = this.vy / speed;
 
     switch (this.style) {
-      case 'sprite': {
-        const s = this.sprite;
-        if (!s) break;
-        // Traînée légère puis l'objet qui tourne sur lui-même
+      case 'gear': {
+        const g = this.gear;
+        if (!g) break;
+        // Traînée légère puis la pièce d'équipement qui tourne sur elle-même
         ctx.fillStyle = 'rgba(255,255,255,0.12)';
         ctx.beginPath();
         ctx.arc(this.x - dx * 12, this.y - dy * 12, this.radius * 0.8, 0, Math.PI * 2);
         ctx.fill();
         ctx.save();
-        ctx.imageSmoothingEnabled = false;
         ctx.translate(this.x, this.y);
-        ctx.rotate(this.traveled * s.spin);
-        ctx.drawImage(s.img, (-s.img.width * s.px) / 2, (-s.img.height * s.px) / 2, s.img.width * s.px, s.img.height * s.px);
+        ctx.rotate(this.traveled * g.spin);
+        const team = this.owner?.outline ?? COLORS.enemy;
+        cached(ctx, `gear.${g.index}.${team}`, this.radius * 1.6, (c) => skaterGear(c, g.index, this.radius, team));
         ctx.restore();
         break;
       }
       case 'water': {
-        // Goutte d'eau en gros pixels : traînée de gouttelettes, puis la goutte (reflet clair).
+        // Goutte d'eau : traînée de gouttelettes, puis la goutte (contour, reflet clair).
         const r = this.radius;
         ctx.fillStyle = 'rgba(64,196,222,0.45)';
         for (let i = 1; i <= 3; i++) {
-          const s = r * (1 - i * 0.22);
-          ctx.fillRect(Math.round(this.x - dx * i * 7 - s / 2), Math.round(this.y - dy * i * 7 - s / 2), s, s);
+          ctx.beginPath();
+          ctx.arc(this.x - dx * i * 7, this.y - dy * i * 7, r * (1 - i * 0.22), 0, Math.PI * 2);
+          ctx.fill();
         }
-        ctx.fillStyle = '#123a4a';
-        ctx.fillRect(Math.round(this.x - r - 1), Math.round(this.y - r + 1), r * 2 + 2, r * 2 - 2);
-        ctx.fillRect(Math.round(this.x - r + 1), Math.round(this.y - r - 1), r * 2 - 2, r * 2 + 2);
         ctx.fillStyle = '#3fc4de';
-        ctx.fillRect(Math.round(this.x - r), Math.round(this.y - r + 1), r * 2, r * 2 - 2);
-        ctx.fillRect(Math.round(this.x - r + 1), Math.round(this.y - r), r * 2 - 2, r * 2);
+        ctx.strokeStyle = '#123a4a';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
         ctx.fillStyle = '#c9f6fb';
-        ctx.fillRect(Math.round(this.x - r * 0.5), Math.round(this.y - r * 0.6), r * 0.6, r * 0.5);
+        ctx.beginPath();
+        ctx.arc(this.x - r * 0.3, this.y - r * 0.3, r * 0.35, 0, Math.PI * 2);
+        ctx.fill();
         break;
       }
       case 'bullet': {

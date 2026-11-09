@@ -677,3 +677,47 @@ export function drawTeamMarker(ctx: CanvasRenderingContext2D, x: number, y: numb
   ctx.stroke();
   ctx.restore();
 }
+
+/**
+ * Pièces d'équipement lancées par le Skater, vues de dessus (rayon `r`) : 0 casque violet,
+ * 1 genouillère, 2 coudière, 3 protège-poignet ; liseré aux couleurs de l'équipe.
+ */
+export function skaterGear(ctx: CanvasRenderingContext2D, index: number, r: number, team: string): void {
+  ctx.strokeStyle = team;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(0, 0, r * 1.25, 0, TAU);
+  ctx.stroke();
+  if (index === 0) {
+    // Casque : dôme violet, bandes blanches, aérations
+    inked(ctx, '#7b4fd6', () => ctx.arc(0, 0, r, 0, TAU), 2);
+    ctx.strokeStyle = '#f2f2f2';
+    ctx.lineWidth = r * 0.18;
+    ctx.beginPath();
+    ctx.moveTo(-r * 0.8, -r * 0.2);
+    ctx.lineTo(r * 0.8, -r * 0.2);
+    ctx.stroke();
+    ctx.fillStyle = '#2a1a5c';
+    for (const x of [-0.45, 0, 0.45]) {
+      ctx.beginPath();
+      ctx.ellipse(x * r, r * 0.35, r * 0.12, r * 0.2, 0, 0, TAU);
+      ctx.fill();
+    }
+  } else if (index === 3) {
+    // Protège-poignet : anneau noir avec sangle grise
+    inked(ctx, '#2a2a30', () => {
+      ctx.arc(0, 0, r * 0.95, 0, TAU);
+      ctx.arc(0, 0, r * 0.5, 0, TAU, true);
+    }, 2);
+    inked(ctx, '#9aa6b4', () => ctx.roundRect(-r * 0.2, -r * 1.0, r * 0.4, r * 0.5, r * 0.1), 1.4);
+  } else {
+    // Genouillère (grande) / coudière (petite) : coque grise sur un rembourrage noir
+    const k = index === 1 ? 1 : 0.8;
+    inked(ctx, '#2a2a30', () => ctx.ellipse(0, 0, r * k, r * 0.85 * k, 0, 0, TAU), 2);
+    inked(ctx, '#aab4c2', () => ctx.ellipse(0, 0, r * 0.6 * k, r * 0.5 * k, 0, 0, TAU), 1.6);
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.beginPath();
+    ctx.ellipse(-r * 0.15 * k, -r * 0.15 * k, r * 0.2 * k, r * 0.12 * k, -0.5, 0, TAU);
+    ctx.fill();
+  }
+}

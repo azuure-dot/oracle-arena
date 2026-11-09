@@ -1,19 +1,18 @@
 import { COLORS } from '../config';
 import type { GameContext } from '../core/GameContext';
-import { boxesOverlap, boxInCone, distToBox } from '../core/geometry';
+import { circleInCone, circlesOverlap, distToCircle } from '../core/geometry';
 import { degToRad, TAU } from '../core/math';
 import { hostile, type Combatant } from '../entities/Combatant';
 import { Projectile } from '../entities/Projectile';
 import { t, type TKey } from '../i18n';
-import { gearImage, GEAR as GEAR_GRIDS } from '../sprites/skater';
 import { cached, deck, drawTeamMarker, hand, head, inked, skaterBeanie, skaterHeadphones } from '../render/topdown';
 import { addBuff } from '../ui/healthBar';
 import { lineOfSight } from '../world/Visibility';
 import { BLINK } from './Flux';
 import { Hero, MOVE_SPEED_SCALE, type AbilitySlot, type WeaponHud } from './Hero';
 
-/** Rayon de la tête vue de dessus, peau, bracelets (d'après son croquis). */
-const R = 14;
+/** Rayon de la boule (= hitbox), peau, bracelets (d'après son croquis). */
+const R = 15;
 const SKIN = '#f1c9a5';
 const BAND = '#2a2a30';
 /** Planche de skate (longueur, largeur). */
@@ -23,7 +22,6 @@ const DECK = { L: 52, W: 15 };
 function skaterDeck(ctx: CanvasRenderingContext2D, side: 'top' | 'bottom'): void {
   cached(ctx, `skater.deck.${side}`, DECK.L * 0.55, (c) => deck(c, DECK.L, DECK.W, side));
 }
-const HITBOX = { hw: 10, hh: 21 };
 
 export const SKATER = {
   /** Sur la planche : un peu plus rapide que les autres héros (330). */
@@ -195,7 +193,7 @@ export class Skater extends Hero {
     super({
       name: 'Skater',
       maxHp: 200,
-      hitbox: HITBOX,
+      radius: R,
       speed: SKATER.speed,
       acceleration: 12, // glisse un peu plus que les autres : il roule
       color: '#c7a3ff',
@@ -280,7 +278,7 @@ export class Skater extends Hero {
       this.trailTimer -= dt;
       if (this.trailTimer <= 0) {
         this.trailTimer = 0.06 - this.speedStacks * 0.01;
-        ctx.effects.afterimage(this.x, this.y + this.hh * 0.5, this.hw, COLORS.auraSpeed, 0.25);
+        ctx.effects.afterimage(this.x, this.y, this.radius, COLORS.auraSpeed, 0.25);
       }
     }
   }
@@ -293,7 +291,7 @@ export class Skater extends Hero {
     const tier = this.auraTier;
     for (const c of ctx.targets) {
       if (!c.alive || hostile(this, c)) continue;
-      if (distToBox(this.x, this.y, c.box()) > SKATE_AURA.radius) continue;
+      if (distToCircle(this.x, this.y, c.circle()) > SKATE_AURA.radius) continue;
       addBuff(c, this.mode);
       if (this.mode === 'heal') c.heal(SKATE_AURA.heal[tier] * dt);
       else c.auraSpeedMul = Math.max(c.auraSpeedMul, 1 + SKATE_AURA.speedBonus[tier]);
@@ -355,13 +353,13 @@ export class Skater extends Hero {
     this.footTimer = COMBO.footLinger;
     this.swing = { step: this.comboStep - 1, t: 0, aim: this.aim };
 
-    const reach = this.hw + hit.reach;
+    const reach = this.radius + hit.reach;
     const dx = Math.cos(this.aim);
     const dy = Math.sin(this.aim);
     let touched = false;
     for (const c of ctx.targets) {
       if (!c.alive || !hostile(this, c)) continue;
-      if (!boxInCone(this.x, this.y, this.aim, hit.halfArc, reach, c.box())) continue;
+      if (!circleInCone(this.x, this.y, this.aim, hit.halfArc, reach, c.circle())) continue;
       if (!lineOfSight(ctx.arena, this.x, this.y, c.x, c.y)) continue;
       ctx.damage(c, hit.damage, this);
       c.applyImpulse(dx * hit.knockback, dy * hit.knockback, this);
@@ -370,8 +368,8 @@ export class Skater extends Hero {
     }
     if (hit.sweep === 0) {
       // Fracas : onde au sol devant lui
-      const fx = this.x + dx * (this.hw + hit.reach * 0.6);
-      const fy = this.y + dy * (this.hw + hit.reach * 0.6);
+      const fx = this.x + dx * (this.radius + hit.reach * 0.6);
+      const fy = this.y + dy * (this.radius + hit.reach * 0.6);
       ctx.effects.ring(fx, fy, '#ffffff', 70, 0.3);
       ctx.effects.sparks(fx, fy, '#cfd8e3', 14, 260);
       ctx.shake(touched ? 7 : 4, this);
@@ -393,9 +391,9 @@ export class Skater extends Hero {
     this.gearCooldown = GEAR.cooldown;
     this.throwAnim = THROW_TIME;
     const i = this.gearIndex;
-    this.gearIndex = (this.gearIndex + 1) % GEAR_GRIDS.length;
-    const ox = this.x + Math.cos(this.aim) * (this.hw + 10);
-    const oy = this.y - 6 + Math.sin(this.aim) * (this.hw + 10);
+    this.gearIndex = (this.gearIndex + 1) % GEAR_NAMES.length;
+    const ox = this.x + Math.cos(this.aim) * (this.radius + 10);
+    const oy = this.y + Math.sin(this.aim) * (this.radius + 10);
     if (ctx.arena.pointInWall(ox, oy)) return;
     ctx.spawnProjectile(
       new Projectile({
@@ -408,8 +406,8 @@ export class Skater extends Hero {
         owner: this,
         range: GEAR.range,
         radius: GEAR.radius,
-        style: 'sprite',
-        sprite: { img: gearImage(i, this.outline), px: 2.2, spin: 0.035 * (i % 2 ? -1 : 1) },
+        style: 'gear',
+        gear: { index: i, spin: 0.035 * (i % 2 ? -1 : 1) },
       }),
     );
   }
@@ -430,7 +428,7 @@ export class Skater extends Hero {
       if (hostile(this, c) !== wantEnemy) continue;
       if (wantEnemy && c.safe) continue; // ennemi protégé dans son spawn
       if (c === this.lastTrickTarget && this.sinceTrick < TRICK.sameTargetLock) continue;
-      const d = distToBox(this.x, this.y, c.box());
+      const d = distToCircle(this.x, this.y, c.circle());
       if (d > bestD) continue;
       if (!lineOfSight(w.arena, this.x, this.y, c.x, c.y)) continue;
       bestD = d;
@@ -471,9 +469,9 @@ export class Skater extends Hero {
       const n = Math.hypot(dx, dy) || 1;
       this.trick = { phase: 'push', t: 0, target: null, kind: 'solo', dx: dx / n, dy: dy / n, vx: 0, vy: 0, variant };
       this.boost();
-      ctx.effects.text(this.x, this.spriteTop() - 22, 'PUSH', '#e9eef5', 13, 0.6); // au-dessus de la barre de vie
+      ctx.effects.text(this.x, this.bodyTop() - 22, 'PUSH', '#e9eef5', 13, 0.6); // au-dessus de la barre de vie
     }
-    ctx.effects.ring(this.x, this.y + this.hh, '#e9eef5', 34, 0.25);
+    ctx.effects.ring(this.x, this.y, '#e9eef5', 34, 0.25);
   }
 
   protected override updateLocked(dt: number, ctx: GameContext): void {
@@ -501,8 +499,8 @@ export class Skater extends Hero {
         const py = this.y;
         this.x += (tr.dx * step) / n;
         this.y += (tr.dy * step) / n;
-        ctx.arena.resolveBox(this, this.hw, this.hh, this.team);
-        if (boxesOverlap(this.box(), target.box(), 6)) {
+        ctx.arena.resolveCircle(this, this.radius, this.team);
+        if (circlesOverlap(this.circle(), target.circle(), 6)) {
           this.landOn(target, ctx);
           return;
         }
@@ -510,7 +508,7 @@ export class Skater extends Hero {
       }
       this.vx = tr.dx * TRICK.dashSpeed;
       this.vy = tr.dy * TRICK.dashSpeed;
-      ctx.effects.afterimage(this.x, this.y + this.hh * 0.4, this.hw, '#e9eef5', 0.2);
+      ctx.effects.afterimage(this.x, this.y, this.radius, '#e9eef5', 0.2);
       return;
     }
     if (tr.phase === 'push') {
@@ -521,17 +519,17 @@ export class Skater extends Hero {
       const py = this.y;
       this.x += tr.dx * step;
       this.y += tr.dy * step;
-      ctx.arena.resolveBox(this, this.hw, this.hh, this.team);
+      ctx.arena.resolveCircle(this, this.radius, this.team);
       this.vx = tr.dx * speed;
       this.vy = tr.dy * speed;
-      ctx.effects.afterimage(px, py + this.hh * 0.4, this.hw, '#e9eef5', 0.18);
+      ctx.effects.afterimage(px, py, this.radius, '#e9eef5', 0.18);
       const blocked = step > 0 && Math.hypot(this.x - px, this.y - py) < step / 3;
       if (tr.t >= TRICK.pushTime || blocked) {
         this.trick = null;
         // Garde un peu d'élan : il glisse encore un instant au lieu de s'arrêter net.
         this.vx = tr.dx * speed * 0.45;
         this.vy = tr.dy * speed * 0.45;
-        ctx.effects.sparks(this.x, this.y + this.hh, '#cfd8e3', 5, 120);
+        ctx.effects.sparks(this.x, this.y, '#cfd8e3', 5, 120);
       }
       return;
     }
@@ -543,11 +541,11 @@ export class Skater extends Hero {
     this.vy = tr.vy;
     this.x += tr.vx * dt;
     this.y += tr.vy * dt;
-    ctx.arena.resolveBox(this, this.hw, this.hh, this.team);
+    ctx.arena.resolveCircle(this, this.radius, this.team);
     if (tr.t >= TRICK.airTime) {
       this.trick = null;
-      ctx.effects.ring(this.x, this.y + this.hh, '#cfd8e3', 30, 0.2);
-      ctx.effects.sparks(this.x, this.y + this.hh, '#cfd8e3', 6, 140);
+      ctx.effects.ring(this.x, this.y, '#cfd8e3', 30, 0.2);
+      ctx.effects.sparks(this.x, this.y, '#cfd8e3', 6, 140);
     }
   }
 
@@ -560,16 +558,16 @@ export class Skater extends Hero {
       this.speedStacks = Math.min(3, this.speedStacks + 1);
       this.speedTimer = TRICK.stackTime[this.speedStacks];
       ctx.effects.ring(target.x, target.y, COLORS.auraSpeed, 60, 0.35);
-      ctx.effects.text(target.x, target.y - target.hh - 18, `${name} ×${this.speedStacks}`, COLORS.auraSpeed, 16, 1);
+      ctx.effects.text(target.x, target.y - target.radius - 18, `${name} ×${this.speedStacks}`, COLORS.auraSpeed, 16, 1);
     } else {
       target.heal(TRICK.allyHeal);
       this.healStacks = Math.min(3, this.healStacks + 1);
       this.healTimer = TRICK.stackTime[this.healStacks];
       ctx.effects.ring(target.x, target.y, COLORS.auraHeal, 60, 0.35);
-      ctx.effects.text(target.x, target.y - target.hh - 18, name, COLORS.auraHeal, 16, 1);
-      ctx.effects.text(target.x, target.y - target.hh - 2, `+${TRICK.allyHeal}`, '#7dff9a', 14, 0.9);
+      ctx.effects.text(target.x, target.y - target.radius - 18, name, COLORS.auraHeal, 16, 1);
+      ctx.effects.text(target.x, target.y - target.radius - 2, `+${TRICK.allyHeal}`, '#7dff9a', 14, 0.9);
     }
-    ctx.effects.sparks(target.x, target.y - target.hh, '#ffffff', 12, 260);
+    ctx.effects.sparks(target.x, target.y - target.radius, '#ffffff', 12, 260);
     ctx.shake(3, this);
     tr.phase = 'air';
     tr.t = 0;
@@ -667,10 +665,6 @@ export class Skater extends Hero {
       ctx.stroke();
     }
     ctx.restore();
-  }
-
-  protected headRadius(): number {
-    return R;
   }
 
   override draw(ctx: CanvasRenderingContext2D): void {
@@ -830,7 +824,7 @@ export class Skater extends Hero {
     if (sw) {
       const hit = COMBO.hits[sw.step];
       const u = Math.min(1, sw.t / COMBO.swingTime);
-      const R = this.hw + hit.reach;
+      const R = this.radius + hit.reach;
       ctx.save();
       ctx.globalAlpha = 0.75 * (1 - u);
       ctx.fillStyle = '#ffffff';
@@ -841,8 +835,8 @@ export class Skater extends Hero {
         ctx.arc(this.x, this.y, R, Math.min(a0, a1), Math.max(a0, a1));
         ctx.arc(this.x, this.y, R * 0.72, Math.max(a0, a1), Math.min(a0, a1), true);
       } else if (u > 0.4) {
-        const fx = this.x + Math.cos(sw.aim) * (this.hw + hit.reach * 0.6);
-        const fy = this.y + Math.sin(sw.aim) * (this.hw + hit.reach * 0.6);
+        const fx = this.x + Math.cos(sw.aim) * (this.radius + hit.reach * 0.6);
+        const fy = this.y + Math.sin(sw.aim) * (this.radius + hit.reach * 0.6);
         ctx.ellipse(fx, fy, 30 * (u + 0.2), 13 * (u + 0.2), sw.aim, 0, TAU);
       }
       ctx.fill();
@@ -858,7 +852,7 @@ export class Skater extends Hero {
       ctx.setLineDash([6, 5]);
       ctx.lineDashOffset = -this.pulse * 30;
       ctx.beginPath();
-      ctx.ellipse(tp.x, tp.y + tp.hh, tp.hw * 1.8, tp.hw * 0.8, 0, 0, TAU);
+      ctx.arc(tp.x, tp.y, tp.radius + 9, 0, TAU);
       ctx.stroke();
       ctx.restore();
     }
@@ -868,7 +862,7 @@ export class Skater extends Hero {
     super.drawOverlay(ctx);
     if (this.dead || this.speedStacks === 0) return;
     // Chevrons de vitesse à gauche de la barre de vie (dessous, ils cacheraient sa tête)
-    const y = this.spriteTop() - 4 - 3.5;
+    const y = this.bodyTop() - 4 - 3.5;
     const right = this.x - 30 - 8; // barre de 60 de large
     ctx.save();
     ctx.strokeStyle = COLORS.auraSpeed;

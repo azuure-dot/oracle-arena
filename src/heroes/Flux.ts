@@ -61,7 +61,7 @@ export class Flux extends Hero {
     super({
       name: 'Flux',
       maxHp: 175,
-      hitbox: { hw: 12.6, hh: 16.2 }, // petite hitbox : fragile mais difficile à toucher
+      radius: R, // petite boule : fragile mais difficile à toucher
       speed: 330,
       acceleration: 16,
       color: COLORS.accent,
@@ -200,7 +200,7 @@ export class Flux extends Hero {
     for (let i = 1; i <= steps; i++) {
       const px = this.x + (dir.x * dist * i) / steps;
       const py = this.y + (dir.y * dist * i) / steps;
-      if (ctx.arena.boxCollides(px, py, this.hw - 0.5, this.hh - 0.5, this.team)) break;
+      if (ctx.arena.circleCollides(px, py, this.radius - 0.5, this.team)) break;
       nx = px;
       ny = py;
     }
@@ -278,10 +278,7 @@ export class Flux extends Hero {
 
   // ------------------------------------------------------------ rendu (boule)
 
-  protected headRadius(): number {
-    return R;
-  }
-  protected override spriteTint(): { color: string; alpha: number } | undefined {
+  protected override bodyTint(): { color: string; alpha: number } | undefined {
     return this.recall ? { color: COLORS.recall, alpha: 0.55 } : undefined;
   }
   protected override isWalking(): boolean {
@@ -374,7 +371,9 @@ export class Flux extends Hero {
     if (ghost && this.recallCooldown <= 0) {
       ctx.globalAlpha = 0.3;
       ctx.setLineDash([4, 4]);
-      ctx.strokeRect(ghost.x - this.hw, ghost.y - this.hh, this.hw * 2, this.hh * 2);
+      ctx.beginPath();
+      ctx.arc(ghost.x, ghost.y, this.radius, 0, Math.PI * 2);
+      ctx.stroke();
       ctx.setLineDash([]);
     }
     ctx.globalAlpha = 1;

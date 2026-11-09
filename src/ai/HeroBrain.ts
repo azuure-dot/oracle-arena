@@ -1,11 +1,11 @@
 import type { BotControls } from '../core/Controls';
-import { distToBox } from '../core/geometry';
+import { distToCircle } from '../core/geometry';
 import { angleDiff, normalize, randRange, rotateTowards, TAU, type Vec2 } from '../core/math';
 import { hostile, type Combatant } from '../entities/Combatant';
 import type { Hero } from '../heroes/Hero';
 import type { Team } from '../entities/Team';
 import type { Arena } from '../world/Arena';
-import { canSeeBox, inVisionRange } from '../world/Visibility';
+import { canSeeCircle, inVisionRange } from '../world/Visibility';
 import type { NavGraph } from './nav';
 import { clearance, pathClear, randomFreePoint, steer } from './steering';
 
@@ -255,8 +255,8 @@ export abstract class HeroBrain<H extends Hero = Hero> {
       let bestScore = Infinity;
       for (const c of w.targets) {
         if (!c.alive || !hostile(h, c) || c.safe) continue; // inutile de viser un ennemi protégé au spawn
-        if (!inVisionRange(h.x, h.y, c.x, c.y, c.hw, c.hh)) continue;
-        if (!canSeeBox(w.arena, h.x, h.y, c.box())) continue;
+        if (!inVisionRange(h.x, h.y, c.x, c.y, c.radius)) continue;
+        if (!canSeeCircle(w.arena, h.x, h.y, c.circle())) continue;
         // On garde sa cible actuelle sauf si une autre est nettement plus proche.
         const score = Math.hypot(c.x - h.x, c.y - h.y) - (c === this.target ? 220 : 0);
         if (score < bestScore) {
@@ -298,7 +298,7 @@ export abstract class HeroBrain<H extends Hero = Hero> {
     const dist = Math.hypot(dx, dy) || 1;
     return {
       dist,
-      edge: distToBox(h.x, h.y, t.box()),
+      edge: distToCircle(h.x, h.y, t.circle()),
       aimError: Math.abs(angleDiff(this.aimAngle, this.desiredAim)),
       dir: { x: dx / dist, y: dy / dist },
     };
@@ -421,24 +421,24 @@ export abstract class HeroBrain<H extends Hero = Hero> {
    */
   private coverSpot(w: BrainWorld, o: ObjectiveInfo, threatDir: Vec2): Vec2 {
     const h = this.hero;
-    const back = (o.cover ?? 30) + Math.max(h.hw, h.hh) + 22;
+    const back = (o.cover ?? 30) + h.radius + 22;
     const perp = { x: -threatDir.y, y: threatDir.x };
     const spot = {
       x: o.x - threatDir.x * back + perp.x * this.coverJitter,
       y: o.y - threatDir.y * back + perp.y * this.coverJitter,
     };
-    if (!w.arena.boxCollides(spot.x, spot.y, h.hw, h.hh, h.team)) return spot;
+    if (!w.arena.circleCollides(spot.x, spot.y, h.radius, h.team)) return spot;
     const straight = { x: o.x - threatDir.x * back, y: o.y - threatDir.y * back };
-    if (!w.arena.boxCollides(straight.x, straight.y, h.hw, h.hh, h.team)) return straight;
+    if (!w.arena.circleCollides(straight.x, straight.y, h.radius, h.team)) return straight;
     return this.pointNear(w, o, o.r * 0.6);
   }
 
   /** Point libre collé au convoi, du côté `side` (devant pour un défenseur). */
   private besidePayload(w: BrainWorld, o: ObjectiveInfo, side: Vec2): Vec2 {
     const h = this.hero;
-    const off = (o.cover ?? 30) + Math.max(h.hw, h.hh) + 22;
+    const off = (o.cover ?? 30) + h.radius + 22;
     const p = { x: o.x + side.x * off, y: o.y + side.y * off };
-    if (!w.arena.boxCollides(p.x, p.y, h.hw, h.hh, h.team)) return p;
+    if (!w.arena.circleCollides(p.x, p.y, h.radius, h.team)) return p;
     return this.pointNear(w, o, o.r * 0.6);
   }
 
@@ -449,7 +449,7 @@ export abstract class HeroBrain<H extends Hero = Hero> {
       const a = Math.random() * TAU;
       const r = Math.sqrt(Math.random()) * radius;
       const p = { x: o.x + Math.cos(a) * r, y: o.y + Math.sin(a) * r };
-      if (!w.arena.boxCollides(p.x, p.y, h.hw + 6, h.hh + 6, h.team)) return p;
+      if (!w.arena.circleCollides(p.x, p.y, h.radius + 6, h.team)) return p;
     }
     return { x: o.x, y: o.y };
   }

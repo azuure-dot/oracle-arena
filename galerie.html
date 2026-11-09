@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Galerie de sprites</title>
+    <title>Galerie des personnages</title>
     <style>
       :root {
         color-scheme: dark;
@@ -68,7 +68,6 @@
         font-size: 12px;
       }
       canvas {
-        image-rendering: pixelated;
         background: repeating-conic-gradient(#232b36 0% 25%, #1e252f 0% 50%) 0 0 / 16px 16px;
         border-radius: 4px;
       }
@@ -80,11 +79,11 @@
   </head>
   <body>
     <header>
-      <h1>Galerie de sprites</h1>
-      <p>Héros vus de dessus : <code>src/render/topdown.ts</code> (dessins) et chaque fichier de <code>src/heroes/</code> (poses) · pixel art restant (robots, tourelles) : <code>src/sprites/library.ts</code>. La page se recharge toute seule.</p>
-      <label>Zoom <input id="zoom" type="range" min="2" max="10" value="5" /></label>
+      <h1>Galerie des personnages</h1>
+      <p>Tout est vu de dessus : dessins dans <code>src/render/topdown.ts</code>, poses dans chaque fichier de <code>src/heroes/</code>, robots et tourelles dans <code>src/entities/Bot.ts</code>. La page se recharge toute seule.</p>
+      <label>Zoom <input id="zoom" type="range" min="1" max="5" step="0.25" value="2.5" /></label>
     </header>
     <main id="gallery"></main>
-    <script type="module" src="/src/spriteGallery.ts"></script>
+    <script type="module" src="/src/gallery.ts"></script>
   </body>
 </html>

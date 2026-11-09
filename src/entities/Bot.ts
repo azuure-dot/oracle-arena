@@ -5,19 +5,9 @@ import { angleDiff, rotateTowards } from '../core/math';
 import { t } from '../i18n';
 import { drawBuffIndicators, drawHealthBar, drawStunStars, type BuffKind } from '../ui/healthBar';
 import type { Arena } from '../world/Arena';
-import type { Box } from '../core/geometry';
-import { canSeeBox } from '../world/Visibility';
-import { ROBOT_SPRITE, TURRET_BARREL, TURRET_BASE, TURRET_PALETTE } from '../sprites/library';
-import {
-  characterHalfSize,
-  characterLayout,
-  drawCharacter,
-  drawGroundRing,
-  drawProp,
-  facingFromAngle,
-  propImage,
-  walkFrame,
-} from '../sprites/SpriteRenderer';
+import type { Circle } from '../core/geometry';
+import { cached, drawTeamMarker, hand, inked, LINE, TAU } from '../render/topdown';
+import { canSeeCircle } from '../world/Visibility';
 import type { Combatant } from './Combatant';
 import { Projectile } from './Projectile';
 import { ENEMY, type Team } from './Team';
@@ -58,10 +48,8 @@ export interface BotContext {
 export class Bot implements Combatant {
   x: number;
   y: number;
-  /** Taille d'un pixel de sprite → fixe la hitbox rectangulaire (hw, hh). */
-  readonly px: number;
-  readonly hw: number;
-  readonly hh: number;
+  /** Rayon de la boule (= hitbox ronde). */
+  readonly radius: number;
   readonly maxHp: number;
   readonly team: Team;
   readonly kind: BotKind;
@@ -101,24 +89,12 @@ export class Bot implements Combatant {
     this.facing = this.spawnFacing = opts.facing ?? Math.PI;
     this.maxHp = this.team === ENEMY ? BOT.enemyHp : BOT.allyHp;
     this.hp = this.wounded ? this.maxHp * 0.5 : this.maxHp;
-    if (this.kind === 'turret') {
-      this.px = BOT.turretPx;
-      this.hw = (TURRET_BASE[0].length * this.px) / 2;
-      this.hh = (TURRET_BASE.length * this.px) / 2;
-    } else {
-      this.px = BOT.robotPx;
-      ({ hw: this.hw, hh: this.hh } = characterHalfSize(ROBOT_SPRITE, this.px));
-    }
+    this.radius = this.kind === 'turret' ? BOT.turretRadius : BOT.robotRadius;
   }
 
-  /** Hitbox rectangulaire = le dessin du sprite. */
-  box(): Box {
-    return { x: this.x, y: this.y, hw: this.hw, hh: this.hh };
-  }
-
-  /** Taille approximative pour placer les effets (demi-largeur). */
-  get radius(): number {
-    return this.hw;
+  /** Hitbox ronde = la boule dessinée. */
+  circle(): Circle {
+    return { x: this.x, y: this.y, r: this.radius };
   }
 
   get isEnemy(): boolean {
@@ -195,7 +171,7 @@ export class Bot implements Combatant {
       const decay = Math.exp(-BOT.knockbackDamping * dt);
       this.kvx *= decay;
       this.kvy *= decay;
-      ctx.arena.resolveBox(this, this.hw, this.hh);
+      ctx.arena.resolveCircle(this, this.radius);
     } else {
       this.kvx = this.kvy = 0;
     }
@@ -249,14 +225,14 @@ export class Bot implements Combatant {
     if (!ctx.turretsEnabled || !h || h.dead) return;
     const dist = Math.hypot(h.x - this.x, h.y - this.y);
     if (dist > TURRET.range) return;
-    if (!canSeeBox(ctx.arena, this.x, this.y, h.box())) return;
+    if (!canSeeCircle(ctx.arena, this.x, this.y, h.circle())) return;
 
     const target = Math.atan2(h.y - this.y, h.x - this.x);
     this.facing = rotateTowards(this.facing, target, TURRET.turnRate * dt);
     if (this.fireTimer <= 0 && Math.abs(angleDiff(this.facing, target)) < 0.12) {
       this.fireTimer = TURRET.fireInterval;
-      const mx = this.x + Math.cos(this.facing) * (this.hw + 8);
-      const my = this.y + Math.sin(this.facing) * (this.hw + 8);
+      const mx = this.x + Math.cos(this.facing) * (this.radius + 16);
+      const my = this.y + Math.sin(this.facing) * (this.radius + 16);
       ctx.spawnProjectile(
         new Projectile({
           x: mx,
@@ -289,14 +265,17 @@ export class Bot implements Combatant {
 
   draw(ctx: CanvasRenderingContext2D): void {
     const outline = teamColor(this.team);
+    const R = this.radius;
 
     if (!this.alive) {
-      // Silhouette fantôme de la hitbox + compte à rebours
+      // Silhouette fantôme de la boule + compte à rebours
       ctx.strokeStyle = outline;
       ctx.globalAlpha = 0.35;
       ctx.setLineDash([5, 5]);
       ctx.lineWidth = 2;
-      ctx.strokeRect(this.x - this.hw, this.y - this.hh, this.hw * 2, this.hh * 2);
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, R, 0, TAU);
+      ctx.stroke();
       ctx.setLineDash([]);
       ctx.globalAlpha = 0.8;
       ctx.fillStyle = outline;
@@ -307,35 +286,36 @@ export class Bot implements Combatant {
       return;
     }
 
-    const flash = this.hitFlash > 0;
+    drawTeamMarker(ctx, this.x, this.y, R, outline);
+    ctx.save();
+    ctx.translate(this.x, this.y);
+    ctx.rotate(this.facing);
     if (this.kind === 'turret') {
-      const v = { outline, overrides: { t: outline }, silhouette: flash ? '#ffffff' : undefined };
-      const base = propImage('turret.base', TURRET_BASE, TURRET_PALETTE, v);
-      const barrel = propImage('turret.barrel', TURRET_BARREL, TURRET_PALETTE, v);
-      ctx.fillStyle = 'rgba(0,0,0,0.3)';
-      ctx.fillRect(this.x - this.hw + 4, this.y - this.hh + 6, this.hw * 2, this.hh * 2);
-      drawProp(ctx, base, this.x, this.y, 0, this.px, base.width / 2, base.height / 2);
-      drawProp(ctx, barrel, this.x, this.y, this.facing, this.px, 0, barrel.height / 2);
+      // Tourelle : socle rond boulonné, canon qui suit la cible, dôme aux couleurs de l'équipe.
+      cached(ctx, `turret.${outline}`, R * 2.1, (c) => drawTurret(c, R, outline));
     } else {
-      const layout = characterLayout(ROBOT_SPRITE, this.x, this.y, this.px);
-      drawGroundRing(ctx, this.x, layout.feetY, this.hw, outline);
-      drawCharacter(ctx, ROBOT_SPRITE, {
-        x: this.x,
-        y: this.y,
-        px: this.px,
-        facing: facingFromAngle(this.facing),
-        frame: walkFrame(this.animTime),
-        outline,
-        overrides: { t: outline },
-        flash,
-      });
+      // Robot : dôme d'acier, visière lumineuse aux couleurs de l'équipe, mains qui se balancent.
+      const swing = this.animTime > 0 ? Math.sin(this.animTime * 10) * R * 0.18 : 0;
+      cached(ctx, `robot.${outline}`, R * 1.3, (c) => drawRobotHead(c, R, outline));
+      for (const side of [-1, 1]) hand(ctx, R * 0.5 + swing * side, side * R * 0.9, R * 0.3, '#8e9bb0', this.facing);
     }
+    if (this.hitFlash > 0) {
+      ctx.globalAlpha = 0.7;
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(0, 0, R, 0, TAU);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+    ctx.restore();
 
     if (this.pinned) {
       ctx.strokeStyle = '#ffffff';
       ctx.lineWidth = 2;
       ctx.setLineDash([4, 3]);
-      ctx.strokeRect(this.x - this.hw - 4, this.y - this.hh - 4, this.hw * 2 + 8, this.hh * 2 + 8);
+      ctx.beginPath();
+      ctx.arc(this.x, this.y, R + 6, 0, TAU);
+      ctx.stroke();
       ctx.setLineDash([]);
     }
   }
@@ -343,11 +323,11 @@ export class Bot implements Combatant {
   drawOverlay(ctx: CanvasRenderingContext2D): void {
     if (!this.alive) return;
     const color = this.isEnemy ? COLORS.hpEnemy : COLORS.hpAlly;
-    const barTop = this.y - this.hh - this.px - 4;
+    const barTop = this.y - this.radius * 1.3 - 4;
     const barWidth = 56;
     drawHealthBar(ctx, this.x, barTop, this.hp, this.maxHp, color, barWidth);
     drawBuffIndicators(ctx, this.x + barWidth / 2 + 12, barTop - 3.5, this.buffs);
-    if (this.stunTimer > 0) drawStunStars(ctx, this.x, this.y - this.hh * 0.4);
+    if (this.stunTimer > 0) drawStunStars(ctx, this.x, this.y - this.radius * 0.4);
 
     const tag = !this.isEnemy
       ? t(this.wounded ? 'tag.wounded' : 'tag.ally')
@@ -361,4 +341,58 @@ export class Bot implements Combatant {
       ctx.fillText(tag, this.x, barTop - 12);
     }
   }
+}
+
+/** Robot d'entraînement vu de dessus (regard vers +x) : dôme d'acier riveté, antenne, visière lumineuse. */
+function drawRobotHead(ctx: CanvasRenderingContext2D, R: number, team: string): void {
+  inked(ctx, '#9aa6b4', () => ctx.arc(0, 0, R, 0, TAU), 2.4);
+  ctx.strokeStyle = '#6f7c8c';
+  ctx.lineWidth = R * 0.08;
+  ctx.beginPath();
+  ctx.arc(0, 0, R * 0.7, 0, TAU);
+  ctx.stroke();
+  ctx.fillStyle = '#5d6b80';
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * TAU + Math.PI / 6;
+    ctx.beginPath();
+    ctx.arc(Math.cos(a) * R * 0.85, Math.sin(a) * R * 0.85, R * 0.06, 0, TAU);
+    ctx.fill();
+  }
+  // Visière : bandeau lumineux à l'avant
+  ctx.strokeStyle = LINE;
+  ctx.lineWidth = R * 0.32;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.arc(0, 0, R * 0.78, -0.75, 0.75);
+  ctx.stroke();
+  ctx.strokeStyle = team;
+  ctx.lineWidth = R * 0.18;
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+  ctx.lineWidth = R * 0.05;
+  ctx.beginPath();
+  ctx.arc(0, 0, R * 0.74, -0.5, 0.1);
+  ctx.stroke();
+  // Antenne au sommet
+  inked(ctx, '#c9d4e2', () => ctx.arc(-R * 0.15, 0, R * 0.16, 0, TAU), 1.6);
+  inked(ctx, team, () => ctx.arc(-R * 0.15, 0, R * 0.07, 0, TAU), 1.2);
+}
+
+/** Tourelle vue de dessus (canon vers +x) : socle rond boulonné, canon double, dôme de l'équipe. */
+function drawTurret(ctx: CanvasRenderingContext2D, R: number, team: string): void {
+  inked(ctx, '#4a5262', () => ctx.arc(0, 0, R, 0, TAU), 2.4);
+  ctx.fillStyle = '#2f3542';
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * TAU;
+    ctx.beginPath();
+    ctx.arc(Math.cos(a) * R * 0.82, Math.sin(a) * R * 0.82, R * 0.07, 0, TAU);
+    ctx.fill();
+  }
+  for (const y of [-R * 0.22, R * 0.22]) inked(ctx, '#7f8ea3', () => ctx.roundRect(R * 0.2, y - R * 0.13, R * 1.5, R * 0.26, R * 0.08), 1.8);
+  inked(ctx, '#2f3542', () => ctx.roundRect(R * 1.55, -R * 0.42, R * 0.25, R * 0.84, R * 0.08), 1.6);
+  inked(ctx, team, () => ctx.arc(0, 0, R * 0.55, 0, TAU), 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.35)';
+  ctx.beginPath();
+  ctx.arc(-R * 0.15, -R * 0.15, R * 0.2, 0, TAU);
+  ctx.fill();
 }

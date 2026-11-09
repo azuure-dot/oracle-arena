@@ -1,3 +1,4 @@
+import { circleHitsRect } from '../core/geometry';
 import { clamp } from '../core/math';
 import { COLORS, WORLD, ZONES, teamColor } from '../config';
 import type { Team } from '../entities/Team';
@@ -41,9 +42,6 @@ function doorRect(s: Segment): Rect {
   if (Math.abs(s.ax - s.bx) < 1) return { x: s.ax - half, y: Math.min(s.ay, s.by), w: half * 2, h: Math.abs(s.by - s.ay) };
   return { x: Math.min(s.ax, s.bx), y: s.ay - half, w: Math.abs(s.bx - s.ax), h: half * 2 };
 }
-
-const boxHitsRect = (x: number, y: number, hw: number, hh: number, r: Rect): boolean =>
-  x + hw > r.x && x - hw < r.x + r.w && y + hh > r.y && y - hh < r.y + r.h;
 
 /**
  * La map : bords, murs, zones spéciales, zones de spawn protégées et rendu du sol.
@@ -141,12 +139,12 @@ export class Arena {
   }
 
   /**
-   * La boîte (centre x,y, demi-dimensions hw,hh) chevauche-t-elle un obstacle ou sort-elle de la map ?
+   * Le cercle (centre x,y, rayon r) chevauche-t-il un obstacle ou sort-il de la map ?
    * `overLava` : la lave ne compte pas (recul, héros porté par une Charge).
    */
-  boxCollides(x: number, y: number, hw: number, hh: number, team?: Team, overLava = false): boolean {
-    if (x - hw < 0 || y - hh < 0 || x + hw > this.width || y + hh > this.height) return true;
-    return this.blockers(team, overLava).some((w) => boxHitsRect(x, y, hw, hh, w));
+  circleCollides(x: number, y: number, r: number, team?: Team, overLava = false): boolean {
+    if (x - r < 0 || y - r < 0 || x + r > this.width || y + r > this.height) return true;
+    return this.blockers(team, overLava).some((w) => circleHitsRect(x, y, r, w));
   }
 
   /** Ce point est-il au-dessus de la lave ? (un héros y tombe si son centre y passe) */
@@ -161,25 +159,38 @@ export class Arena {
   }
 
   /**
-   * Repousse une boîte hors des obstacles et des bords, sur l'axe de plus petite
-   * pénétration : le personnage "glisse" le long des murs.
+   * Repousse un cercle hors des obstacles et des bords, depuis le point du mur le plus
+   * proche : le personnage "glisse" le long des murs et contourne les coins en douceur.
    */
-  resolveBox(pos: { x: number; y: number }, hw: number, hh: number, team?: Team, overLava = false): void {
+  resolveCircle(pos: { x: number; y: number }, r: number, team?: Team, overLava = false): void {
     const blockers = this.blockers(team, overLava);
     for (let iter = 0; iter < 3; iter++) {
       let moved = false;
       for (const w of blockers) {
-        const ox = Math.min(pos.x + hw, w.x + w.w) - Math.max(pos.x - hw, w.x);
-        const oy = Math.min(pos.y + hh, w.y + w.h) - Math.max(pos.y - hh, w.y);
-        if (ox <= 0 || oy <= 0) continue;
-        if (ox < oy) pos.x += pos.x < w.x + w.w / 2 ? -ox : ox;
-        else pos.y += pos.y < w.y + w.h / 2 ? -oy : oy;
+        const nx = clamp(pos.x, w.x, w.x + w.w);
+        const ny = clamp(pos.y, w.y, w.y + w.h);
+        const dx = pos.x - nx;
+        const dy = pos.y - ny;
+        const d = Math.hypot(dx, dy);
+        if (d >= r) continue;
+        if (d > 1e-6) {
+          pos.x += (dx / d) * (r - d);
+          pos.y += (dy / d) * (r - d);
+        } else {
+          // Centre dans le mur : on sort par le côté le plus proche.
+          const exits = [pos.x - w.x, w.x + w.w - pos.x, pos.y - w.y, w.y + w.h - pos.y];
+          const i = exits.indexOf(Math.min(...exits));
+          if (i === 0) pos.x = w.x - r;
+          else if (i === 1) pos.x = w.x + w.w + r;
+          else if (i === 2) pos.y = w.y - r;
+          else pos.y = w.y + w.h + r;
+        }
         moved = true;
       }
       if (!moved) break;
     }
-    pos.x = clamp(pos.x, hw, this.width - hw);
-    pos.y = clamp(pos.y, hh, this.height - hh);
+    pos.x = clamp(pos.x, r, this.width - r);
+    pos.y = clamp(pos.y, r, this.height - r);
   }
 
   zoneAt(x: number, y: number): Zone | undefined {

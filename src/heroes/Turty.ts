@@ -1,5 +1,5 @@
 import type { GameContext } from '../core/GameContext';
-import { boxesOverlap, distToBox } from '../core/geometry';
+import { circlesOverlap, distToCircle } from '../core/geometry';
 import { clamp, degToRad, randRange, rotateTowards, TAU } from '../core/math';
 import { hostile, type Combatant } from '../entities/Combatant';
 import { Projectile } from '../entities/Projectile';
@@ -7,8 +7,6 @@ import type { Team } from '../entities/Team';
 import type { WorldObject } from '../entities/WorldObject';
 import { WET, type WetGround } from '../game/WetGround';
 import { t } from '../i18n';
-import { dir8, type Dir8 } from '../sprites/skater';
-import { BLAST_FRAMES, blastImage, bombImage, IMPACT_FRAMES, impactImage } from '../sprites/turty';
 import { cached, drawTeamMarker, hand, head, inked, LINE, turtyHair, turtyShell, waterGun } from '../render/topdown';
 import { lineOfSight } from '../world/Visibility';
 import { WEAPON as FLUX_WEAPON } from './Flux';
@@ -16,11 +14,9 @@ import { Hero, MOVE_SPEED_SCALE, type AbilitySlot, type WeaponHud } from './Hero
 import { Magazine } from './Magazine';
 import { SKATE_AURA } from './Skater';
 
-/** Rayon de la tête vue de dessus et peau verte (d'après son croquis). */
-const R = 14;
+/** Rayon de la boule (= hitbox) et peau verte (d'après son croquis). */
+const R = 15;
 const SKIN = '#69c7a1';
-/** Hitbox du corps (sans l'arme). */
-const HITBOX = { hw: 11, hh: 20 };
 /** Forme tortue / carapace : rayon de la carapace (unités monde). */
 const SHELL_R = 16;
 
@@ -103,7 +99,7 @@ export const BOMB = {
   range: 560,
   flightBase: 0.45,
   flightPerPx: 0.0008,
-  arcHeight: 120,
+  arcHeight: 120, // hauteur de la cloche : vue de dessus, la bombe grossit en montant
   /** Posée au sol, elle s'amorce un court instant avant d'exploser. */
   prime: 0.32,
   blastTime: 0.5,
@@ -160,7 +156,7 @@ export class Turty extends Hero {
     super({
       name: 'Turty',
       maxHp: 200,
-      hitbox: HITBOX,
+      radius: R,
       speed: TURTY.speed,
       acceleration: 14,
       color: '#4fd1a5',
@@ -210,7 +206,7 @@ export class Turty extends Hero {
     this.shellCooldown = Math.max(0, this.shellCooldown - dt);
     this.bombCooldown = Math.max(0, this.bombCooldown - dt);
     this.throwAnim = Math.max(0, this.throwAnim - dt);
-    this.onWet = ctx.wet.isWet(this.x, this.y + this.hh - 4, ctx.time);
+    this.onWet = ctx.wet.isWet(this.x, this.y, ctx.time);
     if (this.pinned) this.shell = null;
 
     const speed = Math.hypot(this.vx, this.vy);
@@ -221,7 +217,7 @@ export class Turty extends Hero {
       this.dripTimer -= dt;
       if (this.dripTimer <= 0) {
         this.dripTimer = 0.05;
-        ctx.effects.sparks(this.x - (this.vx / speed) * 10, this.y + this.hh - 2, WATER_COLOR, 2, 90);
+        ctx.effects.sparks(this.x - (this.vx / speed) * 10, this.y, WATER_COLOR, 2, 90);
       }
     }
     this.bombAimPreview = this.isLocalPlayer && this.form === 'human' && this.bombReady ? this.bombTarget(ctx) : null;
@@ -286,9 +282,9 @@ export class Turty extends Hero {
     this.morph = TURTY.morphTime;
     if (form === 'turtle') this.formLock = TURTY.formLock;
     // Petite gerbe d'eau à la transformation
-    ctx.effects.ring(this.x, this.y + this.hh - 6, WATER_COLOR, 34, 0.25);
-    ctx.effects.sparks(this.x, this.y + this.hh - 8, WATER_COLOR, 8, 140);
-    ctx.effects.sparks(this.x, this.y + this.hh - 8, FOAM_COLOR, 4, 100);
+    ctx.effects.ring(this.x, this.y, WATER_COLOR, 34, 0.25);
+    ctx.effects.sparks(this.x, this.y, WATER_COLOR, 8, 140);
+    ctx.effects.sparks(this.x, this.y, FOAM_COLOR, 4, 100);
   }
 
   // ------------------------------------------------------------ pistolet à eau
@@ -296,7 +292,8 @@ export class Turty extends Hero {
   private muzzle(): { x: number; y: number } {
     const fx = Math.cos(this.aim);
     const fy = Math.sin(this.aim);
-    return { x: this.x + fx * (this.hw + 14), y: this.y + 2 + fy * (this.hw + 10) };
+    // Bout du canon du pistolet à eau (tenu à droite, devant elle).
+    return { x: this.x + fx * R * 2.3 - fy * R * 0.35, y: this.y + fy * R * 2.3 + fx * R * 0.35 };
   }
 
   private fire(ctx: GameContext): void {
@@ -390,7 +387,7 @@ export class Turty extends Hero {
     this.bombCooldown = BOMB.cooldown;
     this.throwAnim = 0.25;
     const to = this.bombTarget(ctx);
-    ctx.spawnObject(new WaterBomb(this, this.x, this.y - 10, to.x, to.y));
+    ctx.spawnObject(new WaterBomb(this, this.x, this.y, to.x, to.y));
   }
 
   // ------------------------------------------------------------ carapace
@@ -413,7 +410,7 @@ export class Turty extends Hero {
       trailTimer: 0,
     };
     this.vx = this.vy = 0;
-    ctx.effects.ring(this.x, this.y + this.hh - 8, FOAM_COLOR, 40, 0.3);
+    ctx.effects.ring(this.x, this.y, FOAM_COLOR, 40, 0.3);
   }
 
   get shellWindupProgress(): number {
@@ -433,8 +430,8 @@ export class Turty extends Hero {
       if (s.windup <= 0) {
         s.vx = Math.cos(s.dir) * SHELL.speed;
         s.vy = Math.sin(s.dir) * SHELL.speed;
-        ctx.effects.ring(this.x, this.y + this.hh - 8, '#ffffff', 50, 0.25);
-        ctx.effects.sparks(this.x, this.y + this.hh - 6, '#cfd8e3', 10, 220);
+        ctx.effects.ring(this.x, this.y, '#ffffff', 50, 0.25);
+        ctx.effects.sparks(this.x, this.y, '#cfd8e3', 10, 220);
         ctx.shake(3, this);
       }
       return;
@@ -446,7 +443,7 @@ export class Turty extends Hero {
     const steps = Math.max(1, Math.ceil(dist / 5));
     const h = dt / steps;
     // Collisions avec le hitbox du héros : murs, portes de spawn et bords de lave font rebondir.
-    const blocked = (x: number, y: number) => ctx.arena.boxCollides(x, y, this.hw - 0.5, this.hh - 0.5, this.team);
+    const blocked = (x: number, y: number) => ctx.arena.circleCollides(x, y, this.radius - 0.5, this.team);
     for (let i = 0; i < steps; i++) {
       let bounced = false;
       const nx = this.x + s.vx * h;
@@ -461,8 +458,8 @@ export class Turty extends Hero {
       } else this.y = ny;
       if (bounced) {
         s.bounces++;
-        ctx.effects.sparks(this.x, this.y + this.hh * 0.4, '#e8eef5', 10, 240);
-        ctx.effects.ring(this.x, this.y + this.hh * 0.4, '#ffffff', 36, 0.2);
+        ctx.effects.sparks(this.x, this.y, '#e8eef5', 10, 240);
+        ctx.effects.ring(this.x, this.y, '#ffffff', 36, 0.2);
         ctx.shake(3, this);
         if (s.bounces > SHELL.maxBounces) {
           this.endShell(ctx);
@@ -477,8 +474,8 @@ export class Turty extends Hero {
     s.trailTimer -= dt;
     if (s.trailTimer <= 0) {
       s.trailTimer = 0.035;
-      ctx.effects.afterimage(this.x, this.y + this.hh - 12, 14, '#7fe3c4', 0.22);
-      if (this.onWet) ctx.effects.sparks(this.x, this.y + this.hh - 4, WATER_COLOR, 3, 140);
+      ctx.effects.afterimage(this.x, this.y, 14, '#7fe3c4', 0.22);
+      if (this.onWet) ctx.effects.sparks(this.x, this.y, WATER_COLOR, 3, 140);
     }
     if (s.t >= SHELL.maxDuration) this.endShell(ctx);
   }
@@ -490,7 +487,7 @@ export class Turty extends Hero {
     const dy = s.vy / speed;
     for (const c of ctx.targets) {
       if (!c.alive || !hostile(this, c) || s.hit.has(c)) continue;
-      if (!boxesOverlap(this.box(), c.box(), 4)) continue;
+      if (!circlesOverlap(this.circle(), c.circle(), 4)) continue;
       s.hit.add(c);
       ctx.damage(c, SHELL.damage, this);
       // Éjecté sur le côté (gauche ou droite selon sa position) : la carapace continue.
@@ -511,14 +508,14 @@ export class Turty extends Hero {
     this.shellCooldown = SHELL.cooldown;
     this.vx = s.vx * 0.15;
     this.vy = s.vy * 0.15;
-    ctx.arena.resolveBox(this, this.hw, this.hh, this.team);
+    ctx.arena.resolveCircle(this, this.radius, this.team);
     // Clic D toujours maintenu : elle reste en tortue, sinon elle se relève.
     if (!this.controls.held('secondary')) {
       this.morphFrom = 'turtle';
       this.form = 'human';
       this.morph = TURTY.morphTime;
     }
-    ctx.effects.sparks(this.x, this.y + this.hh - 8, FOAM_COLOR, 6, 120);
+    ctx.effects.sparks(this.x, this.y, FOAM_COLOR, 6, 120);
   }
 
   // ------------------------------------------------------------ HUD
@@ -570,7 +567,7 @@ export class Turty extends Hero {
     const len = 320;
     const w = 16;
     ctx.save();
-    ctx.translate(this.x, this.y + this.hh - 10);
+    ctx.translate(this.x, this.y);
     ctx.rotate(s.dir);
     ctx.globalAlpha = 0.1 + 0.15 * p;
     ctx.fillStyle = '#7fe3c4';
@@ -591,9 +588,6 @@ export class Turty extends Hero {
     ctx.restore();
   }
 
-  protected headRadius(): number {
-    return R;
-  }
   /** Repère local de la forme humaine (draw() choisit la forme). */
   protected drawTop(ctx: CanvasRenderingContext2D): void {
     this.drawHuman(ctx, false);
@@ -769,7 +763,7 @@ class WaterBomb implements WorldObject {
   private phase: 'air' | 'prime' | 'blast' = 'air';
   private t = 0;
   private readonly flight: number;
-  private readonly dir: Dir8;
+  private readonly dir: number;
   private readonly height: number;
 
   constructor(
@@ -782,7 +776,7 @@ class WaterBomb implements WorldObject {
     this.team = owner.team;
     const d = Math.hypot(x - fromX, y - fromY);
     this.flight = BOMB.flightBase + d * BOMB.flightPerPx;
-    this.dir = dir8(Math.atan2(y - fromY, x - fromX));
+    this.dir = Math.atan2(y - fromY, x - fromX);
     this.height = BOMB.arcHeight * clamp(0.4 + d / BOMB.range, 0.4, 1);
   }
 
@@ -806,7 +800,7 @@ class WaterBomb implements WorldObject {
   private explode(ctx: GameContext): void {
     for (const c of ctx.targets) {
       if (!c.alive || !hostile(this, c)) continue;
-      const d = distToBox(this.x, this.y, c.box());
+      const d = distToCircle(this.x, this.y, c.circle());
       if (d > BOMB.radius) continue;
       if (!lineOfSight(ctx.arena, this.x, this.y, c.x, c.y)) continue;
       const k = d / BOMB.radius; // 0 au centre → 1 au bord
@@ -852,43 +846,76 @@ class WaterBomb implements WorldObject {
       const z = Math.sin(Math.PI * u);
       ctx.fillStyle = `rgba(0,0,0,${0.35 - z * 0.15})`;
       ctx.beginPath();
-      ctx.ellipse(bx, by + 12, 12 * (1 - z * 0.3), 5 * (1 - z * 0.3), 0, 0, TAU);
+      ctx.arc(bx + z * 6, by + z * 9, 9 * (1 - z * 0.35), 0, TAU);
       ctx.fill();
     }
   }
 
-  /** En vol : au-dessus de tout, murs compris (elle est lancée en l'air). */
+  /**
+   * En vol : au-dessus de tout, murs compris (elle est lancée en l'air). Vue de dessus, elle
+   * grossit en montant et se dandine dans les airs.
+   */
   drawSky(ctx: CanvasRenderingContext2D): void {
     if (this.phase !== 'air') return;
     const u = this.t / this.flight;
     const bx = this.fromX + (this.x - this.fromX) * u;
-    const by = this.fromY + (this.y - this.fromY) * u - Math.sin(Math.PI * u) * this.height;
-    const img = bombImage(this.dir);
-    const s = 0.85 * (1 + Math.sin(Math.PI * u) * 0.35); // plus grosse en haut de la cloche
+    const by = this.fromY + (this.y - this.fromY) * u;
+    const s = 1 + (Math.sin(Math.PI * u) * this.height) / 220; // plus haut = plus gros
     ctx.save();
-    ctx.imageSmoothingEnabled = false;
     ctx.translate(bx, by);
-    ctx.rotate(Math.sin(u * TAU * 2) * 0.15);
-    ctx.drawImage(img, (-img.width * s) / 2, (-img.height * s) / 2, img.width * s, img.height * s);
+    ctx.rotate(this.dir + Math.sin(u * TAU * 2) * 0.25);
+    ctx.scale(s, s);
+    cached(ctx, 'turty.balloon', 13, drawWaterBalloon);
     ctx.restore();
   }
 
   drawOver(ctx: CanvasRenderingContext2D): void {
     if (this.phase === 'air') return;
     ctx.save();
-    ctx.imageSmoothingEnabled = false;
+    ctx.translate(this.x, this.y);
     if (this.phase === 'prime') {
-      const i = Math.min(IMPACT_FRAMES - 1, Math.floor((this.t / BOMB.prime) * IMPACT_FRAMES));
-      const img = impactImage(i);
-      const s = 0.9;
-      ctx.drawImage(img, this.x - (img.width * s) / 2, this.y + 10 - img.height * s, img.width * s, img.height * s);
+      // Posée au sol : elle tremble et gonfle avant d'éclater.
+      const k = this.t / BOMB.prime;
+      const wob = Math.sin(this.t * 40) * 0.12 * k;
+      ctx.rotate(this.dir);
+      ctx.scale(1 + k * 0.25 + wob, 1 + k * 0.25 - wob);
+      cached(ctx, 'turty.balloon', 13, drawWaterBalloon);
     } else {
-      const i = Math.min(BLAST_FRAMES - 1, Math.floor((this.t / BOMB.blastTime) * BLAST_FRAMES));
-      const img = blastImage(i);
-      const s = 1.7;
-      ctx.globalAlpha = i === BLAST_FRAMES - 1 ? 0.8 : 1;
-      ctx.drawImage(img, this.x - (img.width * s) / 2, this.y + 18 - img.height * s, img.width * s, img.height * s);
+      // Éclaboussure : une couronne de gouttes qui part dans tous les sens, et la flaque qui s'étale.
+      const k = Math.min(1, this.t / BOMB.blastTime);
+      ctx.globalAlpha = 1 - k * 0.6;
+      ctx.fillStyle = 'rgba(95,214,234,0.55)';
+      ctx.beginPath();
+      ctx.arc(0, 0, BOMB.radius * (0.35 + 0.55 * k), 0, TAU);
+      ctx.fill();
+      ctx.strokeStyle = FOAM_COLOR;
+      ctx.lineWidth = 4 * (1 - k) + 1;
+      ctx.stroke();
+      for (let i = 0; i < 12; i++) {
+        const a = (i / 12) * TAU + (i % 2) * 0.2;
+        const d = BOMB.radius * (0.3 + k * (0.75 + (i % 3) * 0.12));
+        inked(ctx, i % 2 ? WATER_COLOR : FOAM_COLOR, () => ctx.arc(Math.cos(a) * d, Math.sin(a) * d, 5 * (1 - k) + 1.5, 0, TAU), 1.2);
+      }
     }
     ctx.restore();
   }
+}
+
+/** Bombe à eau vue de dessus (nœud vers -x) : ballon bleu translucide, reflet, nœud orange. */
+function drawWaterBalloon(ctx: CanvasRenderingContext2D): void {
+  inked(ctx, '#f07a28', () => {
+    ctx.moveTo(-8, 0);
+    ctx.lineTo(-12.5, -3);
+    ctx.lineTo(-12.5, 3);
+    ctx.closePath();
+  }, 1.4);
+  inked(ctx, '#3fb8e0', () => ctx.ellipse(0, 0, 9.5, 8.5, 0, 0, TAU), 2);
+  ctx.fillStyle = 'rgba(160,235,255,0.75)';
+  ctx.beginPath();
+  ctx.ellipse(1.5, 1.5, 5.5, 4.5, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.85)';
+  ctx.beginPath();
+  ctx.ellipse(-2.5, -3, 2.6, 1.6, -0.6, 0, TAU);
+  ctx.fill();
 }

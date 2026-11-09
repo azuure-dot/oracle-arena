@@ -1,6 +1,6 @@
 import { COLORS } from '../config';
 import type { GameContext } from '../core/GameContext';
-import { boxExtent, boxInCone, boxesOverlap } from '../core/geometry';
+import { circleInCone, circlesOverlap } from '../core/geometry';
 import { angleDiff, degToRad, rotateTowards } from '../core/math';
 import { hostile, type Combatant } from '../entities/Combatant';
 import { Projectile } from '../entities/Projectile';
@@ -35,8 +35,8 @@ export const CHARGE = {
   bumpImpulse: 520,
 };
 
-/** Rayon de la tête vue de dessus. */
-const R = 24;
+/** Rayon de la boule (= hitbox). */
+const R = 28;
 const GAUNTLET = '#8e9bb0';
 
 interface ChargeState {
@@ -76,7 +76,7 @@ export class Rempart extends Hero {
     super({
       name: 'Rempart',
       maxHp: 600,
-      hitbox: { hw: 30, hh: 31.5 }, // très grande hitbox
+      radius: R, // très grosse boule
       speed: 220, // très lent
       acceleration: 10,
       mass: 2, // lourd : les reculs le déplacent deux fois moins
@@ -189,7 +189,7 @@ export class Rempart extends Hero {
     let hit = false;
     for (const bot of ctx.targets) {
       if (!bot.alive || !hostile(this, bot)) continue;
-      if (!boxInCone(this.x, this.y, this.aim, HAMMER.halfArc, reach, bot.box())) continue;
+      if (!circleInCone(this.x, this.y, this.aim, HAMMER.halfArc, reach, bot.circle())) continue;
       if (!lineOfSight(ctx.arena, this.x, this.y, bot.x, bot.y)) continue; // pas de coup à travers un mur
       ctx.damage(bot, HAMMER.damage, this);
       const d = Math.hypot(bot.x - this.x, bot.y - this.y) || 1;
@@ -299,21 +299,21 @@ export class Rempart extends Hero {
       const ny = this.y + (dy * dist) / steps;
 
       // Les murs arrêtent la charge (plaquage) ; la lave seulement Rempart, qui s'arrête au bord.
-      if (ctx.arena.boxCollides(nx, ny, this.hw - 0.5, this.hh - 0.5, this.team, true)) {
+      if (ctx.arena.circleCollides(nx, ny, this.radius - 0.5, this.team, true)) {
         this.impact(ctx);
         return;
       }
-      if (ctx.arena.boxCollides(nx, ny, this.hw - 0.5, this.hh - 0.5, this.team)) {
+      if (ctx.arena.circleCollides(nx, ny, this.radius - 0.5, this.team)) {
         // Bord d'une fosse : l'ennemi épinglé, porté devant, est lâché au-dessus de la lave.
         this.endCharge(ctx);
         return;
       }
       if (c.pinned) {
         // Ennemi collé contre l'avant de la hitbox de Rempart.
-        const off = boxExtent(this, dx, dy) + boxExtent(c.pinned, dx, dy) + 2;
+        const off = this.radius + c.pinned.radius + 2;
         const px = nx + dx * off;
         const py = ny + dy * off;
-        if (ctx.arena.boxCollides(px, py, c.pinned.hw - 0.5, c.pinned.hh - 0.5, this.team, true)) {
+        if (ctx.arena.circleCollides(px, py, c.pinned.radius - 0.5, this.team, true)) {
           this.impact(ctx);
           return;
         }
@@ -342,7 +342,7 @@ export class Rempart extends Hero {
       const ox = bot.x - this.x;
       const oy = bot.y - this.y;
       const d = Math.hypot(ox, oy);
-      if (!boxesOverlap(this.box(), bot.box(), 4)) continue;
+      if (!circlesOverlap(this.circle(), bot.circle(), 4)) continue;
 
       const frontal = (ox * dx + oy * dy) / (d || 1) > 0.35;
       if (!c.pinned && frontal) {
@@ -387,17 +387,17 @@ export class Rempart extends Hero {
     if (c.pinned) {
       c.pinned.pinned = false;
       // Lâché tel quel au-dessus de la lave s'il y est : il y tombe.
-      if (c.pinned.alive) ctx.arena.resolveBox(c.pinned, c.pinned.hw, c.pinned.hh, c.pinned.team, true);
+      if (c.pinned.alive) ctx.arena.resolveCircle(c.pinned, c.pinned.radius, c.pinned.team, true);
     }
     this.charge = null;
     this.chargeCooldown = CHARGE.cooldown;
     this.vx = this.vy = 0;
-    ctx.arena.resolveBox(this, this.hw, this.hh, this.team);
+    ctx.arena.resolveCircle(this, this.radius, this.team);
   }
 
-  // ------------------------------------------------------------ sprite
+  // ------------------------------------------------------------ rendu
 
-  protected override spriteFacingAngle(): number {
+  protected override facingAngle(): number {
     return this.charge ? this.charge.dir : this.aim;
   }
   protected override isWalking(): boolean {
@@ -405,10 +405,6 @@ export class Rempart extends Hero {
   }
   protected override animRate(): number {
     return this.charge && this.charge.windup <= 0 ? 2.2 : 1;
-  }
-
-  protected headRadius(): number {
-    return R;
   }
 
   /**

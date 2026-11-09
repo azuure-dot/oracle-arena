@@ -1,5 +1,5 @@
 import { COLORS } from '../config';
-import { circleIntersectsBox } from '../core/geometry';
+import { circleTouches } from '../core/geometry';
 import type { Vec2 } from '../core/math';
 import type { Effects } from '../effects/Effects';
 import type { Hero } from '../heroes/Hero';
@@ -40,7 +40,7 @@ export class HealthPacks {
       }
       // Un héros à fond de PV ne gaspille pas le pack.
       const taker = heroes.find(
-        (h) => h.alive && h.hp < h.maxHp && circleIntersectsBox(p.x, p.y, HEALTH_PACK.radius, h.box()),
+        (h) => h.alive && h.hp < h.maxHp && circleTouches(p.x, p.y, HEALTH_PACK.radius, h.circle()),
       );
       if (!taker) continue;
       taker.heal(HEALTH_PACK.heal);

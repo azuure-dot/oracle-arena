@@ -1,6 +1,6 @@
 import type { GameContext } from '../core/GameContext';
 import type { Hero } from '../heroes/Hero';
-import type { Box } from '../core/geometry';
+import type { Circle } from '../core/geometry';
 import type { BuffKind } from '../ui/healthBar';
 import type { Team } from './Team';
 
@@ -13,8 +13,8 @@ export interface Combatant {
   readonly team: Team;
   x: number;
   y: number;
-  readonly hw: number;
-  readonly hh: number;
+  /** Rayon de la boule : hitbox ronde (dégâts et collisions). */
+  readonly radius: number;
   readonly hp: number;
   readonly maxHp: number;
   readonly alive: boolean;
@@ -25,7 +25,7 @@ export interface Combatant {
   /** Buffs d'aura (Tempo, Skater), soin et vitesse pouvant se cumuler : remis à zéro chaque frame par le monde. */
   buffs: BuffKind[];
   auraSpeedMul: number;
-  box(): Box;
+  circle(): Circle;
   /** Retourne les dégâts réellement infligés (0 si immunisé). */
   takeDamage(amount: number, ctx: GameContext): number;
   heal(amount: number): void;

@@ -9,8 +9,11 @@ import type { Arena } from '../world/Arena';
  * retient aussi l'équipe qui l'a mouillée en dernier : les alliés de cette équipe y
  * récupèrent leur soin passif plus tôt (WET.regenDelay).
  *
- * Rendu : une petite image (1 pixel = 1 case) mise à jour seulement là où l'eau
- * change, puis agrandie sans lissage : des flaques en gros pixels, dans le style du jeu.
+ * Rendu : le contour des flaques est calculé 10 fois par seconde (« marching squares »
+ * sur le niveau d'eau des cases, interpolé entre leurs centres), puis dessiné en vectoriel
+ * à chaque image : eau translucide et liseré clair, aux bords nets et lisses quel que soit
+ * le zoom (pas d'image agrandie, donc pas de flou). Une case qui sèche voit son niveau
+ * baisser : la flaque rétrécit avant de disparaître.
  */
 export const WET = {
   /** Durée d'une case mouillée (s). */
@@ -22,9 +25,14 @@ export const WET = {
   regenDelay: 0.5,
 };
 
-const WATER = [64, 196, 222];
-const RIM = [170, 240, 248];
-const DEEP = [30, 120, 150];
+const WATER = 'rgba(64,196,222,0.5)';
+const RIM = 'rgba(190,246,252,0.95)';
+const SHINE = 'rgba(255,255,255,0.7)';
+/**
+ * Niveau d'eau (0..1, adouci entre cases voisines) à partir duquel le sol est dessiné
+ * mouillé : le contour passe là. Une case isolée (niveau adouci 0,25) reste visible.
+ */
+const ISO = 0.2;
 
 export class WetGround {
   private readonly cols: number;
@@ -38,9 +46,11 @@ export class WetGround {
   private readonly blocked: Uint8Array;
   /** Cases mouillées en ce moment (à faire sécher / redessiner). */
   private readonly active = new Set<number>();
-  private canvas: HTMLCanvasElement | null = null;
-  private image: ImageData | null = null;
-  private dirty = false;
+  /** Formes des flaques (coordonnées monde), recalculées 10 fois par seconde. */
+  private water: Path2D | null = null;
+  private rim: Path2D | null = null;
+  private shine: Path2D | null = null;
+  private shapesDirty = false;
   private redrawTimer = 0;
   /** Temps de jeu de la dernière mise à jour (pour l'estompage). */
   private now = 0;
@@ -88,7 +98,7 @@ export class WetGround {
         this.active.add(i);
       }
     }
-    this.dirty = true;
+    this.shapesDirty = true;
   }
 
   isWet(x: number, y: number, now: number): boolean {
@@ -123,58 +133,168 @@ export class WetGround {
   clear(): void {
     for (const i of this.active) this.until[i] = 0;
     this.active.clear();
-    this.dirty = true;
+    this.shapesDirty = true;
   }
 
   update(dt: number, now: number): void {
-    // L'eau sèche : on retire les cases expirées et on rafraîchit l'estompage (10 fois/s suffit).
-    this.redrawTimer -= dt;
-    if (this.redrawTimer > 0 && !this.dirty) return;
-    this.redrawTimer = 0.1;
-    if (this.active.size) this.dirty = true;
-    for (const i of this.active) if (this.until[i] <= now) this.active.delete(i);
     this.now = now;
+    // L'eau sèche : on retire les cases expirées (10 fois/s suffit).
+    this.redrawTimer -= dt;
+    if (this.redrawTimer > 0) return;
+    this.redrawTimer = 0.1;
+    for (const i of this.active) if (this.until[i] <= now) this.active.delete(i);
+    if (this.active.size || this.water) this.shapesDirty = true; // l'eau s'estompe
   }
 
   draw(ctx: CanvasRenderingContext2D): void {
-    if (!this.dirty && !this.active.size && !this.canvas) return;
-    if (!this.canvas) {
-      this.canvas = document.createElement('canvas');
-      this.canvas.width = this.cols;
-      this.canvas.height = this.rows;
-      this.image = this.canvas.getContext('2d')!.createImageData(this.cols, this.rows);
-    }
-    if (this.dirty) this.repaint();
-    if (!this.active.size) return;
+    if (this.shapesDirty) this.buildShapes();
+    if (!this.water) return;
     ctx.save();
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(this.canvas, 0, 0, this.cols * WET.cell, this.rows * WET.cell);
+    ctx.fillStyle = WATER;
+    ctx.fill(this.water);
+    ctx.strokeStyle = RIM;
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = 'round';
+    ctx.stroke(this.rim!);
+    ctx.fillStyle = SHINE;
+    ctx.fill(this.shine!);
     ctx.restore();
   }
 
-  private repaint(): void {
-    const img = this.image!;
-    const d = img.data;
-    d.fill(0);
-    const now = this.now;
+  /**
+   * « Marching squares » : chaque carré relie les centres de 4 cases voisines. On garde la
+   * partie du carré où le niveau d'eau dépasse ISO (polygone, avec des points interpolés sur
+   * les côtés traversés) et on note les segments de contour pour le liseré.
+   *
+   * Le niveau d'eau est adouci (noyau 1-2-1 dans les deux sens) : le contour est arrondi au
+   * lieu de suivre les marches de la grille. Tout se calcule sur le rectangle qui englobe
+   * l'eau, dans des tableaux ; les carrés entièrement mouillés d'une même rangée sont
+   * regroupés en une seule bande.
+   */
+  private buildShapes(): void {
+    this.shapesDirty = false;
+    if (!this.active.size) {
+      this.water = this.rim = this.shine = null;
+      return;
+    }
+    const C = WET.cell;
     const cols = this.cols;
+    const now = this.now;
+    // Rectangle englobant (en cases), élargi de 2 pour l'adoucissement.
+    let cmin = Infinity;
+    let cmax = -Infinity;
+    let rmin = Infinity;
+    let rmax = -Infinity;
+    for (const i of this.active) {
+      const c = i % cols;
+      const r = (i - c) / cols;
+      if (c < cmin) cmin = c;
+      if (c > cmax) cmax = c;
+      if (r < rmin) rmin = r;
+      if (r > rmax) rmax = r;
+    }
+    cmin -= 2;
+    rmin -= 2;
+    const w = cmax + 2 - cmin + 1;
+    const h = rmax + 2 - rmin + 1;
+    const raw = new Float32Array(w * h);
+    const shine = new Path2D();
     for (const i of this.active) {
       const left = this.until[i] - now;
       if (left <= 0) continue;
-      const fade = Math.min(1, left / WET.fade);
-      // Bord haut de la flaque plus clair (reflet), bord bas plus sombre, le reste en eau translucide.
-      const up = i - cols;
-      const down = i + cols;
-      const rim = up < 0 || !(this.until[up] > now);
-      const edge = !rim && (down >= this.until.length || !(this.until[down] > now));
-      const col = rim ? RIM : edge ? DEEP : WATER;
-      const k = i * 4;
-      d[k] = col[0];
-      d[k + 1] = col[1];
-      d[k + 2] = col[2];
-      d[k + 3] = Math.round((rim ? 140 : edge ? 150 : 100) * fade);
+      const c = i % cols;
+      const r = (i - c) / cols;
+      const v = Math.min(1, left / WET.fade);
+      raw[(r - rmin) * w + (c - cmin)] = v;
+      // Reflets fixes : un petit trait clair dans quelques cases bien mouillées
+      if ((i * 7919) % 29 === 0 && v > 0.9) {
+        const x = (c + 0.5) * C;
+        const y = (r + 0.5) * C;
+        shine.moveTo(x + 3, y);
+        shine.ellipse(x, y, 3, 1.2, -0.35, 0, TAU);
+      }
     }
-    this.canvas!.getContext('2d')!.putImageData(img, 0, 0);
-    this.dirty = false;
+    // Adoucissement séparable : horizontal puis vertical (1-2-1, total 16).
+    const tmp = new Float32Array(w * h);
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const k = y * w + x;
+        tmp[k] = (x > 0 ? raw[k - 1] : 0) + 2 * raw[k] + (x < w - 1 ? raw[k + 1] : 0);
+      }
+    const lv = raw; // réutilisé pour le niveau adouci
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const k = y * w + x;
+        lv[k] = ((y > 0 ? tmp[k - w] : 0) + 2 * tmp[k] + (y < h - 1 ? tmp[k + w] : 0)) / 16;
+      }
+
+    const water = new Path2D();
+    const rim = new Path2D();
+    const px: number[] = [];
+    const py: number[] = [];
+    const isCross: boolean[] = [];
+    const v = [0, 0, 0, 0];
+    const inside = [false, false, false, false];
+    for (let y = 0; y < h - 1; y++) {
+      let run = -1; // début d'une bande de carrés entièrement mouillés
+      const y0 = (rmin + y + 0.5) * C;
+      const flush = (end: number) => {
+        if (run < 0) return;
+        const xa = (cmin + run + 0.5) * C;
+        water.rect(xa, y0, (end - run) * C, C);
+        run = -1;
+      };
+      for (let x = 0; x < w - 1; x++) {
+        const k = y * w + x;
+        v[0] = lv[k];
+        v[1] = lv[k + 1];
+        v[2] = lv[k + w + 1];
+        v[3] = lv[k + w];
+        let n = 0;
+        for (let q = 0; q < 4; q++) {
+          inside[q] = v[q] >= ISO;
+          if (inside[q]) n++;
+        }
+        if (n === 4) {
+          if (run < 0) run = x;
+          continue;
+        }
+        flush(x);
+        if (n === 0) continue;
+        const x0 = (cmin + x + 0.5) * C;
+        const cx = [x0, x0 + C, x0 + C, x0];
+        const cy = [y0, y0, y0 + C, y0 + C];
+        px.length = py.length = isCross.length = 0;
+        for (let q = 0; q < 4; q++) {
+          const m = (q + 1) % 4;
+          if (inside[q]) {
+            px.push(cx[q]);
+            py.push(cy[q]);
+            isCross.push(false);
+          }
+          if (inside[q] !== inside[m]) {
+            // Point du côté où le niveau vaut exactement ISO (interpolation linéaire).
+            const t = (ISO - v[q]) / (v[m] - v[q]);
+            px.push(cx[q] + (cx[m] - cx[q]) * t);
+            py.push(cy[q] + (cy[m] - cy[q]) * t);
+            isCross.push(true);
+          }
+        }
+        water.moveTo(px[0], py[0]);
+        for (let q = 1; q < px.length; q++) water.lineTo(px[q], py[q]);
+        water.closePath();
+        // Contour : les côtés du polygone qui traversent le carré (entre deux points de passage).
+        for (let q = 0; q < px.length; q++) {
+          const m = (q + 1) % px.length;
+          if (!isCross[q] || !isCross[m]) continue;
+          rim.moveTo(px[q], py[q]);
+          rim.lineTo(px[m], py[m]);
+        }
+      }
+      flush(w - 1);
+    }
+    this.water = water;
+    this.rim = rim;
+    this.shine = shine;
   }
 }

@@ -265,7 +265,7 @@ export class SkaterBrain extends HeroBrain<Skater> {
     const s = this.hero;
     const c = this.controls;
     if (s.isTricking) return;
-    const reach = s.hw + s.meleeReach;
+    const reach = s.radius + s.meleeReach;
     if (this.targetVisible && i.edge < reach * 0.85 && i.aimError < 0.6) {
       if (s.comboReady) c.hold('primary');
     } else if (this.canShoot(i, 0.1) && i.dist > 90 && i.dist < 650 && !s.inCombo) {
@@ -333,7 +333,7 @@ export class TurtyBrain extends HeroBrain<Turty> {
     const speed = Math.hypot(h.vx, h.vy);
     const dx = speed > 20 ? h.vx / speed : 0;
     const dy = speed > 20 ? h.vy / speed : 0;
-    if (h.wetAt(h.x + dx * 50, h.y + h.hh + dy * 50) && h.wetAt(h.x, h.y + h.hh - 4)) {
+    if (h.wetAt(h.x + dx * 50, h.y + dy * 50) && h.wetAt(h.x, h.y)) {
       this.want('turtle');
     } else {
       this.want('human');
@@ -347,7 +347,7 @@ export class TurtyBrain extends HeroBrain<Turty> {
     if (h.isShelling) return; // préparation : la visée suit la cible (oriente le lancer)
 
     // Peu de PV : fuite en tortue si le sol est mouillé, sinon on se bat.
-    if (h.hp / h.maxHp < 0.3 && h.wetAt(h.x, h.y + h.hh - 4)) {
+    if (h.hp / h.maxHp < 0.3 && h.wetAt(h.x, h.y)) {
       this.forcedMove = { x: -i.dir.x, y: -i.dir.y };
       this.want('turtle');
       return;

@@ -1,6 +1,6 @@
 import { COLORS } from '../config';
 import type { GameContext } from '../core/GameContext';
-import { boxInCone, distToBox } from '../core/geometry';
+import { circleInCone, distToCircle } from '../core/geometry';
 import { degToRad, randRange } from '../core/math';
 import { hostile } from '../entities/Combatant';
 import { Projectile } from '../entities/Projectile';
@@ -36,8 +36,8 @@ const AMP = { duration: 3, cooldown: 12 };
 
 type AuraMode = 'heal' | 'speed';
 
-/** Rayon de la tête vue de dessus, peau, gants. */
-const R = 15;
+/** Rayon de la boule (= hitbox), peau, gants. */
+const R = 16;
 const SKIN = '#f1c5a2';
 const GLOVE = '#2f3550';
 
@@ -66,7 +66,7 @@ export class Tempo extends Hero {
     super({
       name: 'Tempo',
       maxHp: 200,
-      hitbox: { hw: 15.4, hh: 19.8 }, // hitbox moyenne
+      radius: R,
       speed: 330, // même vitesse de base que Flux
       acceleration: 16,
       color: '#59d48a',
@@ -111,7 +111,7 @@ export class Tempo extends Hero {
     const speedMul = 1 + (this.amped ? AURA.ampSpeedBonus : AURA.speedBonus);
     for (const bot of ctx.targets) {
       if (bot === this || !bot.alive || hostile(this, bot)) continue;
-      if (distToBox(this.x, this.y, bot.box()) > AURA.radius) continue;
+      if (distToCircle(this.x, this.y, bot.circle()) > AURA.radius) continue;
       addBuff(bot, this.mode); // indicateur "+" ou ">>" à côté de la barre de vie
       if (this.mode === 'heal') bot.heal(heal);
       else bot.auraSpeedMul = speedMul;
@@ -213,7 +213,7 @@ export class Tempo extends Hero {
 
     for (const bot of ctx.targets) {
       if (!bot.alive || !hostile(this, bot) || bot.pinned) continue;
-      if (!boxInCone(this.x, this.y, this.aim, BOOP.halfArc, reach, bot.box())) continue;
+      if (!circleInCone(this.x, this.y, this.aim, BOOP.halfArc, reach, bot.circle())) continue;
       if (!lineOfSight(ctx.arena, this.x, this.y, bot.x, bot.y)) continue;
       ctx.damage(bot, BOOP.damage, this);
       const d = Math.hypot(bot.x - this.x, bot.y - this.y) || 1;
@@ -235,10 +235,6 @@ export class Tempo extends Hero {
   }
 
   // ------------------------------------------------------------ rendu (boule)
-
-  protected headRadius(): number {
-    return R;
-  }
 
   /**
    * Canon sonique tenu à deux mains : il recule à chaque tir et son pavillon pulse.
