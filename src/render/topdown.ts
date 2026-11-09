@@ -721,3 +721,218 @@ export function skaterGear(ctx: CanvasRenderingContext2D, index: number, r: numb
     ctx.fill();
   }
 }
+
+// ------------------------------------------------------------ Camellia (archange) et petits anges
+
+/** Palette de Camellia (d'après son concept) : cheveux rose crevette, or, plumes blanches. */
+export const CAMELLIA = {
+  skin: '#efcfaa',
+  hair: '#f2606e',
+  hairDark: '#c23a50',
+  hairLight: '#ff9aa4',
+  gold: '#f2c14e',
+  goldDark: '#b9862a',
+  halo: '#ffe066',
+  feather: '#fbfaff',
+  featherShade: '#d6d9ee',
+  wrap: '#f4ecdc',
+} as const;
+
+/**
+ * Une aile vue de dessus (côté +y ; `side` = -1 pour l'autre). Elle part de l'épaule, s'étend
+ * sur le côté et vers l'arrière : rémiges longues en éventail, puis le bras de l'aile couvert de
+ * petites plumes en écailles. `open` : 1 = déployée, 0 = repliée le long du dos.
+ */
+export function angelWing(ctx: CanvasRenderingContext2D, R: number, side: number, open = 1): void {
+  ctx.save();
+  ctx.scale(1, side);
+  // Repliée : l'aile pivote autour de l'épaule et se range vers l'arrière.
+  ctx.translate(-R * 0.15, R * 0.7);
+  ctx.rotate((1 - open) * 0.95);
+  ctx.translate(R * 0.15, -R * 0.7);
+  // Rémiges : du corps (vers l'arrière) jusqu'au bout de l'aile (vers l'extérieur).
+  const n = 7;
+  for (let i = n - 1; i >= 0; i--) {
+    const u = i / (n - 1);
+    const bx = -R * (0.3 + u * 0.25);
+    const by = R * (0.95 + u * 1.75);
+    const a = Math.PI - u * 0.85;
+    const len = R * (1.05 + u * 0.55);
+    const cx = bx + Math.cos(a) * len * 0.5;
+    const cy = by + Math.sin(a) * len * 0.5;
+    inked(ctx, i % 2 ? CAMELLIA.feather : '#f1f2fb', () => ctx.ellipse(cx, cy, len * 0.55, R * 0.24, a, 0, TAU), 1.6);
+    ctx.strokeStyle = CAMELLIA.featherShade;
+    ctx.lineWidth = R * 0.05;
+    ctx.beginPath();
+    ctx.moveTo(bx, by);
+    ctx.lineTo(cx + Math.cos(a) * len * 0.4, cy + Math.sin(a) * len * 0.4);
+    ctx.stroke();
+  }
+  // Bras de l'aile (couvertures) : bord d'attaque arrondi, de l'épaule jusqu'au bout.
+  inked(ctx, CAMELLIA.feather, () => {
+    ctx.moveTo(-R * 0.35, R * 0.55);
+    ctx.quadraticCurveTo(R * 0.35, R * 1.2, R * 0.05, R * 2.3);
+    ctx.quadraticCurveTo(-R * 0.15, R * 2.95, -R * 0.65, R * 2.95);
+    ctx.quadraticCurveTo(-R * 0.85, R * 2.2, -R * 0.75, R * 1.5);
+    ctx.quadraticCurveTo(-R * 0.7, R * 0.9, -R * 0.35, R * 0.55);
+    ctx.closePath();
+  }, 1.8);
+  // Petites plumes en écailles
+  ctx.strokeStyle = CAMELLIA.featherShade;
+  ctx.lineWidth = R * 0.06;
+  for (const [x, y] of [[-0.2, 1.05], [-0.15, 1.55], [-0.2, 2.05], [-0.38, 2.5], [-0.5, 1.3], [-0.5, 1.85]] as const) {
+    ctx.beginPath();
+    ctx.arc(x * R, y * R, R * 0.2, Math.PI * 0.55, Math.PI * 1.45);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/**
+ * Longs cheveux lisses rose crevette, dessous (avant la tête) : la masse qui tombe dans le dos,
+ * entre les ailes, en mèches droites effilées.
+ */
+export function camelliaHairBack(ctx: CanvasRenderingContext2D, R: number): void {
+  // Une seule nappe lisse qui s'affine vers le bas du dos et finit en pointe douce.
+  inked(ctx, CAMELLIA.hair, () => {
+    ctx.moveTo(-R * 0.2, -R * 0.97);
+    ctx.bezierCurveTo(-R * 1.0, -R * 0.98, -R * 1.6, -R * 0.62, -R * 2.2, -R * 0.3);
+    ctx.quadraticCurveTo(-R * 2.55, -R * 0.05, -R * 2.6, R * 0.05);
+    ctx.quadraticCurveTo(-R * 2.45, R * 0.12, -R * 2.2, R * 0.3);
+    ctx.bezierCurveTo(-R * 1.6, R * 0.62, -R * 1.0, R * 0.98, -R * 0.2, R * 0.97);
+    ctx.closePath();
+  }, 2);
+  // Mèches droites qui convergent vers la pointe, un reflet clair au milieu.
+  ctx.strokeStyle = CAMELLIA.hairDark;
+  ctx.lineWidth = R * 0.055;
+  for (const s of [-0.55, 0.55]) {
+    ctx.beginPath();
+    ctx.moveTo(-R * 1.0, s * R);
+    ctx.quadraticCurveTo(-R * 1.7, s * R * 0.62, -R * 2.3, s * R * 0.12);
+    ctx.stroke();
+  }
+  ctx.strokeStyle = CAMELLIA.hairLight;
+  ctx.lineWidth = R * 0.09;
+  ctx.beginPath();
+  ctx.moveTo(-R * 1.05, -R * 0.12);
+  ctx.quadraticCurveTo(-R * 1.6, -R * 0.1, -R * 2.05, -R * 0.02);
+  ctx.stroke();
+}
+
+/** Dessus des cheveux, mèche qui retombe devant un œil. */
+export function camelliaHairTop(ctx: CanvasRenderingContext2D, R: number): void {
+  classicHair(ctx, R, CAMELLIA.hair, CAMELLIA.hairDark, 0.48);
+  // Mèche devant (sur le côté du visage, comme sur le concept)
+  inked(ctx, CAMELLIA.hair, () => {
+    ctx.moveTo(R * 0.15, -R * 0.75);
+    ctx.quadraticCurveTo(R * 0.75, -R * 0.55, R * 0.92, -R * 0.05);
+    ctx.quadraticCurveTo(R * 0.55, -R * 0.3, R * 0.2, -R * 0.35);
+    ctx.closePath();
+  }, 1.6);
+  ctx.strokeStyle = CAMELLIA.hairLight;
+  ctx.lineWidth = R * 0.06;
+  ctx.beginPath();
+  ctx.moveTo(-R * 0.05, R * 0.4);
+  ctx.quadraticCurveTo(-R * 0.4, R * 0.55, -R * 0.75, R * 0.45);
+  ctx.stroke();
+}
+
+/** Épaulières dorées (sous la tête : elles dépassent sur les côtés). */
+export function goldPauldrons(ctx: CanvasRenderingContext2D, R: number): void {
+  for (const s of [-1, 1]) {
+    inked(ctx, CAMELLIA.gold, () => ctx.ellipse(-R * 0.15, s * R * 0.92, R * 0.42, R * 0.3, 0, 0, TAU), 1.8);
+    ctx.strokeStyle = CAMELLIA.goldDark;
+    ctx.lineWidth = R * 0.07;
+    ctx.beginPath();
+    ctx.ellipse(-R * 0.15, s * R * 0.92, R * 0.25, R * 0.16, 0, 0, TAU);
+    ctx.stroke();
+  }
+}
+
+/** Auréole dorée flottant au-dessus de la tête (anneau lumineux, lueur douce). */
+export function halo(ctx: CanvasRenderingContext2D, r: number, width: number): void {
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,230,120,0.3)';
+  ctx.lineWidth = width * 2;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, 0, TAU);
+  ctx.stroke();
+  ctx.strokeStyle = CAMELLIA.goldDark;
+  ctx.lineWidth = width + 1.6;
+  ctx.stroke();
+  ctx.strokeStyle = CAMELLIA.halo;
+  ctx.lineWidth = width;
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+  ctx.lineWidth = width * 0.35;
+  ctx.beginPath();
+  ctx.arc(0, 0, r, Math.PI * 1.05, Math.PI * 1.55);
+  ctx.stroke();
+  ctx.restore();
+}
+
+/** Plume (projectile, plumes qui tombent) : pointe vers +x, longueur `L`. */
+export function feather(ctx: CanvasRenderingContext2D, L: number, tip: string = CAMELLIA.gold): void {
+  inked(ctx, CAMELLIA.feather, () => {
+    ctx.moveTo(L * 0.5, 0);
+    ctx.quadraticCurveTo(L * 0.1, -L * 0.24, -L * 0.45, -L * 0.1);
+    ctx.lineTo(-L * 0.38, 0);
+    ctx.lineTo(-L * 0.45, L * 0.1);
+    ctx.quadraticCurveTo(L * 0.1, L * 0.24, L * 0.5, 0);
+    ctx.closePath();
+  }, Math.max(1, L * 0.08));
+  ctx.strokeStyle = tip;
+  ctx.lineWidth = Math.max(1, L * 0.08);
+  ctx.beginPath();
+  ctx.moveTo(-L * 0.55, 0);
+  ctx.lineTo(L * 0.42, 0);
+  ctx.stroke();
+}
+
+/**
+ * Petit ange de Camellia, vu de dessus (regard vers +x) : boule aux couleurs de l'équipe vue par
+ * le joueur (`team` : bleu pour une Camellia alliée, rouge pour une adverse), petites ailes
+ * blanches qui battent (`flap` : -1..1), mini-auréole dorée.
+ */
+export function littleAngel(ctx: CanvasRenderingContext2D, r: number, flap: number, team: string): void {
+  // Ailes (dessinées à chaque fois : elles battent)
+  for (const s of [-1, 1]) {
+    ctx.save();
+    ctx.translate(-r * 0.15, s * r * 0.75);
+    ctx.rotate(s * (0.3 + flap * 0.4));
+    ctx.scale(1.35, 1.35);
+    inked(ctx, CAMELLIA.feather, () => {
+      ctx.moveTo(0, 0);
+      ctx.quadraticCurveTo(r * 0.55, s * r * 1.15, -r * 0.1, s * r * 1.75);
+      ctx.quadraticCurveTo(-r * 0.4, s * r * 1.45, -r * 0.65, s * r * 1.55);
+      ctx.quadraticCurveTo(-r * 0.8, s * r * 1.2, -r * 1.0, s * r * 1.2);
+      ctx.quadraticCurveTo(-r * 0.8, s * r * 0.6, 0, 0);
+      ctx.closePath();
+    }, 1.1);
+    ctx.restore();
+  }
+  cached(ctx, `angel.body|${r}|${team}`, r * 1.9, (c) => {
+    // Lueur douce, puis la boule aux couleurs de l'équipe
+    c.globalAlpha = 0.3;
+    c.fillStyle = team;
+    c.beginPath();
+    c.arc(0, 0, r * 1.3, 0, TAU);
+    c.fill();
+    c.globalAlpha = 1;
+    inked(c, team, () => c.arc(0, 0, r, 0, TAU), 1.8);
+    c.fillStyle = 'rgba(255,255,255,0.22)';
+    c.beginPath();
+    c.arc(r * 0.2, 0, r * 0.62, 0, TAU);
+    c.fill();
+    shade(c, 0, 0, r, 0, 0.18);
+    // Petite auréole qui flotte au-dessus de la nuque (elle dépasse derrière la tête) : anneau
+    // blanc cerné d'or, bien distinct de la tête jaune.
+    for (const [color, w] of [[LINE, 0.34], [CAMELLIA.halo, 0.22], ['#ffffff', 0.08]] as const) {
+      c.strokeStyle = color;
+      c.lineWidth = r * w;
+      c.beginPath();
+      c.ellipse(-r * 0.75, 0, r * 0.32, r * 0.5, 0, 0, TAU);
+      c.stroke();
+    }
+  });
+}

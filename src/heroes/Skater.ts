@@ -30,7 +30,11 @@ export const SKATER = {
   footSpeed: 0.85,
 };
 
-/** Clic G : combo de 3 coups de planche (le dernier, plus lent, repousse fort), puis 1,5 s de recharge. */
+/**
+ * Clic G : combo de 3 coups de planche (le dernier, plus lent, repousse fort). Pas de recharge :
+ * quand il arrête de taper (ou après le 3e coup), il doit attendre 1,5 s après son dernier coup
+ * avant de pouvoir retaper (le combo repart alors du 1er coup).
+ */
 export const COMBO = {
   hits: [
     // Portée réduite de 40 % (88 → 53, 100 → 60)
@@ -41,8 +45,9 @@ export const COMBO = {
   ],
   /** Délai minimal entre deux coups. */
   interval: 0.34,
-  /** Sans nouveau coup pendant ce temps, le combo s'arrête (et la recharge démarre). */
+  /** Sans nouveau coup pendant ce temps, le combo s'arrête. */
   window: 0.9,
+  /** Attente avant de pouvoir retaper, comptée depuis le dernier coup. */
   cooldown: 1.5,
   /** Durée de l'animation d'un coup. */
   swingTime: 0.24,
@@ -243,10 +248,10 @@ export class Skater extends Hero {
     this.swingTimer = Math.max(0, this.swingTimer - dt);
     this.footTimer = Math.max(0, this.footTimer - dt);
 
-    // Combo interrompu : la recharge démarre.
+    // Combo interrompu : il reste à attendre la fin des 1,5 s depuis le dernier coup.
     if (this.comboStep > 0) {
       this.comboTimer += dt;
-      if (this.comboTimer > COMBO.window) this.endCombo();
+      if (this.comboTimer > COMBO.window) this.endCombo(this.comboTimer);
     }
     if (this.swing) {
       this.swing.t += dt;
@@ -379,10 +384,11 @@ export class Skater extends Hero {
     if (this.comboStep >= COMBO.hits.length) this.endCombo();
   }
 
-  private endCombo(): void {
+  /** Fin du combo ; `sinceHit` : temps déjà écoulé depuis le dernier coup (compté dans l'attente). */
+  private endCombo(sinceHit = 0): void {
     this.comboStep = 0;
     this.comboTimer = 0;
-    this.comboCooldown = COMBO.cooldown;
+    this.comboCooldown = Math.max(0, COMBO.cooldown - sinceHit);
   }
 
   // ------------------------------------------------------------ équipement
@@ -633,11 +639,10 @@ export class Skater extends Hero {
   }
 
   weaponHud(): WeaponHud {
+    // Arme de mêlée : pas de munitions ni de rechargement, juste la jauge « prêt » (attente de 1,5 s).
     return {
       name: t('skater.weapon'),
-      ammo: COMBO.hits.length - this.comboStep,
-      magSize: COMBO.hits.length,
-      reloadProgress: this.comboCooldown > 0 ? 1 - this.comboCooldown / COMBO.cooldown : undefined,
+      readyRatio: this.comboCooldown > 0 ? 1 - this.comboCooldown / COMBO.cooldown : 1,
     };
   }
 

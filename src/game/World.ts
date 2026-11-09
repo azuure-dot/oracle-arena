@@ -141,6 +141,9 @@ export class World {
 
   damage(target: Combatant, amount: number, source: Hero | null, cause?: DamageCause): number {
     if (source) amount *= source.damageMultiplier; // bots : -30 %
+    // Protégé (Sanctuaire de Camellia) : ne descend pas sous un seuil de PV. La lave tue quand même.
+    const guard = target.guard;
+    if (guard && guard.until >= this.time && cause !== 'lava') amount = Math.min(amount, Math.max(0, target.hp - guard.floor));
     const wasAlive = target.alive;
     const dealt = target.takeDamage(amount, this.ctx);
     if (dealt <= 0) return 0;
@@ -203,10 +206,18 @@ export class World {
     return false;
   }
 
-  /** Les cibles de la même équipe que le tireur sont traversées. */
+  /** Les cibles de la même équipe que le tireur sont traversées (sauf projectile qui soigne : plumes de Camellia). */
   private hitTargets(p: Projectile): void {
     for (const c of this.targetList) {
-      if (!c.alive || !hostile(c, p)) continue;
+      if (!c.alive) continue;
+      if (!hostile(c, p)) {
+        if (p.allyHeal <= 0 || c === p.owner || c.decoy) continue;
+        if (!circleTouches(p.x, p.y, p.radius, c.circle())) continue;
+        c.heal(p.allyHeal);
+        this.effects.sparks(p.x, p.y, COLORS.auraHeal, 4, 140);
+        p.dead = true;
+        return;
+      }
       if (!circleTouches(p.x, p.y, p.radius, c.circle())) continue;
       if (p.pierce) {
         if (p.hits.has(c)) continue;
@@ -260,7 +271,7 @@ export class World {
     // --- 1. Monde (sol, entités visibles, effets)
     toWorld();
     this.arena.drawFloor(ctx, this.time);
-    this.wet.draw(ctx);
+    this.wet.draw(ctx, this.player?.team ?? null); // eau de l'équipe du joueur en bleu, adverse en rouge
     this.hooks.drawGround?.(ctx, this.time);
     this.effects.drawUnder(ctx);
     const objects = this.objects.filter((o) => !eye || !hostile(o, eye) || this.seesPoint(eye, o.x, o.y));

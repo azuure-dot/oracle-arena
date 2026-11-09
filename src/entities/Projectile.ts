@@ -1,9 +1,9 @@
 import { COLORS } from '../config';
-import { cached, skaterGear } from '../render/topdown';
+import { cached, feather, skaterGear } from '../render/topdown';
 import type { Hero } from '../heroes/Hero';
 import type { Team } from './Team';
 
-export type ProjectileStyle = 'bullet' | 'sonic' | 'fire' | 'enemy' | 'gear' | 'water';
+export type ProjectileStyle = 'bullet' | 'sonic' | 'fire' | 'enemy' | 'gear' | 'water' | 'feather';
 
 export interface ProjectileSpec {
   x: number;
@@ -21,6 +21,11 @@ export interface ProjectileSpec {
   style?: ProjectileStyle;
   /** Style 'gear' : pièce d'équipement du Skater (0 casque, 1 genouillère, 2 coudière, 3 protège-poignet), rotation (rad/px parcouru). */
   gear?: { index: number; spin: number };
+  /**
+   * Soin par projectile (plumes de Camellia) : un allié touché (pas le tireur) récupère ces PV
+   * et arrête le projectile, au lieu d'être traversé.
+   */
+  allyHeal?: number;
   /** Appelé après chaque déplacement (ex. goutte d'eau qui mouille le sol sur son passage). */
   onUpdate?: (p: Projectile) => void;
   /** Appelé une fois, quand le projectile s'arrête (mur, cible, bouclier, portée). */
@@ -38,6 +43,7 @@ export class Projectile {
   readonly maxRange: number;
   readonly radius: number;
   readonly pierce: boolean;
+  readonly allyHeal: number;
   readonly style: ProjectileStyle;
   readonly gear: ProjectileSpec['gear'] | null;
   readonly onUpdate: ProjectileSpec['onUpdate'];
@@ -58,6 +64,7 @@ export class Projectile {
     this.maxRange = spec.range;
     this.radius = spec.radius ?? 2;
     this.pierce = spec.pierce ?? false;
+    this.allyHeal = spec.allyHeal ?? 0;
     this.style = spec.style ?? 'bullet';
     this.gear = spec.gear ?? null;
     this.onUpdate = spec.onUpdate;
@@ -85,6 +92,23 @@ export class Projectile {
     const dy = this.vy / speed;
 
     switch (this.style) {
+      case 'feather': {
+        // Plume de Camellia : traînée dorée, puis la plume blanche à pointe dorée.
+        ctx.strokeStyle = 'rgba(255,224,102,0.45)';
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(this.x - dx * 26, this.y - dy * 26);
+        ctx.lineTo(this.x - dx * 6, this.y - dy * 6);
+        ctx.stroke();
+        ctx.lineCap = 'butt';
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(Math.atan2(dy, dx));
+        cached(ctx, 'projectile.feather', 10, (c) => feather(c, 15));
+        ctx.restore();
+        break;
+      }
       case 'gear': {
         const g = this.gear;
         if (!g) break;
@@ -104,20 +128,22 @@ export class Projectile {
       case 'water': {
         // Goutte d'eau : traînée de gouttelettes, puis la goutte (contour, reflet clair).
         const r = this.radius;
-        ctx.fillStyle = 'rgba(64,196,222,0.45)';
+        // Eau de l'adversaire (vue par le joueur) : rouge, comme ses flaques.
+        const foe = this.owner !== null && this.owner.outline !== COLORS.ally;
+        ctx.fillStyle = foe ? 'rgba(232,70,92,0.45)' : 'rgba(64,196,222,0.45)';
         for (let i = 1; i <= 3; i++) {
           ctx.beginPath();
           ctx.arc(this.x - dx * i * 7, this.y - dy * i * 7, r * (1 - i * 0.22), 0, Math.PI * 2);
           ctx.fill();
         }
-        ctx.fillStyle = '#3fc4de';
-        ctx.strokeStyle = '#123a4a';
+        ctx.fillStyle = foe ? '#e8465c' : '#3fc4de';
+        ctx.strokeStyle = foe ? '#4a1220' : '#123a4a';
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.arc(this.x, this.y, r, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
-        ctx.fillStyle = '#c9f6fb';
+        ctx.fillStyle = foe ? '#ffd3d9' : '#c9f6fb';
         ctx.beginPath();
         ctx.arc(this.x - r * 0.3, this.y - r * 0.3, r * 0.35, 0, Math.PI * 2);
         ctx.fill();

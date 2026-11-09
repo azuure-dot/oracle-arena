@@ -1,4 +1,5 @@
 import type { TKey } from '../i18n';
+import { Camellia } from './Camellia';
 import { Flux } from './Flux';
 import type { Hero, InputSlot } from './Hero';
 import { Rempart } from './Rempart';
@@ -90,6 +91,22 @@ export const HEROES: HeroEntry[] = [
       { input: 'ability2', name: 'skater.mode', desc: 'skater.mode.desc' },
     ],
     create: () => new Skater(),
+  },
+  {
+    id: 'camellia',
+    name: 'Camellia',
+    role: 'support',
+    hp: 200,
+    color: '#ff8f9c',
+    tagline: 'camellia.tagline',
+    abilities: [
+      { input: 'primary', name: 'camellia.weapon', desc: 'camellia.weapon.desc' },
+      { input: 'secondary', name: 'camellia.angel', desc: 'camellia.angel.desc' },
+      { input: 'ability1', name: 'camellia.flight', desc: 'camellia.flight.desc' },
+      { input: 'ability2', name: 'camellia.sanctuary', desc: 'camellia.sanctuary.desc' },
+      { input: 'melee', name: 'melee.name', desc: 'melee.desc' },
+    ],
+    create: () => new Camellia(),
   },
 ];
 

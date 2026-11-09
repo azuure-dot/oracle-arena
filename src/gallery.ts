@@ -9,6 +9,7 @@ import { Projectile, type ProjectileSpec } from './entities/Projectile';
 import { ALLY, ENEMY } from './entities/Team';
 import type { Hero } from './heroes/Hero';
 import { HEROES } from './heroes/registry';
+import { littleAngel } from './render/topdown';
 
 const root = document.getElementById('gallery')!;
 const zoomInput = document.getElementById('zoom') as HTMLInputElement;
@@ -63,6 +64,11 @@ const STATES: Record<string, [string, Setup][]> = {
     ['coup de planche', (h) => Object.assign(h, { swing: { step: 0, t: 0.08, aim: 0 }, footTimer: 1 })],
     ['lancer', (h) => Object.assign(h, { throwAnim: 0.25 })],
   ],
+  camellia: [
+    ['tir', (h) => Object.assign(h, { recoil: 0.08, muzzleFlash: 0.05 })],
+    ['petit ange', (h) => Object.assign(h, { castAnim: 0.15 })],
+    ['envol', (h) => Object.assign(h, { flight: { target: { x: 200, y: 0, alive: true }, t: 0.3, dx: 1, dy: 0 } })],
+  ],
 };
 
 function section(title: string): HTMLElement {
@@ -87,13 +93,14 @@ function render(): void {
       setup(hero as unknown as Record<string, unknown>);
       const c = document.createElement('canvas');
       c.title = label;
-      drawHero(c, hero, scale);
+      drawHero(c, hero, scale, entry.id === 'camellia' ? 140 : 120);
       row.appendChild(c);
     }
     const walker = entry.create();
     walker.outline = COLORS.ally;
     const anim = document.createElement('canvas');
     anim.className = 'anim';
+    if (entry.id === 'camellia') anim.dataset.size = '140';
     anim.title = 'Tourne avec la souris et marche (animé)';
     row.appendChild(anim);
     walkers.push({ canvas: anim, hero: walker, scale });
@@ -116,6 +123,28 @@ function render(): void {
     bots.appendChild(c);
   }
 
+  // Petits anges de Camellia : allié, ennemi, ailes hautes / basses.
+  const angels = section('Petits anges (Camellia)');
+  for (const [label, team, flap] of [
+    ['allié', COLORS.ally, 1],
+    ['allié', COLORS.ally, -1],
+    ['ennemi', COLORS.enemy, 0.3],
+  ] as const) {
+    const c = document.createElement('canvas');
+    c.title = label;
+    cell(c, scale, 48, (g) => littleAngel(g, 7, flap, team));
+    angels.appendChild(c);
+  }
+  for (const [label, team] of [['ange gardien allié', COLORS.ally], ['ange gardien ennemi', COLORS.enemy]] as const) {
+    const c = document.createElement('canvas');
+    c.title = label;
+    cell(c, scale, 64, (g) => {
+      g.rotate(-Math.PI / 2);
+      littleAngel(g, 12, 0.4, team);
+    });
+    angels.appendChild(c);
+  }
+
   // Projectiles (vers la droite)
   const shots = section('Projectiles');
   const base = { x: 0, y: 0, angle: 0, speed: 100, damage: 0, team: ENEMY, range: 100 } as const;
@@ -125,6 +154,7 @@ function render(): void {
     ['onde de feu', { style: 'fire', radius: 26 }],
     ['tourelle', { style: 'enemy', radius: 5 }],
     ['goutte d’eau', { style: 'water', radius: 5 }],
+    ['plume', { style: 'feather', radius: 4 }],
     ...[0, 1, 2, 3].map((i) => ['équipement', { style: 'gear', radius: 11, gear: { index: i, spin: 0 } }] as [string, Partial<ProjectileSpec>]),
   ];
   for (const [label, spec] of specs) {
@@ -147,7 +177,7 @@ function animate(time: number): void {
     w.hero.vy = Math.sin(w.hero.aim) * 110;
     for (const k of ['animTime', 'walkAnim']) if (typeof h[k] === 'number') h[k] += dt;
     if (typeof h.walkCycle === 'number') h.walkCycle += (110 * dt) / 140;
-    drawHero(w.canvas, w.hero, w.scale);
+    drawHero(w.canvas, w.hero, w.scale, w.canvas.dataset.size ? Number(w.canvas.dataset.size) : 120);
   }
   requestAnimationFrame(animate);
 }

@@ -123,6 +123,11 @@ export abstract class HeroBrain<H extends Hero = Hero> {
   private smoothMove: Vec2 = { x: 0, y: 0 };
   /** Déplacement imposé cette frame par combat() (fuite, esquive...). Appliqué sans lissage. */
   protected forcedMove: Vec2 | null = null;
+  /**
+   * Point à viser cette frame à la place de la cible (soutien qui vise un allié pour le soigner).
+   * Remis à null à chaque frame : la sous-classe le redonne tant qu'elle en a besoin.
+   */
+  protected aimOverride: Vec2 | null = null;
   private stuckClock = 0;
   private stuckFrom: Vec2 = { x: 0, y: 0 };
   private wantedMoveTime = 0;
@@ -189,6 +194,7 @@ export abstract class HeroBrain<H extends Hero = Hero> {
 
     this.reaction = Math.max(0, this.reaction - dt);
     this.forcedMove = null;
+    this.aimOverride = null;
     this.coverJitterTimer -= dt;
     if (this.coverJitterTimer <= 0) {
       this.coverJitter = randRange(-35, 35);
@@ -665,8 +671,19 @@ export abstract class HeroBrain<H extends Hero = Hero> {
 
   // ------------------------------------------------------------------ visée
 
+  /** La visée actuelle pointe-t-elle vers `p` (à `tolerance` rad près) ? */
+  protected aimedAt(p: Vec2, tolerance: number): boolean {
+    const h = this.hero;
+    return Math.abs(angleDiff(this.aimAngle, Math.atan2(p.y - h.y, p.x - h.x))) < tolerance;
+  }
+
   private applyAim(dt: number, w: BrainWorld): void {
     const h = this.hero;
+    const o = this.aimOverride;
+    if (o) {
+      this.desiredAim = Math.atan2(o.y - h.y, o.x - h.x);
+      this.aimDist = Math.max(30, Math.hypot(o.x - h.x, o.y - h.y));
+    }
     // Léger tremblement de visée : les bots ne sont pas des aimbots.
     const t = w.time + this.wobblePhase;
     const wobble = Math.sin(t * 3.1) * 0.035 + Math.sin(t * 7.7) * 0.02;

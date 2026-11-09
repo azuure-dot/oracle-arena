@@ -24,6 +24,11 @@ export interface Combatant {
   readonly stealthed?: boolean;
   /** Leurre (clone holographique) : touchable, mais hors score et fil des éliminations. */
   readonly decoy?: boolean;
+  /**
+   * Protection contre la mort (Sanctuaire de Camellia) : tant que `until` (temps de jeu) n'est
+   * pas passé, les dégâts ne font pas descendre sous `floor` PV (sauf la lave).
+   */
+  guard?: { floor: number; until: number };
   /** Tenu par une Charge : sa position est pilotée par le Rempart qui charge. */
   pinned: boolean;
   /** Buffs d'aura (Tempo, Skater), soin et vitesse pouvant se cumuler : remis à zéro chaque frame par le monde. */

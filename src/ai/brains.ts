@@ -1,6 +1,7 @@
 import type { BotControls } from '../core/Controls';
 import { randRange } from '../core/math';
 import { hostile, type Combatant } from '../entities/Combatant';
+import { ANGEL, Camellia, FEATHER_GUN, FLIGHT, SANCTUARY } from '../heroes/Camellia';
 import { Flux } from '../heroes/Flux';
 import type { Hero } from '../heroes/Hero';
 import { FIRE, HAMMER, Rempart } from '../heroes/Rempart';
@@ -10,6 +11,7 @@ import { SMASH, THROW, Thor } from '../heroes/Thor';
 import { BOMB, SHELL, Turty, WATER_GUN } from '../heroes/Turty';
 import { HeroBrain, type BrainWorld, type TargetInfo } from './HeroBrain';
 import { pathClear } from './steering';
+import { lineOfSight } from '../world/Visibility';
 
 /**
  * Flux — le glitcheur, à distance moyenne : tire dès qu'il a la cible en vue.
@@ -376,6 +378,137 @@ export class TurtyBrain extends HeroBrain<Turty> {
 }
 
 /** L'IA adaptée au héros attribué au bot. */
+/**
+ * Camellia — soutien à distance : tire en rafale sur sa cible, mais les soins passent avant.
+ * - Sanctuaire de plumes (ange gardien) sur l'allié le plus blessé à portée (ou sur elle-même).
+ * - Hors combat : rafale de plumes sur un allié blessé (chaque plume le soigne de 10 PV).
+ * - Petit ange : sur un allié blessé (visé : il s'y colle directement), sinon sur l'ennemi
+ *   qu'elle combat (en gardant une charge pour soigner).
+ * - Envol vers un allié blessé loin d'elle, ou pour fuir vers un allié quand elle est à bout.
+ * Pour viser un allié, elle tourne sa visée vers lui (aimOverride) et ne tire pas pendant ce temps.
+ */
+type CamelliaPlan = { kind: 'zone' | 'angel' | 'fly'; target: Combatant; t: number };
+
+export class CamelliaBrain extends HeroBrain<Camellia> {
+  protected readonly preferredRange = 330;
+  protected override rangeBand = 90;
+  protected override strafeWeight = 0.8;
+  protected override projectileSpeed = FEATHER_GUN.speed;
+  protected override turnRate = 7;
+
+  private plan: CamelliaPlan | null = null;
+  private angelDelay = randRange(0.5, 1.5);
+  private healDelay = randRange(0.2, 0.6);
+
+  /** Allié (elle comprise si `self`) le plus blessé, en vue, à moins de `range`. */
+  private mostHurt(w: BrainWorld, range: number, below: number, self: boolean): Combatant | null {
+    const h = this.hero;
+    let best: Combatant | null = null;
+    let bestRatio = below;
+    for (const a of w.targets) {
+      if (!a.alive || a.decoy || hostile(h, a) || (a === h && !self)) continue;
+      const ratio = a.hp / a.maxHp;
+      if (ratio >= bestRatio) continue;
+      if (a !== h && (Math.hypot(a.x - h.x, a.y - h.y) > range || !lineOfSight(w.arena, h.x, h.y, a.x, a.y))) continue;
+      bestRatio = ratio;
+      best = a;
+    }
+    return best;
+  }
+
+  protected override always(dt: number, w: BrainWorld): void {
+    const h = this.hero;
+    const c = this.controls;
+    this.angelDelay -= dt;
+    this.healDelay -= dt;
+    if (h.isFlying) {
+      this.plan = null;
+      return;
+    }
+    if (this.plan) {
+      this.plan.t += dt;
+      if (this.plan.t > 0.9 || !this.plan.target.alive) this.plan = null;
+    }
+
+    if (!this.plan && this.healDelay <= 0) {
+      this.healDelay = randRange(0.15, 0.35);
+      const low = h.hp / h.maxHp < 0.35;
+      const hurtAlly = this.mostHurt(w, FLIGHT.range, 0.5, false);
+      if (h.sanctuaryReady) {
+        const z = this.mostHurt(w, SANCTUARY.range, 0.6, true);
+        if (z) this.plan = { kind: 'zone', target: z, t: 0 };
+      }
+      if (!this.plan && h.angelCharges > 0 && this.angelDelay <= 0) {
+        const a = this.mostHurt(w, 520, 0.7, false);
+        if (a) this.plan = { kind: 'angel', target: a, t: 0 };
+      }
+      if (!this.plan && h.flightReady) {
+        // Allié blessé loin d'elle, ou fuite vers un allié quand elle est à bout.
+        const far = hurtAlly && Math.hypot(hurtAlly.x - h.x, hurtAlly.y - h.y) > 260 ? hurtAlly : null;
+        const refuge = low ? this.farthestAlly(w) : null;
+        const to = far ?? refuge;
+        if (to) this.plan = { kind: 'fly', target: to, t: 0 };
+      }
+    }
+
+    const p = this.plan;
+    if (!p) return;
+    // Sur elle-même : un peu devant, dans la direction où elle regarde déjà.
+    const self = p.target === h;
+    const spot = self ? { x: h.x + Math.cos(h.aim) * 40, y: h.y + Math.sin(h.aim) * 40 } : { x: p.target.x, y: p.target.y };
+    this.aimOverride = spot;
+    if (self ? p.t === 0 : !this.aimedAt(spot, 0.08)) return; // sur elle : la visée se rapproche d'abord
+    if (p.kind === 'zone') c.press('ability2');
+    else if (p.kind === 'angel') {
+      c.press('secondary');
+      this.angelDelay = randRange(1, 2);
+    } else {
+      if (h.flightTarget(w) !== p.target) return;
+      c.press('ability1');
+    }
+    this.plan = null;
+  }
+
+  /** Hors combat : rafale de plumes sur un allié blessé en vue (chaque plume rend 10 PV). */
+  protected override roam(_dt: number, w: BrainWorld): void {
+    const h = this.hero;
+    if (this.plan || h.isFlying) return;
+    const ally = this.mostHurt(w, FEATHER_GUN.range * 0.8, 0.9, false);
+    if (!ally) return;
+    this.aimOverride = { x: ally.x, y: ally.y };
+    if (this.aimedAt(ally, 0.08)) this.controls.hold('primary');
+  }
+
+  /** Allié en vue le plus loin d'elle, à portée d'Envol (pour fuir). */
+  private farthestAlly(w: BrainWorld): Combatant | null {
+    const h = this.hero;
+    let best: Combatant | null = null;
+    let bestD = 200;
+    for (const a of w.targets) {
+      if (a === h || !a.alive || a.decoy || hostile(h, a)) continue;
+      const d = Math.hypot(a.x - h.x, a.y - h.y);
+      if (d < bestD || d > FLIGHT.range) continue;
+      if (!lineOfSight(w.arena, h.x, h.y, a.x, a.y)) continue;
+      bestD = d;
+      best = a;
+    }
+    return best;
+  }
+
+  protected combat(_dt: number, w: BrainWorld, t: Combatant, i: TargetInfo): void {
+    const h = this.hero;
+    const c = this.controls;
+    if (this.plan || h.isFlying) return; // elle vise un allié : pas de tir
+    if (this.canShoot(i, 0.12) && i.dist < FEATHER_GUN.range * 0.9) c.hold('primary');
+    // Petit ange sur l'ennemi : la souris est sur lui, il s'y colle directement.
+    const spare = h.angelCharges === ANGEL.charges || !this.mostHurt(w, 520, 0.8, false);
+    if (spare && h.angelCharges > 0 && this.angelDelay <= 0 && this.canShoot(i, 0.06) && i.dist < 520 && !t.decoy) {
+      c.press('secondary');
+      this.angelDelay = randRange(2, 4);
+    }
+  }
+}
+
 export function createBrain(hero: Hero, controls: BotControls): HeroBrain {
   if (hero instanceof Flux) return new FluxBrain(hero, controls);
   if (hero instanceof Rempart) return new RempartBrain(hero, controls);
@@ -383,5 +516,6 @@ export function createBrain(hero: Hero, controls: BotControls): HeroBrain {
   if (hero instanceof Tempo) return new TempoBrain(hero, controls);
   if (hero instanceof Skater) return new SkaterBrain(hero, controls);
   if (hero instanceof Turty) return new TurtyBrain(hero, controls);
+  if (hero instanceof Camellia) return new CamelliaBrain(hero, controls);
   throw new Error(`Pas d'IA pour le héros ${hero.name}`);
 }

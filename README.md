@@ -93,7 +93,7 @@ Commun à tous les modes :
   `MOVE_SPEED_SCALE` dans `src/heroes/Hero.ts`) ;
   les compétences de déplacement sont ralenties d'autant (ruée de Thor, course du trick, carapace ; distance de la Frappe fantôme).
 - **Bots héros** : ils infligent 30 % de dégâts en moins que le joueur.
-- **4 héros** : Thor (tank), Flux (dégâts), Turty (dégâts), Skater (soutien).
+- **5 héros** : Thor (tank), Flux (dégâts), Turty (dégâts), Skater (soutien), Camellia (soutien).
 - **Flux, le glitcheur** (leurres et faux-semblants : l'adversaire doit deviner le vrai du faux), 175 PV, petite boule.
   - Clic G : blasters jumeaux (20 balles/s, 40 munitions, 7,8 dégâts).
   - Clic D, Frappe fantôme : 2 téléportations courtes (101 unités, direction du déplacement, sinon de la visée).
@@ -124,7 +124,8 @@ Commun à tous les modes :
   - Démarche lourde : il se dandine (le corps se décale et penche vers le pied posé, rebondit et s'écrase
     un peu à chaque pas, poussière sous le pied ; le marteau balance au rythme des pas).
 - **Skater** : il se déplace sur sa planche, un peu plus vite que les autres.
-  - Clic G : combo de 3 coups de planche (35, 35 puis 60 dégâts), le 3e repousse ; puis 1,5 s de recharge.
+  - Clic G : combo de 3 coups de planche (35, 35 puis 60 dégâts), le 3e repousse. Pas de rechargement : quand il arrête
+    de taper (ou après le 3e coup), il attend 1,5 s après son dernier coup avant de pouvoir retaper (le combo repart du 1er).
   - Clic D : il lance son équipement dans l'ordre (casque, genouillère, coudière, protège-poignet), 75 dégâts, toutes les secondes.
     On le voit armer puis lancer de la main droite.
   - Espace : trick (3 charges, rechargées une par une en 6 s) sur le joueur le plus proche dans la zone de l'aura.
@@ -137,12 +138,29 @@ Commun à tous les modes :
   - Maj : mode d'aura Vitesse / Soin. L'aura bénéficie au Skater et à ses alliés proches : active de base, puis 3 paliers selon les tricks enchaînés.
     - Vitesse des alliés : +8 % de base, puis +11 / +16 / +22 %. Soin : 9,6 PV/s de base, puis 12 / 15,6 / 21,6 PV/s.
     - Vitesse du Skater lui-même avec les paliers de tricks sur des ennemis : +15 / +26 / +37 %.
+- **Camellia, l'archange** : soutien à distance (200 PV). Ailes blanches, auréole dorée, longs cheveux rose crevette.
+  - Clic G, rafale de plumes : tir automatique façon fusil d'assaut, 9 plumes/s, chargeur de 30, recharge 1,6 s.
+    Chaque plume fait 10 dégâts à un ennemi ; sur un allié, elle s'arrête et lui rend 10 PV (pas sur Camellia elle-même).
+  - Clic D, petit ange (2 charges, rechargées une par une en 8 s) : lancé sur la souris. Si un joueur est sous la souris, il
+    file droit sur lui ; sinon il va au point visé puis rejoint le joueur le plus proche (260 autour, allié ou ennemi).
+    Il vole par-dessus les murs et se colle dans le dos de sa cible pendant 5 s : allié +30 PV/s, ennemi 20 dégâts/s.
+    Personne autour au bout de 3 s : il disparaît.
+  - Espace, Envol : elle vole jusqu'à l'allié visé (le plus proche de la ligne de visée, en vue, à 460 max), ailes grandes
+    ouvertes. Personne de visé : rien ne se passe (recharge non consommée). Recharge 5 s. L'allié visé est entouré.
+  - Maj, Sanctuaire de plumes : un ange gardien se pose sous la souris (420 max, s'arrête aux murs) et ouvre une zone de
+    110 de rayon où tombe une pluie de plumes. Les alliés à l'intérieur (Camellia comprise) récupèrent 17,5 PV/s et ne
+    peuvent pas descendre sous 50 PV (la lave tue quand même). L'ange a 100 PV qui baissent petit à petit (0 au bout de
+    15 s) ; l'adversaire peut le viser et le tuer (les bots le prennent pour cible) : la zone disparaît avec lui.
+    Il ne compte ni dans le score ni dans le fil des éliminations. Recharge 20 s.
+  - Les anges (petits anges et ange gardien) sont bleus pour une Camellia de l'équipe du joueur, rouges pour une adverse.
 - **Turty** : deux formes, humaine (vitesse moyenne) pour se battre, tortue pour se déplacer.
   - Clic G : pistolet à eau façon lanceur de base de Splatoon, 90 gouttes, 20 dégâts, 9 tirs/s. Tir peu précis
     (dispersion 24°, 30° en marchant) ; chaque goutte sème des taches et des éclaboussures le long de sa course,
     fines près de Turty et de plus en plus larges au loin : en rafale, l'eau forme un V ouvert devant elle.
     Les gouttes touchent aussi loin que le pistolet de Flux, mais ne mouillent le sol que jusqu'à 340 px
     (2 × l'aura du Skater). Le sol reste mouillé 15 s.
+    L'eau appartient à l'équipe qui l'a posée en dernier (comme dans Splatoon) : vue par le joueur, l'eau de son
+    équipe est bleue, celle d'une Turty adverse rouge (flaques et gouttes).
     Rendu des flaques : contour calculé 10 fois par seconde (« marching squares » sur un niveau d'eau adouci entre
     cases voisines) puis dessiné en vectoriel : bords arrondis et nets à tout zoom, liseré clair, quelques reflets ;
     une flaque qui sèche rétrécit avant de disparaître (`src/game/WetGround.ts`).
@@ -161,11 +179,15 @@ Commun à tous les modes :
   - Thor : cheveux bleus, barbe tressée, mains bandées, marteau
     à runes lumineuses · Flux : cheveux roux en pointes, lunettes, deux blasters · Turty : afro bouclée et bandana orange, peau verte, carapace à autocollants sur le dos,
     pistolet à eau-bouteille ; en tortue, carapace ronde avec tête et pattes · Skater : bonnet violet à pompon (qui
-    cache ses cheveux), casque audio au cou, planche (qui tourne pendant les tricks, et sert d'arme à pied) ;
+    cache ses cheveux), casque audio au cou, planche (qui tourne pendant les tricks, et sert d'arme à pied) ·
+    Camellia : longs cheveux lisses rose crevette qui tombent dans le dos, auréole dorée, grandes ailes blanches (à demi
+    repliées au repos, qui battent en marchant, grandes ouvertes en vol), épaulières dorées, mains bandées et orbe de
+    lumière d'où partent les plumes ; ses anges sont des boules bleues (alliés) ou rouges (adverses) à petites ailes
+    blanches et mini-auréole dorée ;
   - liseré aux couleurs de l'équipe autour de la tête, ombre au sol décalée, lumière fixe à l'écran ;
   - **hitbox ronde** : la boule dessinée est exactement la hitbox (dégâts reçus et collisions avec les murs, qui font
     glisser le long des parois et contourner les coins). Rayons : Thor 23, Turty 15,
-    Skater 15, Flux 13 (petite boule : fragile mais difficile à toucher) ; robots 17, tourelles 18 ;
+    Skater 15, Camellia 14, Flux 13 (petite boule : fragile mais difficile à toucher) ; robots 17, tourelles 18 ;
   - les robots d'entraînement (dôme d'acier, visière aux couleurs de l'équipe) et les tourelles (socle boulonné,
     canon double) sont dessinés de la même façon, comme les projectiles (équipement du Skater, bombe à eau) ;
   - chaque tête, arme et main est dessinée une seule fois en haute résolution puis recopiée (≈ 0,1 ms par héros
@@ -259,6 +281,7 @@ Comportements par héros :
 | ------- | ------------ |
 | Flux    | Distance moyenne, tire dès qu'il a la cible en vue. Esquive parfois en Frappe fantôme latérale (le clone file vers la cible et attire les tirs). Sous 45 % de PV : Permutation (+75 PV), sinon Frappe fantôme pour fuir. |
 | Thor    | Fonce au corps à corps. Mur de foudre s'il est touché de loin. Lance son marteau à mi-distance, puis fonce le ramasser s'il est tombé près de la cible, sinon le rappelle. Ruée pour coller une cible un peu éloignée. |
+| Camellia | Distance moyenne, tire en rafale ; les soins passent avant le tir : elle tourne sa visée vers un allié pour poser son Sanctuaire (ange gardien) sur le plus blessé (ou sur elle-même), lui lancer un petit ange, ou s'envoler jusqu'à lui s'il est loin (et pour fuir vers un allié quand elle est à bout). Garde une charge de petit ange pour soigner, sinon le lance sur l'ennemi qu'elle combat. Hors combat, soigne un allié blessé en lui tirant ses plumes dessus. |
 
 ## Commandes
 

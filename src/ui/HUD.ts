@@ -446,6 +446,63 @@ export class HUD {
         ctx.stroke();
         break;
       }
+      case 'feather': {
+        // Plume penchée au-dessus d'un cercle de soin
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy + 12, 16, 5, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.save();
+        ctx.translate(cx + 1, cy - 3);
+        ctx.rotate(-0.8);
+        ctx.beginPath();
+        ctx.moveTo(15, 0);
+        ctx.quadraticCurveTo(3, -8, -13, -3);
+        ctx.lineTo(-11, 0);
+        ctx.lineTo(-13, 3);
+        ctx.quadraticCurveTo(3, 8, 15, 0);
+        ctx.fill();
+        ctx.restore();
+        break;
+      }
+      case 'wing': {
+        // Aile déployée + flèche d'élan
+        ctx.beginPath();
+        ctx.moveTo(cx - 14, cy + 8);
+        ctx.quadraticCurveTo(cx - 12, cy - 14, cx + 14, cy - 16);
+        ctx.quadraticCurveTo(cx + 6, cy - 8, cx + 10, cy - 4);
+        ctx.quadraticCurveTo(cx + 2, cy - 2, cx + 6, cy + 3);
+        ctx.quadraticCurveTo(cx - 2, cy + 3, cx, cy + 9);
+        ctx.quadraticCurveTo(cx - 8, cy + 6, cx - 14, cy + 8);
+        ctx.fill();
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(cx + 4, cy + 15);
+        ctx.lineTo(cx + 16, cy + 15);
+        ctx.moveTo(cx + 11, cy + 10);
+        ctx.lineTo(cx + 16, cy + 15);
+        ctx.lineTo(cx + 11, cy + 20);
+        ctx.stroke();
+        break;
+      }
+      case 'angel': {
+        // Petit ange : boule, auréole, deux petites ailes
+        ctx.beginPath();
+        ctx.arc(cx, cy + 3, 8, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy - 11, 8, 3, 0, 0, Math.PI * 2);
+        ctx.stroke();
+        for (const s of [-1, 1]) {
+          ctx.beginPath();
+          ctx.moveTo(cx + s * 7, cy + 1);
+          ctx.quadraticCurveTo(cx + s * 20, cy - 8, cx + s * 18, cy + 6);
+          ctx.quadraticCurveTo(cx + s * 13, cy + 4, cx + s * 7, cy + 6);
+          ctx.fill();
+        }
+        break;
+      }
       case 'amp':
         ctx.lineWidth = 3;
         for (let i = 0; i < 4; i++) {

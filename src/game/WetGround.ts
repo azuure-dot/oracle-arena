@@ -9,6 +9,10 @@ import type { Arena } from '../world/Arena';
  * retient aussi l'équipe qui l'a mouillée en dernier : les alliés de cette équipe y
  * récupèrent leur soin passif plus tôt (WET.regenDelay).
  *
+ * Couleur : l'eau appartient à l'équipe qui l'a posée en dernier (comme dans Splatoon). Vue par
+ * le joueur, l'eau de son équipe est bleue, celle de l'adversaire rouge : deux couches de
+ * flaques, chacune avec son contour.
+ *
  * Rendu : le contour des flaques est calculé 10 fois par seconde (« marching squares »
  * sur le niveau d'eau des cases, interpolé entre leurs centres), puis dessiné en vectoriel
  * à chaque image : eau translucide et liseré clair, aux bords nets et lisses quel que soit
@@ -25,9 +29,18 @@ export const WET = {
   regenDelay: 0.5,
 };
 
-const WATER = 'rgba(64,196,222,0.5)';
-const RIM = 'rgba(190,246,252,0.95)';
-const SHINE = 'rgba(255,255,255,0.7)';
+/** Couleurs de l'eau : de l'équipe du joueur (bleue) et de l'adversaire (rouge). */
+const PALETTE = {
+  ally: { water: 'rgba(64,196,222,0.5)', rim: 'rgba(190,246,252,0.95)', shine: 'rgba(255,255,255,0.7)' },
+  enemy: { water: 'rgba(232,70,92,0.48)', rim: 'rgba(255,196,204,0.95)', shine: 'rgba(255,235,238,0.7)' },
+};
+
+/** Formes d'une couche de flaques (coordonnées monde). */
+interface Shapes {
+  water: Path2D;
+  rim: Path2D;
+  shine: Path2D;
+}
 /**
  * Niveau d'eau (0..1, adouci entre cases voisines) à partir duquel le sol est dessiné
  * mouillé : le contour passe là. Une case isolée (niveau adouci 0,25) reste visible.
@@ -46,10 +59,11 @@ export class WetGround {
   private readonly blocked: Uint8Array;
   /** Cases mouillées en ce moment (à faire sécher / redessiner). */
   private readonly active = new Set<number>();
-  /** Formes des flaques (coordonnées monde), recalculées 10 fois par seconde. */
-  private water: Path2D | null = null;
-  private rim: Path2D | null = null;
-  private shine: Path2D | null = null;
+  /** Formes des flaques (coordonnées monde), recalculées 10 fois par seconde : eau de l'équipe du joueur, eau adverse. */
+  private allyShapes: Shapes | null = null;
+  private enemyShapes: Shapes | null = null;
+  /** Équipe du joueur lors du dernier calcul des formes (null : pas de joueur, tout est bleu). */
+  private viewTeam: Team | null = null;
   private shapesDirty = false;
   private redrawTimer = 0;
   /** Temps de jeu de la dernière mise à jour (pour l'estompage). */
@@ -143,21 +157,35 @@ export class WetGround {
     if (this.redrawTimer > 0) return;
     this.redrawTimer = 0.1;
     for (const i of this.active) if (this.until[i] <= now) this.active.delete(i);
-    if (this.active.size || this.water) this.shapesDirty = true; // l'eau s'estompe
+    if (this.active.size || this.allyShapes || this.enemyShapes) this.shapesDirty = true; // l'eau s'estompe
   }
 
-  draw(ctx: CanvasRenderingContext2D): void {
-    if (this.shapesDirty) this.buildShapes();
-    if (!this.water) return;
+  /** `viewer` : équipe du joueur (son eau est bleue, celle des autres rouge) ; null = tout en bleu. */
+  draw(ctx: CanvasRenderingContext2D, viewer: Team | null = null): void {
+    if (viewer !== this.viewTeam) {
+      this.viewTeam = viewer;
+      this.shapesDirty = true;
+    }
+    if (this.shapesDirty) {
+      this.shapesDirty = false;
+      const mine = viewer === null ? -2 : this.teams.indexOf(viewer);
+      this.allyShapes = this.buildShapes((o) => mine === -2 || o === mine);
+      this.enemyShapes = mine === -2 ? null : this.buildShapes((o) => o !== mine);
+    }
+    if (this.enemyShapes) this.drawShapes(ctx, this.enemyShapes, PALETTE.enemy);
+    if (this.allyShapes) this.drawShapes(ctx, this.allyShapes, PALETTE.ally);
+  }
+
+  private drawShapes(ctx: CanvasRenderingContext2D, s: Shapes, colors: (typeof PALETTE)['ally']): void {
     ctx.save();
-    ctx.fillStyle = WATER;
-    ctx.fill(this.water);
-    ctx.strokeStyle = RIM;
+    ctx.fillStyle = colors.water;
+    ctx.fill(s.water);
+    ctx.strokeStyle = colors.rim;
     ctx.lineWidth = 2.2;
     ctx.lineCap = 'round';
-    ctx.stroke(this.rim!);
-    ctx.fillStyle = SHINE;
-    ctx.fill(this.shine!);
+    ctx.stroke(s.rim);
+    ctx.fillStyle = colors.shine;
+    ctx.fill(s.shine);
     ctx.restore();
   }
 
@@ -170,13 +198,18 @@ export class WetGround {
    * lieu de suivre les marches de la grille. Tout se calcule sur le rectangle qui englobe
    * l'eau, dans des tableaux ; les carrés entièrement mouillés d'une même rangée sont
    * regroupés en une seule bande.
+   *
+   * `keep` : garde seulement les cases de certaines équipes (index dans `teams`) : une couche par couleur.
    */
-  private buildShapes(): void {
-    this.shapesDirty = false;
-    if (!this.active.size) {
-      this.water = this.rim = this.shine = null;
-      return;
+  private buildShapes(keep: (owner: number) => boolean): Shapes | null {
+    let any = false;
+    for (const i of this.active) {
+      if (keep(this.owner[i])) {
+        any = true;
+        break;
+      }
     }
+    if (!any) return null;
     const C = WET.cell;
     const cols = this.cols;
     const now = this.now;
@@ -186,6 +219,7 @@ export class WetGround {
     let rmin = Infinity;
     let rmax = -Infinity;
     for (const i of this.active) {
+      if (!keep(this.owner[i])) continue;
       const c = i % cols;
       const r = (i - c) / cols;
       if (c < cmin) cmin = c;
@@ -200,6 +234,7 @@ export class WetGround {
     const raw = new Float32Array(w * h);
     const shine = new Path2D();
     for (const i of this.active) {
+      if (!keep(this.owner[i])) continue;
       const left = this.until[i] - now;
       if (left <= 0) continue;
       const c = i % cols;
@@ -293,8 +328,6 @@ export class WetGround {
       }
       flush(w - 1);
     }
-    this.water = water;
-    this.rim = rim;
-    this.shine = shine;
+    return { water, rim, shine };
   }
 }

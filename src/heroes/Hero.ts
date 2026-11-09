@@ -65,7 +65,7 @@ export const QUICK_MELEE = {
   knockback: 140,
 };
 
-export type AbilityIcon = 'blink' | 'recall' | 'shield' | 'fire' | 'charge' | 'boop' | 'swap' | 'amp' | 'gear' | 'trick' | 'turtle' | 'shell' | 'bomb' | 'hammer';
+export type AbilityIcon = 'blink' | 'recall' | 'shield' | 'fire' | 'charge' | 'boop' | 'swap' | 'amp' | 'gear' | 'trick' | 'turtle' | 'shell' | 'bomb' | 'hammer' | 'feather' | 'wing' | 'angel';
 
 /** Description d'une case de compétence pour le HUD (générique pour tous les héros). */
 export interface AbilitySlot {
