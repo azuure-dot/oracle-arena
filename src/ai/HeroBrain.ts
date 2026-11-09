@@ -248,6 +248,10 @@ export abstract class HeroBrain<H extends Hero = Hero> {
       this.perceiveTimer = 0;
     }
 
+    // Cible devenue invisible (Frappe fantôme) : perdue de vue tout de suite, sans attendre le
+    // prochain regard. Le bot garde sa dernière position connue... là où le clone apparaît.
+    if (this.target?.stealthed) this.targetVisible = false;
+
     this.perceiveTimer -= dt;
     if (this.perceiveTimer <= 0) {
       this.perceiveTimer = PERCEPTION_INTERVAL;
@@ -255,6 +259,7 @@ export abstract class HeroBrain<H extends Hero = Hero> {
       let bestScore = Infinity;
       for (const c of w.targets) {
         if (!c.alive || !hostile(h, c) || c.safe) continue; // inutile de viser un ennemi protégé au spawn
+        if (c.stealthed) continue; // invisible (Frappe fantôme) : le bot ne le voit pas
         if (!inVisionRange(h.x, h.y, c.x, c.y, c.radius)) continue;
         if (!canSeeCircle(w.arena, h.x, h.y, c.circle())) continue;
         // On garde sa cible actuelle sauf si une autre est nettement plus proche.

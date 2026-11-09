@@ -8,7 +8,7 @@ import type { WorldObject } from '../entities/WorldObject';
 import { t } from '../i18n';
 import { cached, drawTeamMarker, hand, head, thorHairBack, thorHairTop, thorHammer as drawThorHammer } from '../render/topdown';
 import { lineOfSight } from '../world/Visibility';
-import { BLINK } from './Flux';
+import { PHANTOM } from './Flux';
 import { Hero, MOVE_SPEED_SCALE, type AbilitySlot, type WeaponHud } from './Hero';
 import { HAMMER as REMPART_HAMMER, SHIELD as REMPART_SHIELD } from './Rempart';
 
@@ -66,7 +66,7 @@ export const BARRIER = {
  */
 export const SMASH = {
   cooldown: 6,
-  distance: BLINK.distance,
+  distance: PHANTOM.distance,
   speed: 1050 * MOVE_SPEED_SCALE, // ≈ 625 : ruée de ~0,16 s
   damage: 70,
   reach: 70, // coup de marteau au bout de la ruée (cône devant)

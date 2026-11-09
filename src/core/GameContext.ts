@@ -1,5 +1,6 @@
 import type { Effects } from '../effects/Effects';
 import type { Combatant } from '../entities/Combatant';
+import type { Decoy } from '../entities/Decoy';
 import type { Projectile } from '../entities/Projectile';
 import type { WorldObject } from '../entities/WorldObject';
 import type { WetGround } from '../game/WetGround';
@@ -23,6 +24,8 @@ export interface GameContext {
   spawnProjectile(p: Projectile): void;
   /** Objet autonome (bombe à eau...) : vit même si son lanceur meurt. */
   spawnObject(o: WorldObject): void;
+  /** Leurre (clone holographique de Flux) : une cible de plus pour l'adversaire. */
+  spawnDecoy(d: Decoy): void;
   /** Sol mouillé (Turty). */
   wet: WetGround;
   /** Inflige des dégâts (stats, hitmarker, score...). Retourne les dégâts réels. */

@@ -20,6 +20,10 @@ export interface Combatant {
   readonly alive: boolean;
   /** Protégé dans sa zone de spawn (les bots ne le prennent pas pour cible). */
   readonly safe?: boolean;
+  /** Invisible pour l'adversaire (Frappe fantôme de Flux) : ni affiché, ni pris pour cible. */
+  readonly stealthed?: boolean;
+  /** Leurre (clone holographique) : touchable, mais hors score et fil des éliminations. */
+  readonly decoy?: boolean;
   /** Tenu par une Charge : sa position est pilotée par le Rempart qui charge. */
   pinned: boolean;
   /** Buffs d'aura (Tempo, Skater), soin et vitesse pouvant se cumuler : remis à zéro chaque frame par le monde. */

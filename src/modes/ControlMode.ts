@@ -134,7 +134,7 @@ export class ControlMode extends TeamMatchMode {
   protected override brainWorld(): BrainWorld {
     return {
       arena: this.arena,
-      targets: this.world.heroes,
+      targets: [...this.world.heroes, ...this.world.decoys], // leurres compris (clones de Flux)
       time: this.world.time,
       objective: { x: this.point.x, y: this.point.y, r: this.point.r, owner: this.owner },
       nav: this.nav,

@@ -185,6 +185,10 @@ export abstract class Hero implements Combatant {
   get alive(): boolean {
     return !this.dead;
   }
+  /** Invisible pour l'adversaire (Frappe fantôme de Flux). */
+  get stealthed(): boolean {
+    return false;
+  }
   get invulnerable(): boolean {
     return this.dead || this.safe;
   }

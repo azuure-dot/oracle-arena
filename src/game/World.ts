@@ -6,6 +6,7 @@ import { clamp, type Vec2 } from '../core/math';
 import { Effects } from '../effects/Effects';
 import type { Bot, BotContext } from '../entities/Bot';
 import { hostile, type Combatant } from '../entities/Combatant';
+import type { Decoy } from '../entities/Decoy';
 import type { Projectile } from '../entities/Projectile';
 import type { WorldObject } from '../entities/WorldObject';
 import { RESPAWN_TIME, type Hero } from '../heroes/Hero';
@@ -48,6 +49,8 @@ export class World {
   projectiles: Projectile[] = [];
   /** Objets autonomes (bombes à eau...). */
   objects: WorldObject[] = [];
+  /** Leurres (clones holographiques de Flux) : des cibles de plus. */
+  decoys: Decoy[] = [];
   /** Sol mouillé par Turty (15 s). */
   readonly wet: WetGround;
   /** Le héros du joueur (null = fond animé des menus). */
@@ -77,6 +80,7 @@ export class World {
       },
       spawnProjectile: (p) => this.projectiles.push(p),
       spawnObject: (o) => this.objects.push(o),
+      spawnDecoy: (d) => this.decoys.push(d),
       wet: this.wet,
       damage: (target, amount, source, cause) => this.damage(target, amount, source, cause),
       respawnPoint: (hero) => this.hooks.respawnPoint(hero),
@@ -97,7 +101,7 @@ export class World {
   update(dt: number): void {
     this.time += dt;
     this.ctx.time = this.time;
-    this.targetList = [...this.bots, ...this.heroes];
+    this.targetList = [...this.bots, ...this.heroes, ...this.decoys];
 
     // Les buffs d'aura sont réappliqués à chaque frame par les Tempo.
     for (const c of this.targetList) {
@@ -120,6 +124,7 @@ export class World {
 
     this.updateProjectiles(dt);
     this.objects = this.objects.filter((o) => o.update(dt, this.ctx));
+    this.decoys = this.decoys.filter((d) => d.update(dt, this.ctx));
     this.wet.update(dt, this.time);
     this.updateVisibility();
     this.effects.update(dt);
@@ -129,6 +134,7 @@ export class World {
   clearTransient(): void {
     this.projectiles = [];
     this.objects = [];
+    this.decoys = [];
     this.effects.clear();
     this.wet.clear();
   }
@@ -221,15 +227,18 @@ export class World {
     const eye = this.player;
     if (!eye) {
       for (const b of this.bots) b.visible = true;
-      for (const h of this.heroes) h.visible = true;
+      for (const h of this.heroes) h.visible = !h.stealthed;
+      for (const d of this.decoys) d.visible = true;
       return;
     }
     this.visibility = computeVisibility(eye.x, eye.y, this.arena);
     const sees = (c: Combatant) =>
       inVisionRange(eye.x, eye.y, c.x, c.y, c.radius) && canSeeCircle(this.arena, eye.x, eye.y, c.circle());
     for (const b of this.bots) b.visible = sees(b);
-    // Les alliés restent toujours affichés (comme leurs contours dans un hero shooter).
-    for (const h of this.heroes) h.visible = h === eye || (h.alive && (!hostile(h, eye) || sees(h)));
+    // Les alliés restent toujours affichés (comme leurs contours dans un hero shooter) ;
+    // un adversaire invisible (Frappe fantôme) ne l'est pas, même en pleine vue.
+    for (const h of this.heroes) h.visible = h === eye || (h.alive && (!hostile(h, eye) || (!h.stealthed && sees(h))));
+    for (const d of this.decoys) d.visible = d.alive && (!hostile(d, eye) || sees(d));
   }
 
   // ------------------------------------------------------------------ rendu
@@ -259,6 +268,7 @@ export class World {
     for (const h of shown) h.drawUnder(ctx, this.time);
     for (const b of this.bots) if (b.visible) b.draw(ctx);
     for (const h of shown) h.draw(ctx);
+    for (const d of this.decoys) if (d.visible) d.draw(ctx, eye);
     for (const p of this.projectiles) {
       // Projectiles adverses hors de vue (mur ou périmètre) : non affichés.
       if (
@@ -291,6 +301,7 @@ export class World {
     // --- 5. Barres de vie (seulement ce qui est visible), le joueur par-dessus
     toWorld();
     for (const b of this.bots) if (b.visible) b.drawOverlay(ctx);
+    for (const d of this.decoys) if (d.visible) d.drawOverlay(ctx, eye);
     for (const h of shown) if (h !== eye) h.drawOverlay(ctx);
     eye?.drawOverlay(ctx);
     toScreen();

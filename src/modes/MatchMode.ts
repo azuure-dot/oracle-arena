@@ -102,7 +102,8 @@ export abstract class MatchMode extends GameMode {
   protected abstract nameColor(p: Participant): string;
 
   protected brainWorld(): BrainWorld {
-    return { arena: this.arena, targets: this.world.heroes, time: this.world.time };
+    // Les leurres (clones de Flux) sont des cibles comme les autres : les bots peuvent s'y laisser prendre.
+    return { arena: this.arena, targets: [...this.world.heroes, ...this.world.decoys], time: this.world.time };
   }
 
   protected participantOf(target: unknown): Participant | undefined {
@@ -138,7 +139,11 @@ export abstract class MatchMode extends GameMode {
 
   protected override onDamage(e: DamageEvent): void {
     const victim = this.participantOf(e.target);
-    if (!victim) return;
+    if (!victim) {
+      // Leurre touché : même retour visuel qu'un vrai héros (sinon le joueur saurait).
+      if (e.target.decoy && e.source === this.player) this.hud.onHit(false);
+      return;
+    }
     victim.brain?.onDamaged(e.source, this.brainWorld());
     if (e.source === this.player && e.target !== this.player) this.hud.onHit(e.killed);
     if (!e.killed) return;

@@ -8,7 +8,7 @@ import { t, type TKey } from '../i18n';
 import { cached, deck, drawTeamMarker, hand, head, inked, skaterBeanie, skaterHeadphones } from '../render/topdown';
 import { addBuff } from '../ui/healthBar';
 import { lineOfSight } from '../world/Visibility';
-import { BLINK } from './Flux';
+import { PHANTOM } from './Flux';
 import { Hero, MOVE_SPEED_SCALE, type AbilitySlot, type WeaponHud } from './Hero';
 
 /** Rayon de la boule (= hitbox), peau, bracelets (d'après son croquis). */
@@ -78,7 +78,7 @@ export const TRICK = {
    * en `pushTime` secondes, puis une courte glissade : au total, la distance du
    * Transfert de Flux (la poussée en fait 88 %, la glissade le reste).
    */
-  pushDistance: BLINK.distance * 0.88,
+  pushDistance: PHANTOM.distance * 0.88,
   pushTime: 0.24,
   dashMax: 0.35,
   airTime: 0.42,
@@ -426,6 +426,7 @@ export class Skater extends Hero {
     for (const c of w.targets) {
       if (c === this || !c.alive || c.pinned) continue;
       if (hostile(this, c) !== wantEnemy) continue;
+      if (!wantEnemy && c.decoy) continue; // pas de soin sur un leurre allié
       if (wantEnemy && c.safe) continue; // ennemi protégé dans son spawn
       if (c === this.lastTrickTarget && this.sinceTrick < TRICK.sameTargetLock) continue;
       const d = distToCircle(this.x, this.y, c.circle());

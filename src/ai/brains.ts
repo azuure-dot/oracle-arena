@@ -12,8 +12,10 @@ import { HeroBrain, type BrainWorld, type TargetInfo } from './HeroBrain';
 import { pathClear } from './steering';
 
 /**
- * Flux — distance moyenne, tire dès qu'elle a la cible en vue.
- * Sous 40 % de PV : Rappel (Espace), sinon Transfert (clic D) pour s'enfuir.
+ * Flux — le glitcheur, à distance moyenne : tire dès qu'il a la cible en vue.
+ * - Esquive de temps en temps en Frappe fantôme (le clone attire les tirs adverses).
+ * - Sous 45 % de PV : Permutation (vers un clone, +75 PV), sinon Frappe
+ *   fantôme pour fuir.
  */
 export class FluxBrain extends HeroBrain<Flux> {
   protected readonly preferredRange = 270;
@@ -23,35 +25,33 @@ export class FluxBrain extends HeroBrain<Flux> {
   protected override turnRate = 8;
 
   private fleeTimer = 0;
-  private blinkDelay = 0;
   private dodgeTimer = randRange(2, 4);
 
   protected combat(dt: number, _w: BrainWorld, _t: Combatant, i: TargetInfo): void {
     const f = this.hero;
     const c = this.controls;
     this.fleeTimer = Math.max(0, this.fleeTimer - dt);
-    this.blinkDelay = Math.max(0, this.blinkDelay - dt);
     this.dodgeTimer -= dt;
     const away = { x: -i.dir.x, y: -i.dir.y };
+    const low = f.hp / f.maxHp < 0.45;
 
-    const low = f.hp / f.maxHp < 0.4;
-    if (low && !f.isRecalling) {
-      if (f.recallReady) {
-        c.press('ability1'); // Rappel : retour 3 s en arrière, PV compris
-      } else if (f.blinks > 0 && this.blinkDelay <= 0) {
+    if (low) {
+      if (f.permuteReady) {
+        c.press('ability1'); // vers un clone, +75 PV
+        this.fleeTimer = 1.2;
+      } else if (f.phantomReady) {
         this.forcedMove = away;
-        c.press('secondary'); // Transfert dans la direction de fuite
-        this.blinkDelay = 0.3;
+        c.press('secondary'); // invisible, le clone part vers la cible
         this.fleeTimer = 1.6;
       }
     }
     if (low && this.fleeTimer > 0) this.forcedMove = away; // continue de s'éloigner
 
-    // Esquive latérale de temps en temps quand toutes les charges sont là.
-    if (!low && f.blinks === 3 && this.dodgeTimer <= 0 && this.targetVisible && i.dist < 520) {
+    // Esquive latérale de temps en temps : le clone continue vers la cible et attire les tirs.
+    if (!low && f.phantomReady && this.dodgeTimer <= 0 && this.targetVisible && i.dist < 520) {
       this.forcedMove = { x: -i.dir.y * this.strafeDir, y: i.dir.x * this.strafeDir };
       c.press('secondary');
-      this.dodgeTimer = randRange(2.5, 5);
+      this.dodgeTimer = randRange(3, 6);
     }
 
     if (this.canShoot(i, 0.14) && i.dist < 680) c.hold('primary');

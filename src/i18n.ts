@@ -30,13 +30,15 @@ const fr = {
   'melee.desc': 'Coup au contact, 40 dégâts · 1 s',
 
   // Flux
-  'flux.tagline': 'Duelliste ultra-mobile. Petite hurtbox, gros harcèlement.',
+  'flux.tagline': 'Le glitcheur : leurres holographiques et faux-semblants. Devinez le vrai du faux.',
   'flux.weapon': 'Blasters jumeaux',
   'flux.weapon.desc': '20 balles/s, 40 munitions',
-  'flux.blink': 'Transfert',
-  'flux.blink.desc': 'Téléportation courte · 3 charges (3 s chacune)',
-  'flux.recall': 'Rappel',
-  'flux.recall.desc': 'Retour 3 s en arrière (position + PV) · 12 s',
+  'flux.phantom': 'Frappe fantôme',
+  'flux.phantom.desc': '2 téléportations courtes ; la 1re rend invisible 0,5 s et laisse un clone holographique qui court 1 s · 6 s pour les deux',
+  'flux.permute': 'Permutation',
+  'flux.permute.desc': 'Échange sa place avec son clone le plus proche et laisse un nouveau clone · +75 PV · 10 s',
+  'flux.permute.clone': 'vers le clone',
+  'flux.permute.none': 'aucun clone',
 
   // Rempart
   'rempart.tagline': 'Mur vivant : protège son équipe et écrase la ligne adverse.',
@@ -269,13 +271,15 @@ const en: Record<TKey, string> = {
   'melee.name': 'Quick melee',
   'melee.desc': 'Point-blank hit, 40 damage · 1 s',
 
-  'flux.tagline': 'Hyper-mobile duelist. Tiny hurtbox, relentless harassment.',
+  'flux.tagline': 'The glitcher: holographic decoys and misdirection. Tell the real one from the fake.',
   'flux.weapon': 'Twin Blasters',
   'flux.weapon.desc': '20 shots/s, 40 rounds',
-  'flux.blink': 'Blink',
-  'flux.blink.desc': 'Short teleport · 3 charges (3 s each)',
-  'flux.recall': 'Recall',
-  'flux.recall.desc': 'Rewind 3 s (position + HP) · 12 s',
+  'flux.phantom': 'Phantom Strike',
+  'flux.phantom.desc': '2 short teleports; the 1st makes him invisible for 0.5 s and leaves a holographic clone running for 1 s · 6 s for both',
+  'flux.permute': 'Swap',
+  'flux.permute.desc': 'Swaps places with his nearest clone and leaves a new clone · +75 HP · 10 s',
+  'flux.permute.clone': 'to the clone',
+  'flux.permute.none': 'no clone',
 
   'rempart.tagline': 'A walking wall: shields the team and crushes the enemy line.',
   'rempart.weapon': 'Hammer',

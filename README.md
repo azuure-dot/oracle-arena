@@ -91,9 +91,23 @@ Commun à tous les modes :
 - **Soin passif** : après 5 s sans subir de dégâts, chaque héros récupère 15 PV/s (0,5 s sur l'eau de Turty, voir plus bas). Il ne se cumule pas avec les autres soins (aura du Skater, zone de soin) : seul le plus fort des deux s'applique.
 - **Vitesse de marche** : celle de chaque héros est réduite de 30 % puis encore de 15 % (×0,6 au total,
   `MOVE_SPEED_SCALE` dans `src/heroes/Hero.ts`) ;
-  les compétences de déplacement sont ralenties d'autant (Charge, course du trick, carapace ; distance du Transfert).
+  les compétences de déplacement sont ralenties d'autant (ruée de Thor, course du trick, carapace ; distance de la Frappe fantôme).
 - **Bots héros** : ils infligent 30 % de dégâts en moins que le joueur.
 - **4 héros** : Thor (tank), Flux (dégâts), Turty (dégâts), Skater (soutien).
+- **Flux, le glitcheur** (leurres et faux-semblants : l'adversaire doit deviner le vrai du faux), 175 PV, petite boule.
+  - Clic G : blasters jumeaux (20 balles/s, 40 munitions, 7,8 dégâts).
+  - Clic D, Frappe fantôme : 2 téléportations courtes (101 unités, direction du déplacement, sinon de la visée).
+    La première rend Flux invisible 0,5 s pour l'adversaire et laisse à sa place un clone holographique qui court
+    tout droit vers la visée pendant 1 s avant de disparaître (aucun effet à l'arrivée : rien ne trahit où il est
+    allé). La seconde est une simple téléportation, sans clone. Les deux reviennent ensemble 6 s après la première.
+  - Espace, Permutation : échange instantanément sa place avec son clone le plus proche. Un nouveau clone apparaît
+    à son ancienne place (nouveau leurre). Sans clone actif, rien ne se passe (recharge non consommée). Chaque
+    permutation rend 75 PV. Recharge 10 s.
+  - Les clones : l'adversaire les voit exactement comme Flux (même dessin, même barre de vie, même nom) ; ses bots
+    les prennent pour cible. Un seul tir les fait éclater, avec chiffre de dégâts et marqueur de touche comme un vrai
+    héros, mais sans compter comme une élimination. Flux et ses alliés les voient translucides, qui grésillent.
+  - Invisible, Flux n'est ni affiché ni ciblé par l'adversaire (bots, tourelles), mais les tirs le touchent toujours ;
+    lui et ses alliés le voient en hologramme. Le joueur voit en pointillé où le mènerait la Permutation.
   Rempart (tank) et Tempo (soutien) sont retirés de la sélection : ni le joueur ni les bots ne les jouent plus,
   mais leur code reste en place (`RETIRED_HEROES` dans `src/heroes/registry.ts` : déplacer une entrée dans
   `HEROES` pour le remettre).
@@ -101,7 +115,7 @@ Commun à tous les modes :
   - Clic G : coup de marteau en arc (75 dégâts), de droite à gauche puis de gauche
     à droite au coup suivant. Marteau lancé : petits coups de poing (25 dégâts).
   - Clic D maintenu : mur de foudre droit, face à Thor (1200 PV, bloque les tirs ennemis, ralentit Thor de 30 %).
-  - Espace : ruée en avant sur la distance du Transfert de Flux, coup de marteau au bout ou sur le premier ennemi
+  - Espace : ruée en avant sur la distance de la Frappe fantôme de Flux, coup de marteau au bout ou sur le premier ennemi
     percuté (70 dégâts, gros recul). Marteau lancé : il fonce vers le marteau (même s'il revient), le ramasse
     et déclenche une décharge de 70 dégâts autour de lui. Recharge 6 s.
   - Maj : il lance son marteau vers le point visé (460 px max, arrêté par le premier mur). À l'impact, la foudre
@@ -118,7 +132,7 @@ Commun à tous les modes :
     - Aura en mode Soin : sur un allié, +75 PV, et un palier de son aura de soin.
     - Paliers enchaînés : 3 s après 1 trick, 5 s après 2, 8 s après 3 (chaque trick relance le chrono).
     - Un trick dans les 2 s qui suivent le précédent vise forcément quelqu'un d'autre. Personne à portée : il se pousse
-      en avant sur sa planche (direction du déplacement, sinon de la visée) sur la distance du Transfert de Flux,
+      en avant sur sa planche (direction du déplacement, sinon de la visée) sur la distance de la Frappe fantôme de Flux,
       en un quart de seconde, et garde son coup de boost.
   - Maj : mode d'aura Vitesse / Soin. L'aura bénéficie au Skater et à ses alliés proches : active de base, puis 3 paliers selon les tricks enchaînés.
     - Vitesse des alliés : +8 % de base, puis +11 / +16 / +22 %. Soin : 9,6 PV/s de base, puis 12 / 15,6 / 21,6 PV/s.
@@ -243,7 +257,7 @@ Comportements par héros :
 
 | Héros   | Comportement |
 | ------- | ------------ |
-| Flux    | Distance moyenne, tire dès qu'il a la cible en vue. Sous 40 % de PV : Rappel, sinon Transfert pour fuir. Esquive parfois en Transfert latéral. |
+| Flux    | Distance moyenne, tire dès qu'il a la cible en vue. Esquive parfois en Frappe fantôme latérale (le clone file vers la cible et attire les tirs). Sous 45 % de PV : Permutation (+75 PV), sinon Frappe fantôme pour fuir. |
 | Thor    | Fonce au corps à corps. Mur de foudre s'il est touché de loin. Lance son marteau à mi-distance, puis fonce le ramasser s'il est tombé près de la cible, sinon le rappelle. Ruée pour coller une cible un peu éloignée. |
 
 ## Commandes

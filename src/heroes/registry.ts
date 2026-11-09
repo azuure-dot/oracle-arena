@@ -54,8 +54,8 @@ export const HEROES: HeroEntry[] = [
     tagline: 'flux.tagline',
     abilities: [
       { input: 'primary', name: 'flux.weapon', desc: 'flux.weapon.desc' },
-      { input: 'secondary', name: 'flux.blink', desc: 'flux.blink.desc' },
-      { input: 'ability1', name: 'flux.recall', desc: 'flux.recall.desc' },
+      { input: 'secondary', name: 'flux.phantom', desc: 'flux.phantom.desc' },
+      { input: 'ability1', name: 'flux.permute', desc: 'flux.permute.desc' },
       { input: 'melee', name: 'melee.name', desc: 'melee.desc' },
     ],
     create: () => new Flux(),

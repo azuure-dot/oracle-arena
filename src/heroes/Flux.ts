@@ -1,11 +1,16 @@
 import { COLORS } from '../config';
 import type { GameContext } from '../core/GameContext';
-import { degToRad, lerp, randRange } from '../core/math';
-import { RingBuffer } from '../core/RingBuffer';
+import type { Circle } from '../core/geometry';
+import { degToRad, randRange, TAU } from '../core/math';
+import { hostile } from '../entities/Combatant';
+import type { Decoy } from '../entities/Decoy';
 import { Projectile } from '../entities/Projectile';
+import type { Team } from '../entities/Team';
 import { t } from '../i18n';
-import { blaster, cached, fluxHair, hand, head } from '../render/topdown';
+import { blaster, cached, drawTeamMarker, fluxHair, hand, head } from '../render/topdown';
+import { drawHealthBar } from '../ui/healthBar';
 import { Hero, MOVE_SPEED_SCALE, type AbilitySlot, type WeaponHud } from './Hero';
+import type { BuffKind } from '../ui/healthBar';
 import { Magazine } from './Magazine';
 
 export const WEAPON = {
@@ -17,30 +22,42 @@ export const WEAPON = {
   range: 720,
   reloadTime: 1.15,
 };
-// 3 s par charge ; distance réduite comme la marche (170 → 119)
-export const BLINK = { maxCharges: 3, rechargeTime: 3, distance: 170 * MOVE_SPEED_SCALE };
-export const RECALL = { cooldown: 12, rewindSeconds: 3, animDuration: 0.5 };
 
-/** Rayon de la tête vue de dessus, peau, gants. */
+/**
+ * Clic D — Frappe fantôme : 2 téléportations courtes (distance réduite comme la marche,
+ * 170 → 101). La première rend Flux invisible 0,5 s pour l'adversaire et laisse à sa place
+ * un clone holographique qui court tout droit (vers la visée) pendant 1 s ; la seconde est
+ * une simple téléportation. Les deux reviennent ensemble 6 s après la première.
+ */
+export const PHANTOM = {
+  charges: 2,
+  cooldown: 6,
+  distance: 170 * MOVE_SPEED_SCALE,
+  stealth: 0.5,
+  cloneLife: 1,
+};
+/**
+ * Espace — Permutation : Flux échange sa place avec son clone le plus proche ; un nouveau
+ * clone apparaît à son ancienne place (nouveau leurre). Sans clone actif : rien. Chaque
+ * permutation rend 75 PV.
+ */
+export const PERMUTE = { cooldown: 10, heal: 75 };
+/** Vitesse de course d'un clone : celle de Flux qui marche. */
+const CLONE_SPEED = 330 * MOVE_SPEED_SCALE;
+
+/** Rayon de la boule (= hitbox), peau, gants. */
 const R = 13;
 const SKIN = '#ffd9c0';
 const GLOVE = '#2a2f42';
+/** Couleurs du « glitch » (aberration chromatique des hologrammes). */
+const GLITCH_A = '#3ef2ff';
+const GLITCH_B = '#ff3ec8';
 
-/** Un instantané enregistré à chaque frame pour le Rappel. */
-interface HistorySample {
-  t: number;
-  x: number;
-  y: number;
-  hp: number;
-}
-
-interface RecallState {
-  path: HistorySample[]; // [0] = maintenant ... [n-1] = il y a ~3 s
-  elapsed: number;
-  trailTimer: number;
-}
-
-/** Flux — duelliste ultra-mobile : Transfert (clic D) + Rappel (Espace). Petite hurtbox. */
+/**
+ * Flux — le glitcheur : leurres et faux-semblants. Les adversaires doivent deviner le vrai
+ * du faux. Clic G : blasters · Clic D : Frappe fantôme · Espace : Permutation.
+ * Petite boule : fragile mais difficile à toucher.
+ */
 export class Flux extends Hero {
   private readonly mag = new Magazine(WEAPON.magSize, WEAPON.reloadTime);
   private fireTimer = 0;
@@ -49,13 +66,16 @@ export class Flux extends Hero {
   /** Recul de chaque blaster (gauche, droite), pour l'animation des mains. */
   private recoil = [0, 0];
 
-  private blinkCharges = BLINK.maxCharges;
-  private blinkTimer = 0;
-
-  private recallCooldown = 0;
-  private recall: RecallState | null = null;
-  // 3 s à 300 FPS max ; au-delà, les plus vieux échantillons sont écrasés.
-  private readonly history = new RingBuffer<HistorySample>(Math.ceil(RECALL.rewindSeconds * 300) + 16);
+  private phantomCharges = PHANTOM.charges;
+  /** Recharge des deux Frappes fantômes (démarre à la première). */
+  private phantomCooldown = 0;
+  /** Invisibilité restante (Frappe fantôme). */
+  private stealth = 0;
+  private permuteCooldown = 0;
+  /** Clones holographiques encore actifs. */
+  private clones: HoloClone[] = [];
+  /** Horloge des effets de glitch. */
+  private glitchTime = 0;
 
   constructor() {
     super({
@@ -68,22 +88,24 @@ export class Flux extends Hero {
     });
   }
 
-  override get invulnerable(): boolean {
-    return super.invulnerable || this.recall !== null;
+  override get stealthed(): boolean {
+    return this.stealth > 0 && !this.dead;
   }
   override get spreadDeg(): number {
     return WEAPON.spreadDeg;
   }
 
   // ---- état lu par l'IA ----
-  get blinks(): number {
-    return this.blinkCharges;
+  get phantomReady(): boolean {
+    return this.phantomCharges > 0;
   }
-  get recallReady(): boolean {
-    return this.recallCooldown <= 0 && this.recall === null && this.history.size > 0;
+  /** La prochaine Frappe fantôme laissera-t-elle un clone (la première des deux) ? */
+  get phantomMakesClone(): boolean {
+    return this.phantomCharges === PHANTOM.charges;
   }
-  get isRecalling(): boolean {
-    return this.recall !== null;
+  /** Permutation possible maintenant (recharge prête et un clone actif). */
+  get permuteReady(): boolean {
+    return this.permuteCooldown <= 0 && this.permuteTarget() !== null;
   }
 
   // ------------------------------------------------------------ boucle
@@ -91,33 +113,20 @@ export class Flux extends Hero {
   protected override tick(dt: number): void {
     this.muzzleFlash = Math.max(0, this.muzzleFlash - dt);
     this.recoil = this.recoil.map((r) => Math.max(0, r - dt));
-    if (this.blinkCharges < BLINK.maxCharges) {
-      this.blinkTimer += dt;
-      if (this.blinkTimer >= BLINK.rechargeTime) {
-        this.blinkCharges++;
-        this.blinkTimer = this.blinkCharges < BLINK.maxCharges ? this.blinkTimer - BLINK.rechargeTime : 0;
-      }
+    if (this.phantomCharges < PHANTOM.charges) {
+      this.phantomCooldown = Math.max(0, this.phantomCooldown - dt);
+      if (this.phantomCooldown <= 0) this.phantomCharges = PHANTOM.charges; // les deux reviennent ensemble
     }
-    this.recallCooldown = Math.max(0, this.recallCooldown - dt);
-  }
-
-  protected override isLocked(): boolean {
-    return this.recall !== null;
-  }
-
-  protected override updateLocked(dt: number, ctx: GameContext): void {
-    this.updateRecall(dt, ctx);
+    this.permuteCooldown = Math.max(0, this.permuteCooldown - dt);
+    this.stealth = Math.max(0, this.stealth - dt);
+    this.glitchTime += dt;
+    this.clones = this.clones.filter((c) => c.alive);
   }
 
   protected handleInput(dt: number, ctx: GameContext): void {
-    if (this.controls.pressed('secondary')) this.tryBlink(ctx);
-    if (this.controls.pressed('ability1')) this.tryRecall(ctx);
-    if (this.recall) return;
+    if (this.controls.pressed('secondary')) this.tryPhantom(ctx);
+    if (this.controls.pressed('ability1')) this.tryPermute(ctx);
     this.updateWeapon(dt, ctx);
-  }
-
-  protected override lateUpdate(_dt: number, ctx: GameContext): void {
-    if (!this.recall) this.history.push({ t: ctx.time, x: this.x, y: this.y, hp: this.hp });
   }
 
   /** La mêlée interrompt le rechargement (comme le tir, il faudra le relancer). */
@@ -125,13 +134,23 @@ export class Flux extends Hero {
     this.mag.cancelReload();
   }
 
-  protected override onRespawn(): void {
+  protected override onDeath(ctx: GameContext): void {
+    this.clearDecoys(ctx);
+  }
+
+  protected override onRespawn(ctx: GameContext): void {
     this.mag.refill();
-    this.blinkCharges = BLINK.maxCharges;
-    this.blinkTimer = 0;
-    this.recallCooldown = 0;
-    this.recall = null;
-    this.history.clear();
+    this.phantomCharges = PHANTOM.charges;
+    this.phantomCooldown = 0;
+    this.permuteCooldown = 0;
+    this.stealth = 0;
+    this.clearDecoys(ctx);
+  }
+
+  /** Les clones disparaissent (mort, nouvelle manche). */
+  private clearDecoys(ctx: GameContext): void {
+    for (const c of this.clones) c.vanish(ctx);
+    this.clones = [];
   }
 
   // ------------------------------------------------------------ arme
@@ -185,15 +204,15 @@ export class Flux extends Hero {
     return { x: this.x + fx * forward - fy * lateral, y: this.y + fy * forward + fx * lateral };
   }
 
-  // ------------------------------------------------------------ Transfert
+  // ------------------------------------------------------------ Frappe fantôme
 
-  private tryBlink(ctx: GameContext): void {
-    if (this.blinkCharges <= 0) return;
+  private tryPhantom(ctx: GameContext): void {
+    if (this.phantomCharges <= 0) return;
     let dir = this.moveDir;
     if (dir.x === 0 && dir.y === 0) dir = { x: Math.cos(this.aim), y: Math.sin(this.aim) };
 
     // Petits pas jusqu'au premier obstacle : impossible de traverser un mur.
-    const dist = BLINK.distance;
+    const dist = PHANTOM.distance;
     const steps = Math.ceil(dist / 4);
     let nx = this.x;
     let ny = this.y;
@@ -204,97 +223,85 @@ export class Flux extends Hero {
       nx = px;
       ny = py;
     }
-    const travelled = Math.hypot(nx - this.x, ny - this.y);
-    if (travelled < 4) return; // collé à un mur : charge non consommée
+    if (Math.hypot(nx - this.x, ny - this.y) < 4) return; // collé à un mur : rien de consommé
 
-    const ghosts = Math.max(2, Math.floor(travelled / 22));
-    for (let i = 0; i < ghosts; i++) {
-      const t = i / ghosts;
-      ctx.effects.afterimage(lerp(this.x, nx, t), lerp(this.y, ny, t), this.radius, COLORS.accent, 0.15 + 0.25 * t);
+    if (this.phantomCharges === PHANTOM.charges) {
+      // Première des deux : le clone prend sa place et continue sa course vers la visée ;
+      // Flux, lui, disparaît. Aucun effet à l'arrivée : rien ne trahit où il est allé.
+      this.spawnClone(ctx, this.x, this.y, this.aim);
+      this.stealth = PHANTOM.stealth;
+      this.phantomCooldown = PHANTOM.cooldown;
+    } else {
+      // Seconde : simple téléportation (petit grésillement au départ).
+      glitchBurst(ctx, this.x, this.y, 0.4);
     }
-    ctx.effects.ring(this.x, this.y, COLORS.accent, 26, 0.25);
     this.x = nx;
     this.y = ny;
-    this.blinkCharges--;
+    this.phantomCharges--;
   }
 
-  // ------------------------------------------------------------ Rappel
-
-  private sampleAgo(time: number): HistorySample | undefined {
-    const target = time - RECALL.rewindSeconds;
-    for (let i = 0; i < this.history.size; i++) {
-      const s = this.history.fromNewest(i)!;
-      if (s.t <= target) return s;
-    }
-    return this.history.oldest();
+  private spawnClone(ctx: GameContext, x: number, y: number, dir: number): void {
+    const clone = new HoloClone(this, x, y, dir);
+    this.clones.push(clone);
+    ctx.spawnDecoy(clone);
+    glitchBurst(ctx, x, y, 0.6);
   }
 
-  private tryRecall(ctx: GameContext): void {
-    if (this.recallCooldown > 0 || this.history.size === 0) return;
-    const targetT = ctx.time - RECALL.rewindSeconds;
-    const path: HistorySample[] = [];
-    for (let i = 0; i < this.history.size; i++) {
-      const s = this.history.fromNewest(i)!;
-      path.push(s);
-      if (s.t <= targetT) break;
+  // ------------------------------------------------------------ Permutation
+
+  /** Destination de la Permutation : le clone actif le plus proche. */
+  private permuteTarget(): HoloClone | null {
+    let best: HoloClone | null = null;
+    let bestD = Infinity;
+    for (const c of this.clones) {
+      if (!c.alive) continue;
+      const d = Math.hypot(c.x - this.x, c.y - this.y);
+      if (d < bestD) {
+        bestD = d;
+        best = c;
+      }
     }
-    this.recall = { path, elapsed: 0, trailTimer: 0 };
-    this.mag.cancelReload();
+    return best;
+  }
+
+  private tryPermute(ctx: GameContext): void {
+    if (this.permuteCooldown > 0) return;
+    const target = this.permuteTarget();
+    if (!target) return; // pas de clone actif : rien ne se passe
+    const ox = this.x;
+    const oy = this.y;
+    target.vanish(ctx, false);
+    this.x = target.x;
+    this.y = target.y;
+    ctx.arena.resolveCircle(this, this.radius, this.team);
     this.vx = this.vy = 0;
-    ctx.effects.ring(this.x, this.y, COLORS.recall, 60, 0.4);
+    // Nouveau leurre à l'ancienne place, qui part vers la visée.
+    this.spawnClone(ctx, ox, oy, this.aim);
+    this.heal(PERMUTE.heal);
+    this.permuteCooldown = PERMUTE.cooldown;
+    glitchBurst(ctx, this.x, this.y, 1);
+    ctx.effects.text(this.x, this.y - R * 2.2, `+${PERMUTE.heal}`, '#7dff9a', 14, 0.8);
   }
 
-  private updateRecall(dt: number, ctx: GameContext): void {
-    const st = this.recall!;
-    st.elapsed += dt;
-    const progress = Math.min(1, st.elapsed / RECALL.animDuration);
+  // ------------------------------------------------------------ rendu
 
-    // Rejoue le chemin à l'envers (interpolé entre deux échantillons).
-    const f = progress * (st.path.length - 1);
-    const i0 = Math.floor(f);
-    const i1 = Math.min(st.path.length - 1, i0 + 1);
-    this.x = lerp(st.path[i0].x, st.path[i1].x, f - i0);
-    this.y = lerp(st.path[i0].y, st.path[i1].y, f - i0);
-
-    st.trailTimer -= dt;
-    if (st.trailTimer <= 0) {
-      st.trailTimer = 0.025;
-      ctx.effects.afterimage(this.x, this.y, this.radius, COLORS.recall, 0.4);
-    }
-
-    if (progress >= 1) {
-      const target = st.path[st.path.length - 1];
-      this.x = target.x;
-      this.y = target.y;
-      this.hp = Math.max(this.hp, target.hp); // PV restaurés seulement s'ils étaient plus hauts
-      this.recall = null;
-      this.recallCooldown = RECALL.cooldown;
-      this.history.clear();
-      this.history.push({ t: ctx.time, x: this.x, y: this.y, hp: this.hp });
-      ctx.effects.ring(this.x, this.y, COLORS.recall, 70, 0.45);
-      ctx.effects.sparks(this.x, this.y, COLORS.recall, 14, 260);
-    }
+  /**
+   * Flux (ou un de ses clones) en (x, y), tourné vers `face`, avec son anneau d'équipe.
+   * `kicks` : recul de chaque blaster (0 = au repos).
+   */
+  drawFigure(ctx: CanvasRenderingContext2D, x: number, y: number, face: number, kicks = [0, 0]): void {
+    drawTeamMarker(ctx, x, y, R, this.outline);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(face);
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    this.drawLocal(ctx, face, kicks);
+    ctx.restore();
   }
 
-  // ------------------------------------------------------------ rendu (boule)
-
-  protected override bodyTint(): { color: string; alpha: number } | undefined {
-    return this.recall ? { color: COLORS.recall, alpha: 0.55 } : undefined;
-  }
-  protected override isWalking(): boolean {
-    return this.recall !== null || super.isWalking();
-  }
-  /** Un blaster dans chaque main, pointés vers la visée ; la main qui tire recule (éclair au canon). */
-  protected drawTop(ctx: CanvasRenderingContext2D, rot: number): void {
-    if (this.meleeAnim > 0) {
-      cached(ctx, 'flux.head', R * 1.75, (c) => {
-        head(c, R, SKIN);
-        fluxHair(c, R);
-      });
-      this.idleHands(ctx, R, GLOVE, rot);
-      return;
-    }
-    const kicks = [-1, 1].map((side) => this.recoil[side > 0 ? 1 : 0] / 0.07);
+  /** Repère local (regard vers +x) : un blaster dans chaque main, la tête, les mains par-dessus. */
+  private drawLocal(ctx: CanvasRenderingContext2D, rot: number, kicks: number[]): void {
     [-1, 1].forEach((side, i) => {
       ctx.save();
       ctx.translate(R * (1.0 - kicks[i] * 0.3), side * R * 0.55);
@@ -302,7 +309,7 @@ export class Flux extends Hero {
       if (kicks[i] > 0.4 && this.muzzleSide === side) {
         ctx.fillStyle = 'rgba(255,240,180,0.95)';
         ctx.beginPath();
-        ctx.arc(R * 1.05, 0, R * 0.25, 0, Math.PI * 2);
+        ctx.arc(R * 1.05, 0, R * 0.25, 0, TAU);
         ctx.fill();
       }
       ctx.restore();
@@ -314,26 +321,77 @@ export class Flux extends Hero {
     [-1, 1].forEach((side, i) => hand(ctx, R * (1.0 - kicks[i] * 0.3), side * R * 0.55, R * 0.32, GLOVE, rot));
   }
 
+  /** Un blaster dans chaque main, pointés vers la visée ; la main qui tire recule (éclair au canon). */
+  protected drawTop(ctx: CanvasRenderingContext2D, rot: number): void {
+    if (this.meleeAnim > 0) {
+      cached(ctx, 'flux.head', R * 1.75, (c) => {
+        head(c, R, SKIN);
+        fluxHair(c, R);
+      });
+      this.idleHands(ctx, R, GLOVE, rot);
+      return;
+    }
+    this.drawLocal(ctx, rot, [-1, 1].map((side) => this.recoil[side > 0 ? 1 : 0] / 0.07));
+  }
+
+  /**
+   * Invisible (Frappe fantôme) : l'adversaire ne le voit pas du tout (le monde ne le dessine
+   * pas) ; lui et ses alliés le voient en hologramme translucide qui grésille.
+   */
+  override draw(ctx: CanvasRenderingContext2D): void {
+    if (this.dead) return;
+    if (!this.stealthed) {
+      super.draw(ctx);
+      return;
+    }
+    ctx.save();
+    ctx.globalAlpha = 0.35;
+    this.drawFigure(ctx, this.x, this.y, this.aim);
+    ctx.restore();
+    drawGlitch(ctx, this.x, this.y, R, this.glitchTime, 0.8);
+  }
+
+  /** Aperçu réservé au joueur : où le mènerait la Permutation (trait pointillé). */
+  override drawUnder(ctx: CanvasRenderingContext2D): void {
+    if (!this.isLocalPlayer || this.dead) return;
+    const target = this.permuteTarget();
+    if (!target) return;
+    ctx.save();
+    ctx.strokeStyle = GLITCH_A;
+    ctx.globalAlpha = this.permuteCooldown > 0 ? 0.12 : 0.35;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 6]);
+    ctx.lineDashOffset = -this.glitchTime * 30;
+    ctx.beginPath();
+    ctx.moveTo(this.x, this.y);
+    ctx.lineTo(target.x, target.y);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   // ------------------------------------------------------------ HUD
 
   abilitySlots(): AbilitySlot[] {
+    const target = this.permuteTarget();
     return [
       {
         input: 'secondary',
-        name: t('flux.blink'),
+        name: t('flux.phantom'),
         icon: 'blink',
-        charges: this.blinkCharges,
-        maxCharges: BLINK.maxCharges,
-        chargeProgress: this.blinkCharges < BLINK.maxCharges ? this.blinkTimer / BLINK.rechargeTime : 0,
+        color: GLITCH_A,
+        charges: this.phantomCharges,
+        maxCharges: PHANTOM.charges,
+        chargeProgress: this.phantomCharges < PHANTOM.charges ? 1 - this.phantomCooldown / PHANTOM.cooldown : 0,
+        active: this.stealthed,
       },
       {
         input: 'ability1',
-        name: t('flux.recall'),
-        icon: 'recall',
-        color: COLORS.recall,
-        cooldown: this.recallCooldown,
-        cooldownMax: RECALL.cooldown,
-        active: this.recall !== null,
+        name: t('flux.permute'),
+        icon: 'swap',
+        color: GLITCH_A,
+        cooldown: this.permuteCooldown,
+        cooldownMax: PERMUTE.cooldown,
+        label: this.permuteCooldown > 0 ? undefined : target ? t('flux.permute.clone') : t('flux.permute.none'),
       },
     ];
   }
@@ -346,36 +404,158 @@ export class Flux extends Hero {
       reloadProgress: this.mag.reloading ? this.mag.progress : undefined,
     };
   }
+}
 
-  // ------------------------------------------------------------ rendu
+// ------------------------------------------------------------ effets de glitch
 
-  /** Aperçu du Rappel : chemin des 3 dernières secondes + fantôme à destination. */
-  override drawUnder(ctx: CanvasRenderingContext2D, time: number): void {
-    // Aperçu réservé au joueur (ne pas révéler la destination du Rappel d'un bot).
-    if (!this.isLocalPlayer || this.dead || this.recall || this.history.size < 2) return;
-    ctx.strokeStyle = COLORS.recall;
-    ctx.lineWidth = 2;
-    ctx.globalAlpha = this.recallCooldown > 0 ? 0.08 : 0.22;
-    ctx.beginPath();
-    const step = Math.max(1, Math.floor(this.history.size / 120));
-    const target = time - RECALL.rewindSeconds;
-    for (let i = 0; i < this.history.size; i += step) {
-      const s = this.history.fromNewest(i)!;
-      if (i === 0) ctx.moveTo(s.x, s.y);
-      else ctx.lineTo(s.x, s.y);
-      if (s.t <= target) break;
+/** Grésillement d'hologramme : bandes horizontales cyan / magenta qui sautent, cercle décalé. */
+function drawGlitch(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, time: number, strength: number): void {
+  const k = Math.floor(time * 24); // change ~24 fois par seconde
+  const rnd = (n: number) => {
+    const s = Math.sin(k * 12.9898 + n * 78.233) * 43758.5453;
+    return s - Math.floor(s);
+  };
+  ctx.save();
+  ctx.globalAlpha = 0.55 * strength;
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = GLITCH_A;
+  ctx.beginPath();
+  ctx.arc(x + 1.5, y, r, 0, TAU);
+  ctx.stroke();
+  ctx.strokeStyle = GLITCH_B;
+  ctx.beginPath();
+  ctx.arc(x - 1.5, y, r, 0, TAU);
+  ctx.stroke();
+  for (let i = 0; i < 3; i++) {
+    const by = y - r + rnd(i) * r * 2;
+    const off = (rnd(i + 5) - 0.5) * r * 0.8;
+    ctx.fillStyle = i % 2 ? GLITCH_B : GLITCH_A;
+    ctx.globalAlpha = 0.5 * strength;
+    ctx.fillRect(x - r * 1.1 + off, by, r * 2.2, 1.5 + rnd(i + 9) * 2);
+  }
+  ctx.restore();
+}
+
+/** Éclat de glitch (apparition / disparition d'un hologramme, téléportation). */
+function glitchBurst(ctx: GameContext, x: number, y: number, size: number): void {
+  ctx.effects.sparks(x, y, GLITCH_A, Math.round(8 * size), 200);
+  ctx.effects.sparks(x, y, GLITCH_B, Math.round(6 * size), 170);
+  if (size >= 1) ctx.effects.ring(x, y, GLITCH_A, 34, 0.25);
+}
+
+// ------------------------------------------------------------ clone holographique
+
+/**
+ * Clone holographique : court tout droit pendant 1 s puis disparaît. L'adversaire le voit
+ * exactement comme Flux (même dessin, même barre de vie, même nom) ; ses bots le prennent
+ * pour cible. Un seul tir le fait éclater (sans compter comme une élimination). Flux et
+ * ses alliés le voient translucide, qui grésille.
+ */
+export class HoloClone implements Decoy {
+  readonly decoy = true;
+  readonly team: Team;
+  readonly radius: number;
+  alive = true;
+  visible = true;
+  pinned = false;
+  buffs: BuffKind[] = [];
+  auraSpeedMul = 1;
+  stunTimer = 0;
+  private life = PHANTOM.cloneLife;
+  private kvx = 0;
+  private kvy = 0;
+  private time = 0;
+
+  constructor(
+    private readonly owner: Flux,
+    public x: number,
+    public y: number,
+    private readonly dir: number,
+  ) {
+    this.team = owner.team;
+    this.radius = owner.radius;
+  }
+
+  /** Il affiche les PV du vrai Flux (l'adversaire ne doit pas pouvoir les distinguer). */
+  get hp(): number {
+    return this.owner.hp;
+  }
+  get maxHp(): number {
+    return this.owner.maxHp;
+  }
+
+  circle(): Circle {
+    return { x: this.x, y: this.y, r: this.radius };
+  }
+
+  /** Touché : l'hologramme éclate. Les dégâts « comptent » (chiffre affiché) pour ne pas le trahir. */
+  takeDamage(amount: number, ctx: GameContext): number {
+    if (!this.alive) return 0;
+    this.vanish(ctx);
+    return Math.min(amount, this.owner.hp);
+  }
+  heal(): void {}
+  stun(): void {}
+  applyImpulse(ix: number, iy: number): void {
+    this.kvx += ix;
+    this.kvy += iy;
+  }
+
+  /** Disparition (fin de course, tir, mort de Flux) ; `burst` : éclat de glitch. */
+  vanish(ctx: GameContext, burst = true): void {
+    if (!this.alive) return;
+    this.alive = false;
+    if (burst) glitchBurst(ctx, this.x, this.y, 0.8);
+  }
+
+  update(dt: number, ctx: GameContext): boolean {
+    if (!this.alive) return false;
+    if (this.owner.dead) {
+      this.vanish(ctx);
+      return false;
     }
-    ctx.stroke();
-
-    const ghost = this.sampleAgo(time);
-    if (ghost && this.recallCooldown <= 0) {
-      ctx.globalAlpha = 0.3;
-      ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      ctx.arc(ghost.x, ghost.y, this.radius, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.setLineDash([]);
+    this.time += dt;
+    this.life -= dt;
+    if (this.life <= 0) {
+      this.vanish(ctx);
+      return false;
     }
-    ctx.globalAlpha = 1;
+    // Course tout droit (il glisse le long des murs), plus un éventuel recul.
+    this.x += (Math.cos(this.dir) * CLONE_SPEED + this.kvx) * dt;
+    this.y += (Math.sin(this.dir) * CLONE_SPEED + this.kvy) * dt;
+    const decay = Math.exp(-6 * dt);
+    this.kvx *= decay;
+    this.kvy *= decay;
+    ctx.arena.resolveCircle(this, this.radius, this.team);
+    return true;
+  }
+
+  draw(ctx: CanvasRenderingContext2D, viewer: Hero | null): void {
+    if (!this.alive) return;
+    const ally = viewer !== null && !hostile(this, viewer);
+    if (!ally) {
+      // Vu par l'adversaire : impossible à distinguer du vrai Flux.
+      this.owner.drawFigure(ctx, this.x, this.y, this.dir);
+      return;
+    }
+    ctx.save();
+    ctx.globalAlpha = 0.45;
+    this.owner.drawFigure(ctx, this.x, this.y, this.dir);
+    ctx.restore();
+    drawGlitch(ctx, this.x, this.y, this.radius, this.time + 0.37, 1);
+  }
+
+  /** Barre de vie (et nom) comme un vrai héros, seulement pour l'adversaire. */
+  drawOverlay(ctx: CanvasRenderingContext2D, viewer: Hero | null): void {
+    if (!this.alive || (viewer !== null && !hostile(this, viewer))) return;
+    const barBottom = this.y - this.radius * 1.4 - 4;
+    const color = this.owner.outline === COLORS.ally ? COLORS.hpAlly : COLORS.hpEnemy;
+    drawHealthBar(ctx, this.x, barBottom, this.hp, this.maxHp, color, 60);
+    if (this.owner.label) {
+      ctx.fillStyle = this.owner.outline;
+      ctx.font = 'bold 12px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(this.owner.label, this.x, barBottom - 13);
+    }
   }
 }

@@ -222,7 +222,7 @@ export class Bot implements Combatant {
   private updateTurret(dt: number, ctx: BotContext): void {
     this.fireTimer = Math.max(0, this.fireTimer - dt);
     const h = ctx.hero;
-    if (!ctx.turretsEnabled || !h || h.dead) return;
+    if (!ctx.turretsEnabled || !h || h.dead || h.stealthed) return;
     const dist = Math.hypot(h.x - this.x, h.y - this.y);
     if (dist > TURRET.range) return;
     if (!canSeeCircle(ctx.arena, this.x, this.y, h.circle())) return;

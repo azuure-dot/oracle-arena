@@ -143,7 +143,7 @@ export class EscortMode extends TeamMatchMode {
     const p = this.payload;
     return {
       arena: this.arena,
-      targets: this.world.heroes,
+      targets: [...this.world.heroes, ...this.world.decoys], // leurres compris (clones de Flux)
       time: this.world.time,
       nav: this.nav,
       healthPacks: this.packs.available(),
