@@ -222,12 +222,12 @@ Commun à tous les modes :
 - **Ligne de vue** : les murs bloquent la vision (raycasting + brouillard de guerre).
   L'ombre des murs est calculée en quart de résolution puis agrandie avec lissage : bords doux sans filtre
   de flou, qui coûtait cher à chaque image sur une carte graphique intégrée.
-- **Cercle de vision** autour de chaque héros (rayon 340 unités, `VISION` dans `src/config.ts`), caméra
+- **Cercle de vision** autour de chaque héros (rayon 492 unités, `VISION` dans `src/config.ts`), caméra
   verrouillée sur le joueur. Chacun voit depuis sa propre position : son cercle, moins ce que les murs lui
-  cachent. Les bots ont exactement la même règle, chacun depuis son point de vue. La caméra est cadrée pour
-  que le cercle entier tienne à l'écran (dans sa hauteur en paysage) : personne ne voit plus de terrain qu'un
-  autre, et aucun ennemi ne peut te voir sans que tu puisses le voir. Au-delà du cercle, la carte est assombrie
-  et aucun ennemi n'est affiché.
+  cachent. Les bots ont exactement la même règle, chacun depuis son point de vue. La caméra montre un cadre
+  16:9 fixe (985 × 554 unités, rapprochement `CAMERA_ZOOM` ×1,95), le même sur tous les écrans : le cercle
+  va d'un bord à l'autre en largeur et dépasse un peu en hauteur, où la vue s'arrête au bord de l'écran (pour
+  tous, bots compris). Au-delà du cercle, la carte est assombrie et aucun ennemi n'est affiché.
   Le brouillard ne lance des rayons que vers les coins des murs du carré qui contient le cercle ; les murs qui
   sortent de ce carré y sont découpés, et leur point de sortie compte comme un coin (ombres justes au bord).
 - **Interface bilingue** FR / EN.

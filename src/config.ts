@@ -39,25 +39,32 @@ export const ZONES = {
 
 
 /**
+ * Cadre de la caméra : rectangle 16:9 de monde affiché à l'écran (le même pour tous les écrans),
+ * soit ×1,3 puis ×1,5 de rapprochement par rapport à 1920 × 1080.
+ */
+export const CAMERA_ZOOM = 1.3 * 1.5;
+
+/**
  * Zone de vision : cercle centré sur chaque héros (en unités monde), le même rayon pour tous —
  * joueur et bots. Chacun voit depuis sa propre position (son point de vue) : ce cercle, moins ce
  * que les murs lui cachent.
- * - Le zoom de la caméra est calculé pour que le cercle entier tienne à l'écran (dans sa hauteur
- *   sur un écran en paysage) : personne ne peut voir un ennemi resté hors de son écran, et la
- *   surface visible est la même sur un écran 13" ou 27".
+ * - La caméra montre un cadre 16:9 fixe (`width` × `height`), le même pour tous les écrans.
+ * - Le cercle va d'un bord à l'autre de l'écran en largeur ; en hauteur, il dépasse un peu
+ *   l'écran, et la vue s'arrête au haut et au bas du cadre (personne, bot compris, ne voit un
+ *   ennemi resté hors de l'écran de l'autre).
  * - Au-delà du cercle, la carte reste devinable (assombrie) mais aucun ennemi n'y est visible,
  *   même sans mur entre les deux.
  */
-const VISION_RADIUS = 340;
 export const VISION = {
-  radius: VISION_RADIUS,
-  /** Cadre de la caméra : le carré qui contient le cercle. */
-  width: VISION_RADIUS * 2,
-  height: VISION_RADIUS * 2,
+  /** Cadre de la caméra (unités monde). */
+  width: Math.round(1920 / CAMERA_ZOOM), // 985
+  height: Math.round(1080 / CAMERA_ZOOM), // 554
+  /** Rayon du cercle de vision : la moitié de la largeur de l'écran. */
+  radius: Math.round(1920 / CAMERA_ZOOM / 2), // 492
   /** Assombrissement hors du cercle (la carte reste devinable, pas les ennemis). */
   outsideOpacity: 0.6,
   /** Dégradé d'ombre (unités monde) sur le bord intérieur du cercle. */
-  edgeFade: 46,
+  edgeFade: 56,
 } as const;
 
 export const FOG = {

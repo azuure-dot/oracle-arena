@@ -13,7 +13,7 @@ export interface ViewTransform {
  * - Elle est TOUJOURS centrée sur le joueur (pas de bornage aux bords de la map,
  *   pas de lissage) : si le joueur bouge, le monde défile sous le curseur et il faut
  *   réellement suivre sa cible à la souris.
- * - Le zoom est calculé pour que le cercle de vision (VISION) tienne entier à l'écran :
+ * - Le zoom est calculé pour que le cadre 16:9 de VISION remplisse l'écran :
  *   tous les joueurs voient la même surface de monde, quelle que soit la taille de leur écran.
  */
 
@@ -32,7 +32,7 @@ export class Camera {
   setViewport(w: number, h: number): void {
     this.viewW = w;
     this.viewH = h;
-    // Le cercle de vision (VISION) tient entier à l'écran.
+    // Le cadre 16:9 de VISION (déjà réduit du zoom, voir CAMERA_ZOOM) remplit l'écran.
     this.zoom = Math.min(w / VISION.width, h / VISION.height);
   }
 

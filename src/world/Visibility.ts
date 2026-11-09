@@ -81,13 +81,15 @@ export function computeVisibility(ex: number, ey: number, arena: Arena): VisPoin
 }
 
 /**
- * Le cercle (ou le point si r = 0) touche-t-il le cercle de vision centré sur l'œil ?
+ * Le cercle (ou le point si r = 0) est-il dans le champ de vision centré sur l'œil : le cercle de
+ * vision, limité au cadre de l'écran (on ne voit jamais un ennemi resté hors de son écran) ?
  * Au-delà, rien n'est visible, même sans mur. Chacun (joueur ou bot) a le sien.
  */
 export function inVisionRange(ex: number, ey: number, cx: number, cy: number, r = 0): boolean {
-  const d = VISION.radius + r;
   const dx = cx - ex;
   const dy = cy - ey;
+  if (Math.abs(dx) > VISION.width / 2 + r || Math.abs(dy) > VISION.height / 2 + r) return false;
+  const d = VISION.radius + r;
   return dx * dx + dy * dy <= d * d;
 }
 
