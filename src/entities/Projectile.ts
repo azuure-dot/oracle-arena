@@ -3,7 +3,7 @@ import { cached, feather, skaterGear } from '../render/topdown';
 import type { Hero } from '../heroes/Hero';
 import type { Team } from './Team';
 
-export type ProjectileStyle = 'bullet' | 'sonic' | 'fire' | 'enemy' | 'gear' | 'water' | 'feather';
+export type ProjectileStyle = 'bullet' | 'cyber' | 'sonic' | 'fire' | 'enemy' | 'gear' | 'water' | 'feather';
 
 export interface ProjectileSpec {
   x: number;
@@ -77,6 +77,8 @@ export class Projectile {
         return COLORS.sonic;
       case 'water':
         return '#7fe3f0';
+      case 'cyber':
+        return '#3ef2ff';
       case 'fire':
         return COLORS.fire;
       case 'enemy':
@@ -149,11 +151,14 @@ export class Projectile {
         ctx.fill();
         break;
       }
-      case 'bullet': {
+      case 'bullet':
+      case 'cyber': {
+        // Traînée : jaune (balle classique) ou bleu cyan (blasters « cyber » de Flux)
+        const cyber = this.style === 'cyber';
         const tail = 22;
         const grad = ctx.createLinearGradient(this.x - dx * tail, this.y - dy * tail, this.x, this.y);
-        grad.addColorStop(0, 'rgba(255,227,154,0)');
-        grad.addColorStop(1, COLORS.bullet);
+        grad.addColorStop(0, cyber ? 'rgba(62,242,255,0)' : 'rgba(255,227,154,0)');
+        grad.addColorStop(1, cyber ? '#3ef2ff' : COLORS.bullet);
         ctx.strokeStyle = grad;
         ctx.lineWidth = 3;
         ctx.lineCap = 'round';

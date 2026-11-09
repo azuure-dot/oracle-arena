@@ -196,7 +196,7 @@ export class Skater extends Hero {
 
   constructor() {
     super({
-      name: 'Skater',
+      name: 'Elio', // nom affiché (Skater dans le code)
       maxHp: 200,
       radius: R,
       speed: SKATER.speed,

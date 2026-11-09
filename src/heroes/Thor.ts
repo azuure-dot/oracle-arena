@@ -145,7 +145,7 @@ export class Thor extends Hero {
 
   constructor() {
     super({
-      name: 'Thor',
+      name: 'Keraun', // nom affiché (Thor dans le code)
       maxHp: 600,
       radius: R,
       speed: 220,

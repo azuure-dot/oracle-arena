@@ -150,6 +150,7 @@ function render(): void {
   const base = { x: 0, y: 0, angle: 0, speed: 100, damage: 0, team: ENEMY, range: 100 } as const;
   const specs: [string, Partial<ProjectileSpec>][] = [
     ['balle', { style: 'bullet' }],
+    ['balle de Flux', { style: 'cyber' }],
     ['onde sonique', { style: 'sonic', radius: 6 }],
     ['onde de feu', { style: 'fire', radius: 26 }],
     ['tourelle', { style: 'enemy', radius: 5 }],

@@ -88,42 +88,44 @@ Départ de partie :
 
 Commun à tous les modes :
 
-- **Soin passif** : après 5 s sans subir de dégâts, chaque héros récupère 15 PV/s (0,5 s sur l'eau de Turty, voir plus bas). Il ne se cumule pas avec les autres soins (aura du Skater, zone de soin) : seul le plus fort des deux s'applique.
+- **Soin passif** : après 5 s sans subir de dégâts, chaque héros récupère 15 PV/s (0,5 s sur l'eau de Kora, voir plus bas). Il ne se cumule pas avec les autres soins (aura d'Elio, zone de soin) : seul le plus fort des deux s'applique.
 - **Vitesse de marche** : celle de chaque héros est réduite de 30 % puis encore de 15 % (×0,6 au total,
   `MOVE_SPEED_SCALE` dans `src/heroes/Hero.ts`) ;
-  les compétences de déplacement sont ralenties d'autant (ruée de Thor, course du trick, carapace ; distance de la Frappe fantôme).
+  les compétences de déplacement sont ralenties d'autant (ruée de Keraun, course du trick, carapace ; distance de la Frappe fantôme).
 - **Bots héros** : ils infligent 30 % de dégâts en moins que le joueur.
-- **5 héros** : Thor (tank), Flux (dégâts), Turty (dégâts), Skater (soutien), Camellia (soutien).
+- **5 héros** : Keraun (tank), Flux (dégâts), Kora (dégâts), Elio (soutien), Camellia (soutien).
+  Dans le code, trois gardent leur ancien nom (fichiers, classes, identifiants) : Keraun = `Thor`, Kora = `Turty`,
+  Elio = `Skater`.
 - **Flux, le glitcheur** (leurres et faux-semblants : l'adversaire doit deviner le vrai du faux), 175 PV, petite boule.
   - Clic G : blasters jumeaux (20 balles/s, 40 munitions, 7,8 dégâts).
   - Clic D, Frappe fantôme : 2 téléportations courtes (101 unités, direction du déplacement, sinon de la visée).
-    La première rend Flux invisible 0,5 s pour l'adversaire et laisse à sa place un clone holographique qui court
-    tout droit vers la visée pendant 1 s avant de disparaître (aucun effet à l'arrivée : rien ne trahit où il est
+    La première rend Flux invisible 0,5 s pour l'adversaire et laisse à sa place un clone holographique immortel qui
+    court tout droit vers la visée pendant 2 s avant de disparaître (aucun effet à l'arrivée : rien ne trahit où il est
     allé). La seconde est une simple téléportation, sans clone. Les deux reviennent ensemble 6 s après la première.
   - Espace, Permutation : échange instantanément sa place avec son clone le plus proche. Un nouveau clone apparaît
     à son ancienne place (nouveau leurre). Sans clone actif, rien ne se passe (recharge non consommée). Chaque
     permutation rend 75 PV. Recharge 10 s.
   - Les clones : l'adversaire les voit exactement comme Flux (même dessin, même barre de vie, même nom) ; ses bots
-    les prennent pour cible. Un seul tir les fait éclater, avec chiffre de dégâts et marqueur de touche comme un vrai
-    héros, mais sans compter comme une élimination. Flux et ses alliés les voient translucides, qui grésillent.
+    les prennent pour cible. Ils sont immortels : les tirs les touchent (chiffre de dégâts et marqueur de touche comme
+    sur un vrai héros) sans les arrêter ni compter comme une élimination. Flux et ses alliés les voient translucides, qui grésillent.
   - Invisible, Flux n'est ni affiché ni ciblé par l'adversaire (bots, tourelles), mais les tirs le touchent toujours ;
     lui et ses alliés le voient en hologramme. Le joueur voit en pointillé où le mènerait la Permutation.
   Rempart (tank) et Tempo (soutien) sont retirés de la sélection : ni le joueur ni les bots ne les jouent plus,
   mais leur code reste en place (`RETIRED_HEROES` dans `src/heroes/registry.ts` : déplacer une entrée dans
   `HEROES` pour le remettre).
-- **Thor** : tank de mêlée au marteau de foudre (600 PV).
+- **Keraun** : tank de mêlée au marteau de foudre (600 PV).
   - Clic G : coup de marteau en arc (75 dégâts), de droite à gauche puis de gauche
     à droite au coup suivant. Marteau lancé : petits coups de poing (25 dégâts).
-  - Clic D maintenu : mur de foudre droit, face à Thor (1200 PV, bloque les tirs ennemis, ralentit Thor de 30 %).
+  - Clic D maintenu : mur de foudre droit, face à Keraun (1200 PV, bloque les tirs ennemis, ralentit Keraun de 30 %).
   - Espace : ruée en avant sur la distance de la Frappe fantôme de Flux, coup de marteau au bout ou sur le premier ennemi
     percuté (70 dégâts, gros recul). Marteau lancé : il fonce vers le marteau (même s'il revient), le ramasse
     et déclenche une décharge de 70 dégâts autour de lui. Recharge 6 s.
   - Maj : il lance son marteau vers le point visé (460 px max, arrêté par le premier mur). À l'impact, la foudre
-    tombe : 80 dégâts au centre → 40 au bord. Le marteau reste planté au sol. Maj à nouveau : il revient à Thor
+    tombe : 80 dégâts au centre → 40 au bord. Le marteau reste planté au sol. Maj à nouveau : il revient à Keraun
     à travers les murs (45 dégâts aux ennemis traversés). Recharge 6 s à partir du moment où il l'a récupéré.
   - Démarche lourde : il se dandine (le corps se décale et penche vers le pied posé, rebondit et s'écrase
     un peu à chaque pas, poussière sous le pied ; le marteau balance au rythme des pas).
-- **Skater** : il se déplace sur sa planche, un peu plus vite que les autres.
+- **Elio** : il se déplace sur sa planche, un peu plus vite que les autres.
   - Clic G : combo de 3 coups de planche (35, 35 puis 60 dégâts), le 3e repousse. Pas de rechargement : quand il arrête
     de taper (ou après le 3e coup), il attend 1,5 s après son dernier coup avant de pouvoir retaper (le combo repart du 1er).
   - Clic D : il lance son équipement dans l'ordre (casque, genouillère, coudière, protège-poignet), 75 dégâts, toutes les secondes.
@@ -135,9 +137,9 @@ Commun à tous les modes :
     - Un trick dans les 2 s qui suivent le précédent vise forcément quelqu'un d'autre. Personne à portée : il se pousse
       en avant sur sa planche (direction du déplacement, sinon de la visée) sur la distance de la Frappe fantôme de Flux,
       en un quart de seconde, et garde son coup de boost.
-  - Maj : mode d'aura Vitesse / Soin. L'aura bénéficie au Skater et à ses alliés proches : active de base, puis 3 paliers selon les tricks enchaînés.
+  - Maj : mode d'aura Vitesse / Soin. L'aura bénéficie à Elio et à ses alliés proches : active de base, puis 3 paliers selon les tricks enchaînés.
     - Vitesse des alliés : +8 % de base, puis +11 / +16 / +22 %. Soin : 9,6 PV/s de base, puis 12 / 15,6 / 21,6 PV/s.
-    - Vitesse du Skater lui-même avec les paliers de tricks sur des ennemis : +15 / +26 / +37 %.
+    - Vitesse d'Elio lui-même avec les paliers de tricks sur des ennemis : +15 / +26 / +37 %.
 - **Camellia, l'archange** : soutien à distance (200 PV). Ailes blanches, auréole dorée, longs cheveux rose crevette.
   - Clic G, rafale de plumes : tir automatique façon fusil d'assaut, 9 plumes/s, chargeur de 30, recharge 1,6 s.
     Chaque plume fait 10 dégâts à un ennemi ; sur un allié, elle s'arrête et lui rend 10 PV (pas sur Camellia elle-même).
@@ -153,14 +155,14 @@ Commun à tous les modes :
     15 s) ; l'adversaire peut le viser et le tuer (les bots le prennent pour cible) : la zone disparaît avec lui.
     Il ne compte ni dans le score ni dans le fil des éliminations. Recharge 20 s.
   - Les anges (petits anges et ange gardien) sont bleus pour une Camellia de l'équipe du joueur, rouges pour une adverse.
-- **Turty** : deux formes, humaine (vitesse moyenne) pour se battre, tortue pour se déplacer.
-  - Clic G : pistolet à eau façon lanceur de base de Splatoon, 90 gouttes, 20 dégâts, 9 tirs/s. Tir peu précis
+- **Kora** : deux formes, humaine (vitesse moyenne) pour se battre, tortue pour se déplacer.
+  - Clic G : pistolet à eau façon lanceur de base de Splatoon, 90 gouttes, 30 dégâts, 9 tirs/s. Tir peu précis
     (dispersion 24°, 30° en marchant) ; chaque goutte sème des taches et des éclaboussures le long de sa course,
-    fines près de Turty et de plus en plus larges au loin : en rafale, l'eau forme un V ouvert devant elle.
+    fines près de Kora et de plus en plus larges au loin : en rafale, l'eau forme un V ouvert devant elle.
     Les gouttes touchent aussi loin que le pistolet de Flux, mais ne mouillent le sol que jusqu'à 340 px
-    (2 × l'aura du Skater). Le sol reste mouillé 15 s.
+    (2 × l'aura d'Elio). Le sol reste mouillé 15 s.
     L'eau appartient à l'équipe qui l'a posée en dernier (comme dans Splatoon) : vue par le joueur, l'eau de son
-    équipe est bleue, celle d'une Turty adverse rouge (flaques et gouttes).
+    équipe est bleue, celle d'une Kora adverse rouge (flaques et gouttes).
     Rendu des flaques : contour calculé 10 fois par seconde (« marching squares » sur un niveau d'eau adouci entre
     cases voisines) puis dessiné en vectoriel : bords arrondis et nets à tout zoom, liseré clair, quelques reflets ;
     une flaque qui sèche rétrécit avant de disparaître (`src/game/WetGround.ts`).
@@ -168,17 +170,24 @@ Commun à tous les modes :
     Ses alliés aussi, sur l'eau de leur équipe : chaque case retient l'équipe qui l'a mouillée en dernier.
   - Clic D maintenu : forme tortue (relâché : forme humaine). En tortue : ×0,5 sur le sec, ×1,8 sur l'eau ;
     0,5 s sans compétence après la transformation. Clic G en tortue : elle se relève et tire aussitôt.
-  - Espace : elle rentre dans sa carapace, la fait tourner (on peut encore viser) puis se lance ; 2 rebonds max sur les murs
-    (les bords de lave font aussi rebondir), 75 dégâts à chaque ennemi touché. Recharge 12 s.
+  - Espace : elle rentre dans sa carapace, la fait tourner (on peut encore viser) puis se lance. La carapace est
+    téléguidée : pendant la préparation, on sélectionne un adversaire (le plus proche de la ligne de visée, en vue,
+    900 max ; viseur rouge autour de lui, plein une fois verrouillé). Pendant sa course, la carapace tourne peu à peu
+    vers lui (3,2 rad/s), où qu'on vise ensuite, et continue de le poursuivre après chaque rebond (sur lui ou sur un
+    mur), jusqu'à la fin de sa course. Cible morte ou devenue invisible : tout droit. Sans adversaire sélectionné,
+    elle suit la souris. Elle rebondit sur les murs
+    (2 rebonds max ; les bords de lave font aussi rebondir) et sur chaque ennemi percuté (75 dégâts, il est repoussé ;
+    il peut être repercuté 0,5 s plus tard, ou après un rebond sur un mur). Recharge 12 s, 3,5 s de course max.
   - Maj : bombe à eau lancée en l'air jusqu'au point visé (560 px max), au-dessus des murs et des joueurs.
     Une zone d'ombre montre l'impact pendant tout le vol. 120 dégâts au centre → 60 au bord, et une grande flaque. Recharge 8 s.
 - **Personnages vus de dessus, façon Bopz.io** (`src/render/topdown.ts`, poses dans chaque fichier de `src/heroes/`) :
   - la caméra est juste au-dessus des têtes : chaque héros est une boule (sa tête vue d'en haut) qu'on reconnaît
     à ses cheveux ou à son couvre-chef, avec deux mains rondes qui tiennent l'arme et l'animent (recul au tir,
     arcs de marteau, coups de poing, lancers) ; tout le personnage tourne avec la souris ;
-  - Thor : cheveux bleus, barbe tressée, mains bandées, marteau
-    à runes lumineuses · Flux : cheveux roux en pointes, lunettes, deux blasters · Turty : afro bouclée et bandana orange, peau verte, carapace à autocollants sur le dos,
-    pistolet à eau-bouteille ; en tortue, carapace ronde avec tête et pattes · Skater : bonnet violet à pompon (qui
+  - Keraun : cheveux bleus, barbe tressée, mains bandées, marteau
+    à runes lumineuses · Flux : casquette noire à l'envers (visière dans la nuque, liseré cyan), peau foncée, gants cyber à
+    bracelets lumineux, deux blasters aux balles bleu cyan · Kora : afro bouclée et bandana orange, peau verte, carapace à autocollants sur le dos,
+    pistolet à eau-bouteille ; en tortue, carapace ronde avec tête et pattes · Elio : bonnet violet à pompon (qui
     cache ses cheveux), casque audio au cou, planche (qui tourne pendant les tricks, et sert d'arme à pied) ·
     Camellia : longs cheveux lisses rose crevette qui tombent dans le dos, auréole dorée, grandes ailes blanches (à demi
     repliées au repos, qui battent en marchant, grandes ouvertes en vol), épaulières dorées, mains bandées et orbe de
@@ -186,15 +195,15 @@ Commun à tous les modes :
     blanches et mini-auréole dorée ;
   - liseré aux couleurs de l'équipe autour de la tête, ombre au sol décalée, lumière fixe à l'écran ;
   - **hitbox ronde** : la boule dessinée est exactement la hitbox (dégâts reçus et collisions avec les murs, qui font
-    glisser le long des parois et contourner les coins). Rayons : Thor 23, Turty 15,
-    Skater 15, Camellia 14, Flux 13 (petite boule : fragile mais difficile à toucher) ; robots 17, tourelles 18 ;
+    glisser le long des parois et contourner les coins). Rayons : Keraun 23, Kora 15,
+    Elio 15, Camellia 14, Flux 13 (petite boule : fragile mais difficile à toucher) ; robots 17, tourelles 18 ;
   - les robots d'entraînement (dôme d'acier, visière aux couleurs de l'équipe) et les tourelles (socle boulonné,
-    canon double) sont dessinés de la même façon, comme les projectiles (équipement du Skater, bombe à eau) ;
+    canon double) sont dessinés de la même façon, comme les projectiles (équipement d'Elio, bombe à eau) ;
   - chaque tête, arme et main est dessinée une seule fois en haute résolution puis recopiée (≈ 0,1 ms par héros
     et par image) ;
   - galerie : `galerie.html` (chaque héros au repos, en action, et une version animée qui tourne et marche ;
     robots, tourelles, projectiles) ;
-    croquis de référence dans `concept/` (Turty, Skater, Thor).
+    croquis de référence dans `concept/` (Kora, Elio, Keraun).
 - **Ligne de vue** : les murs bloquent la vision (raycasting + brouillard de guerre).
   L'ombre des murs est calculée en quart de résolution puis agrandie avec lissage : bords doux sans filtre
   de flou, qui coûtait cher à chaque image sur une carte graphique intégrée.
@@ -227,8 +236,8 @@ Elle est symétrique par rotation de 180°, comme Sanctuaire.
     par des garde-corps ; elles sont ouvertes côté point.
 - **La lave** :
   - Impossible d'y entrer en marchant : on s'arrête au bord, marqué d'une bande jaune et noire.
-  - Un recul (marteau et ruée de Thor, bombe à eau, coup de planche, mêlée) peut y projeter un héros.
-    Il meurt dès que son centre passe au-dessus de la lave. Thor, lui, s'arrête au bord pendant sa ruée.
+  - Un recul (marteau et ruée de Keraun, bombe à eau, coup de planche, mêlée) peut y projeter un héros.
+    Il meurt dès que son centre passe au-dessus de la lave. Keraun, lui, s'arrête au bord pendant sa ruée.
   - La chute est créditée au dernier héros qui a poussé la victime (dans les 4 s).
     Le fil des éliminations affiche « LAVE ».
 - **Rendu pixel art** (`src/world/themes/volcano.ts`) : 1 pixel du décor = 4 unités.
@@ -280,7 +289,7 @@ Comportements par héros :
 | Héros   | Comportement |
 | ------- | ------------ |
 | Flux    | Distance moyenne, tire dès qu'il a la cible en vue. Esquive parfois en Frappe fantôme latérale (le clone file vers la cible et attire les tirs). Sous 45 % de PV : Permutation (+75 PV), sinon Frappe fantôme pour fuir. |
-| Thor    | Fonce au corps à corps. Mur de foudre s'il est touché de loin. Lance son marteau à mi-distance, puis fonce le ramasser s'il est tombé près de la cible, sinon le rappelle. Ruée pour coller une cible un peu éloignée. |
+| Keraun    | Fonce au corps à corps. Mur de foudre s'il est touché de loin. Lance son marteau à mi-distance, puis fonce le ramasser s'il est tombé près de la cible, sinon le rappelle. Ruée pour coller une cible un peu éloignée. |
 | Camellia | Distance moyenne, tire en rafale ; les soins passent avant le tir : elle tourne sa visée vers un allié pour poser son Sanctuaire (ange gardien) sur le plus blessé (ou sur elle-même), lui lancer un petit ange, ou s'envoler jusqu'à lui s'il est loin (et pour fuir vers un allié quand elle est à bout). Garde une charge de petit ange pour soigner, sinon le lance sur l'ennemi qu'elle combat. Hors combat, soigne un allié blessé en lui tirant ses plumes dessus. |
 
 ## Commandes
@@ -292,7 +301,7 @@ Comportements par héros :
 | Clic gauche       | Arme principale                     |
 | Clic droit        | Compétence 1                        |
 | Espace / Maj      | Compétences 2 et 3                  |
-| Clic molette      | Mêlée rapide (sauf Thor et Skater)  |
+| Clic molette      | Mêlée rapide (sauf Keraun et Elio)  |
 | R                 | Recharger                           |
 | H                 | Aide                                |
 | X                 | Afficher les hitbox                 |

@@ -234,33 +234,73 @@ export function thorHairTop(ctx: CanvasRenderingContext2D, R: number): void {
   ctx.stroke();
 }
 
-/** Cheveux en pointes rejetées en arrière (éventail) + lunettes relevées sur le front (Flux). */
-export function fluxHair(ctx: CanvasRenderingContext2D, R: number): void {
-  const color = '#c4672a';
-  for (const a of [Math.PI - 1.0, Math.PI - 0.5, Math.PI, Math.PI + 0.5, Math.PI + 1.0]) {
-    const w = 0.32;
-    const tip = R * (Math.abs(a - Math.PI) < 0.1 ? 1.5 : 1.38);
-    inked(ctx, color, () => {
-      ctx.moveTo(Math.cos(a - w) * R * 0.8, Math.sin(a - w) * R * 0.8);
-      ctx.lineTo(Math.cos(a) * tip, Math.sin(a) * tip);
-      ctx.lineTo(Math.cos(a + w) * R * 0.8, Math.sin(a + w) * R * 0.8);
-      ctx.closePath();
-    }, 1.8);
-  }
-  classicHair(ctx, R, color, '#8a4517');
-  ctx.strokeStyle = LINE;
-  ctx.lineWidth = R * 0.09;
+/**
+ * Flux (d'après son concept) : casquette noire portée à l'envers (visière dans la nuque,
+ * fermoir à l'avant au-dessus du front), liseré cyan « glitch » sur la visière et petit logo violet.
+ */
+export const FLUX_LOOK = {
+  skin: '#6e4532',
+  cap: '#1d1d24',
+  capDark: '#0d0d12',
+  capLight: '#45454f',
+  hair: '#22170f',
+  cyan: '#3ef2ff',
+  violet: '#a35cff',
+} as const;
+
+export function fluxCap(ctx: CanvasRenderingContext2D, R: number): void {
+  const L = FLUX_LOOK;
+  // Visière (à l'arrière) : dépasse derrière la tête, au-dessus des locks de la nuque.
+  inked(ctx, L.capDark, () => {
+    ctx.moveTo(-R * 0.7, -R * 0.72);
+    ctx.bezierCurveTo(-R * 1.25, -R * 0.78, -R * 1.62, -R * 0.4, -R * 1.62, 0);
+    ctx.bezierCurveTo(-R * 1.62, R * 0.4, -R * 1.25, R * 0.78, -R * 0.7, R * 0.72);
+    ctx.closePath();
+  }, 2);
+  ctx.strokeStyle = L.cyan;
+  ctx.lineWidth = R * 0.07;
+  ctx.globalAlpha = 0.9;
   ctx.beginPath();
-  ctx.moveTo(R * 0.35, -R * 0.98);
-  ctx.quadraticCurveTo(R * 0.62, 0, R * 0.35, R * 0.98);
+  ctx.ellipse(-R * 0.95, 0, R * 0.55, R * 0.62, 0, Math.PI * 0.62, Math.PI * 1.38);
   ctx.stroke();
-  for (const s of [-1, 1]) {
-    inked(ctx, '#ffcf5a', () => ctx.ellipse(R * 0.56, s * R * 0.34, R * 0.2, R * 0.25, 0, 0, TAU), 1.8);
-    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.globalAlpha = 1;
+  // Calotte : couvre la tête, sauf un croissant de front devant.
+  inked(ctx, L.cap, () => {
+    ctx.arc(-R * 0.08, 0, R * 0.98, Math.PI * 0.32, Math.PI * 1.68);
+    ctx.quadraticCurveTo(R * 0.72, 0, R * 0.36, R * 0.84);
+    ctx.closePath();
+  }, 2.2);
+  // Coutures des panneaux, depuis le bouton du sommet
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(-R * 0.08, 0, R * 0.96, 0, TAU);
+  ctx.clip();
+  ctx.strokeStyle = L.capDark;
+  ctx.lineWidth = R * 0.06;
+  for (const a of [0.6, 1.6, 2.6, 3.7, 4.7, 5.7]) {
     ctx.beginPath();
-    ctx.arc(R * 0.5, s * R * 0.34 - R * 0.07, R * 0.06, 0, TAU);
-    ctx.fill();
+    ctx.moveTo(-R * 0.15, 0);
+    ctx.lineTo(-R * 0.15 + Math.cos(a) * R * 1.1, Math.sin(a) * R * 1.1);
+    ctx.stroke();
   }
+  // Reflet
+  ctx.strokeStyle = L.capLight;
+  ctx.lineWidth = R * 0.1;
+  ctx.beginPath();
+  ctx.arc(-R * 0.15, 0, R * 0.62, Math.PI * 1.1, Math.PI * 1.45);
+  ctx.stroke();
+  ctx.restore();
+  inked(ctx, L.capDark, () => ctx.arc(-R * 0.15, 0, R * 0.12, 0, TAU), 1.4);
+  // Fermoir à l'avant (casquette à l'envers) : ouverture où l'on voit les cheveux, sangle.
+  inked(ctx, L.hair, () => ctx.ellipse(R * 0.42, 0, R * 0.17, R * 0.3, 0, 0, TAU), 1.4);
+  ctx.strokeStyle = L.capLight;
+  ctx.lineWidth = R * 0.08;
+  ctx.beginPath();
+  ctx.moveTo(R * 0.36, -R * 0.24);
+  ctx.lineTo(R * 0.36, R * 0.24);
+  ctx.stroke();
+  // Petit logo violet sur le côté
+  inked(ctx, L.violet, () => ctx.roundRect(-R * 0.55, R * 0.3, R * 0.26, R * 0.16, R * 0.05), 1);
 }
 
 /** Cheveux courts + casque audio sur la tête : arceau d'une oreille à l'autre, coques aux couleurs de l'aura (Tempo). */
@@ -489,7 +529,8 @@ export function skaterBeanie(ctx: CanvasRenderingContext2D, R: number): void {
 /** Blaster de Flux. */
 export function blaster(ctx: CanvasRenderingContext2D, L: number): void {
   inked(ctx, '#3a4058', () => ctx.roundRect(-L * 0.15, -L * 0.2, L, L * 0.4, L * 0.14), 1.6);
-  ctx.fillStyle = '#ff9a3c';
+  // Bande lumineuse cyan (style cyber de Flux)
+  ctx.fillStyle = '#3ef2ff';
   ctx.fillRect(L * 0.15, -L * 0.06, L * 0.5, L * 0.12);
 }
 

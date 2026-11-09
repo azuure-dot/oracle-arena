@@ -1,6 +1,6 @@
 import type { GameContext } from '../core/GameContext';
 import { circlesOverlap, distToCircle } from '../core/geometry';
-import { clamp, degToRad, randRange, rotateTowards, TAU } from '../core/math';
+import { angleDiff, clamp, degToRad, randRange, rotateTowards, TAU } from '../core/math';
 import { hostile, type Combatant } from '../entities/Combatant';
 import { Projectile } from '../entities/Projectile';
 import type { Team } from '../entities/Team';
@@ -47,7 +47,7 @@ export const TURTY = {
 export const WATER_GUN = {
   magSize: 90,
   fireRate: 9, // gouttes/s
-  damage: 20,
+  damage: 30,
   speed: 900,
   range: FLUX_WEAPON.range, // 720
   radius: 5,
@@ -75,7 +75,12 @@ export const WATER_GUN = {
   splashRadius: 46,
 };
 
-/** Espace : carapace lancée qui ricoche sur les murs (2 rebonds max), façon Charge de Rempart. */
+/**
+ * Espace : carapace lancée, téléguidée. Pendant la préparation, on sélectionne un adversaire
+ * (le plus proche de la ligne de visée, en vue) ; la carapace le poursuit pendant toute sa course,
+ * même après avoir rebondi sur lui ou sur un mur. Sans adversaire sélectionné, elle suit la souris. Elle rebondit sur les murs
+ * (2 rebonds max) et sur les adversaires qu'elle percute (75 dégâts chacun).
+ */
 export const SHELL = {
   cooldown: 12,
   /** Préparation : la carapace tourne sur place, on peut encore viser. */
@@ -83,7 +88,15 @@ export const SHELL = {
   windupTurnRate: 4,
   speed: 780 * MOVE_SPEED_SCALE, // ralentie comme la marche (546)
   maxBounces: 2,
-  maxDuration: 1.5,
+  /** Course max (s) : 1,5 s, puis +2 s. */
+  maxDuration: 3.5,
+  /** Guidage : vitesse de rotation (rad/s) vers la cible (ou la souris) pendant la course. */
+  steerRate: 3.2,
+  /** Sélection de la cible : portée, et tolérance autour de la ligne de visée. */
+  lockRange: 900,
+  lockCone: degToRad(16),
+  /** Un même adversaire ne peut être repercuté qu'après ce délai (s), ou après un rebond sur un mur. */
+  rehitDelay: 0.5,
   damage: 75,
   /** Ennemis touchés : éjectés sur le côté. */
   knockback: 360,
@@ -120,8 +133,15 @@ interface ShellState {
   vx: number;
   vy: number;
   bounces: number;
-  /** Ennemis déjà touchés depuis le dernier rebond. */
-  hit: Set<Combatant>;
+  /** Ennemis touchés depuis le dernier rebond sur un mur, et instant (s.t) du dernier choc. */
+  hit: Map<Combatant, number>;
+  /**
+   * Adversaire sélectionné pendant la préparation, poursuivi pendant toute la course (même après
+   * un rebond). Remis à null s'il meurt ou devient invisible : la carapace continue tout droit.
+   */
+  target: Combatant | null;
+  /** Une cible a été verrouillée au lancer (sinon : guidage à la souris). */
+  locked: boolean;
   spin: number;
   trailTimer: number;
 }
@@ -154,7 +174,7 @@ export class Turty extends Hero {
 
   constructor() {
     super({
-      name: 'Turty',
+      name: 'Kora', // nom affiché (Turty dans le code)
       maxHp: 200,
       radius: R,
       speed: TURTY.speed,
@@ -405,7 +425,9 @@ export class Turty extends Hero {
       vx: 0,
       vy: 0,
       bounces: 0,
-      hit: new Set(),
+      hit: new Map(),
+      target: null,
+      locked: false,
       spin: 0,
       trailTimer: 0,
     };
@@ -426,8 +448,10 @@ export class Turty extends Hero {
       s.windup -= dt;
       s.dir = rotateTowards(s.dir, this.aim, SHELL.windupTurnRate * dt);
       s.spin += dt * (6 + 30 * this.shellWindupProgress);
+      s.target = this.shellTarget(ctx);
       this.vx = this.vy = 0;
       if (s.windup <= 0) {
+        s.locked = s.target !== null;
         s.vx = Math.cos(s.dir) * SHELL.speed;
         s.vy = Math.sin(s.dir) * SHELL.speed;
         ctx.effects.ring(this.x, this.y, '#ffffff', 50, 0.25);
@@ -439,6 +463,15 @@ export class Turty extends Hero {
 
     s.t += dt;
     s.spin += dt * 36;
+    // Téléguidée (vitesse constante) : elle tourne peu à peu vers l'adversaire sélectionné, même
+    // après avoir rebondi ; sans sélection, vers la souris ; cible perdue (morte, invisible) : tout droit.
+    if (s.target && (!s.target.alive || s.target.stealthed)) s.target = null;
+    let want: number | null = null;
+    if (s.target) want = Math.atan2(s.target.y - this.y, s.target.x - this.x);
+    else if (!s.locked) want = this.aim;
+    const heading = want === null ? Math.atan2(s.vy, s.vx) : rotateTowards(Math.atan2(s.vy, s.vx), want, SHELL.steerRate * dt);
+    s.vx = Math.cos(heading) * SHELL.speed;
+    s.vy = Math.sin(heading) * SHELL.speed;
     const dist = SHELL.speed * dt;
     const steps = Math.max(1, Math.ceil(dist / 5));
     const h = dt / steps;
@@ -480,25 +513,66 @@ export class Turty extends Hero {
     if (s.t >= SHELL.maxDuration) this.endShell(ctx);
   }
 
+  /**
+   * Adversaire percuté : 75 dégâts, il est repoussé, et la carapace rebondit sur lui (réflexion
+   * sur sa boule). Il peut être repercuté 0,5 s plus tard (ou après un rebond sur un mur).
+   */
   private hitWithShell(ctx: GameContext): void {
     const s = this.shell!;
-    const speed = Math.hypot(s.vx, s.vy) || 1;
-    const dx = s.vx / speed;
-    const dy = s.vy / speed;
     for (const c of ctx.targets) {
-      if (!c.alive || !hostile(this, c) || s.hit.has(c)) continue;
+      if (!c.alive || !hostile(this, c)) continue;
+      const last = s.hit.get(c);
+      if (last !== undefined && s.t - last < SHELL.rehitDelay) continue;
       if (!circlesOverlap(this.circle(), c.circle(), 4)) continue;
-      s.hit.add(c);
+      s.hit.set(c, s.t);
       ctx.damage(c, SHELL.damage, this);
-      // Éjecté sur le côté (gauche ou droite selon sa position) : la carapace continue.
-      const ox = c.x - this.x;
-      const oy = c.y - this.y;
-      const side = dx * oy - dy * ox >= 0 ? 1 : -1;
-      c.applyImpulse((-dy * side + dx * 0.4) * SHELL.knockback, (dx * side + dy * 0.4) * SHELL.knockback, this);
+      // Normale du choc : du centre de la cible vers la carapace.
+      let nx = this.x - c.x;
+      let ny = this.y - c.y;
+      const d = Math.hypot(nx, ny) || 1;
+      nx /= d;
+      ny /= d;
+      c.applyImpulse(-nx * SHELL.knockback, -ny * SHELL.knockback, this);
+      const dot = s.vx * nx + s.vy * ny;
+      if (dot < 0) {
+        s.vx -= 2 * dot * nx;
+        s.vy -= 2 * dot * ny;
+      }
+      // Sortie du contact (sans entrer dans un mur)
+      const px = c.x + nx * (c.radius + this.radius + 1);
+      const py = c.y + ny * (c.radius + this.radius + 1);
+      if (!ctx.arena.circleCollides(px, py, this.radius - 0.5, this.team)) {
+        this.x = px;
+        this.y = py;
+      }
       ctx.effects.sparks(c.x, c.y, '#ffffff', 12, 260);
       ctx.effects.ring(c.x, c.y, '#7fe3c4', 40, 0.25);
       ctx.shake(5, this);
     }
+  }
+
+  /**
+   * Adversaire sélectionné par la carapace : le plus proche de la ligne de visée (cône étroit,
+   * élargi pour les cibles proches), à portée et en vue. Les leurres comptent (clones de Flux).
+   */
+  private shellTarget(ctx: GameContext): Combatant | null {
+    let best: Combatant | null = null;
+    let bestScore = Infinity;
+    for (const c of ctx.targets) {
+      if (!c.alive || !hostile(this, c) || c.safe || c.stealthed) continue;
+      const d = Math.hypot(c.x - this.x, c.y - this.y);
+      if (d < 1 || d > SHELL.lockRange) continue;
+      const off = Math.abs(angleDiff(this.aim, Math.atan2(c.y - this.y, c.x - this.x)));
+      const tol = Math.max(SHELL.lockCone, Math.asin(Math.min(1, (c.radius + 20) / d)));
+      if (off > tol) continue;
+      if (!lineOfSight(ctx.arena, this.x, this.y, c.x, c.y)) continue;
+      const score = off / tol + d / 4000;
+      if (score < bestScore) {
+        bestScore = score;
+        best = c;
+      }
+    }
+    return best;
   }
 
   private endShell(ctx: GameContext): void {
@@ -736,6 +810,30 @@ export class Turty extends Hero {
 
   override drawOver(ctx: CanvasRenderingContext2D): void {
     if (this.dead) return;
+    // Adversaire sélectionné par la carapace (joueur seulement) : viseur pointillé qui tourne,
+    // plein une fois verrouillé.
+    const st = this.shell?.target;
+    if (st && st.alive && this.isLocalPlayer) {
+      const locked = this.shell!.windup <= 0;
+      ctx.save();
+      ctx.strokeStyle = '#ff5c6c';
+      ctx.lineWidth = locked ? 2.5 : 2;
+      ctx.setLineDash(locked ? [] : [7, 5]);
+      ctx.lineDashOffset = -(this.shell!.spin * 6);
+      const r = st.radius + 9;
+      ctx.beginPath();
+      ctx.arc(st.x, st.y, r, 0, TAU);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      for (let i = 0; i < 4; i++) {
+        const a = (i * Math.PI) / 2 + (locked ? 0 : this.shell!.spin * 0.2);
+        ctx.beginPath();
+        ctx.moveTo(st.x + Math.cos(a) * (r - 4), st.y + Math.sin(a) * (r - 4));
+        ctx.lineTo(st.x + Math.cos(a) * (r + 6), st.y + Math.sin(a) * (r + 6));
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
     // Aperçu du point d'impact de la bombe (joueur seulement)
     const p = this.bombAimPreview;
     if (p) {

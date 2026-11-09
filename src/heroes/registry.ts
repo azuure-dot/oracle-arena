@@ -29,11 +29,15 @@ export interface HeroEntry {
   create(): Hero;
 }
 
-/** Héros jouables, triés par rôle (Tank → Dégâts → Soutien). Touches 1/2/3 = cet ordre. */
+/**
+ * Héros jouables, triés par rôle (Tank → Dégâts → Soutien). Touches 1/2/3 = cet ordre.
+ * Noms affichés et noms dans le code : Keraun = Thor, Kora = Turty, Elio = Skater (fichiers,
+ * classes, identifiants et clés de texte gardent l'ancien nom).
+ */
 export const HEROES: HeroEntry[] = [
   {
     id: 'thor',
-    name: 'Thor',
+    name: 'Keraun',
     role: 'tank',
     hp: 600,
     color: '#5ab4ff',
@@ -63,7 +67,7 @@ export const HEROES: HeroEntry[] = [
   },
   {
     id: 'turty',
-    name: 'Turty',
+    name: 'Kora',
     role: 'damage',
     hp: 200,
     color: '#4fd1a5',
@@ -79,7 +83,7 @@ export const HEROES: HeroEntry[] = [
   },
   {
     id: 'skater',
-    name: 'Skater',
+    name: 'Elio',
     role: 'support',
     hp: 200,
     color: '#c7a3ff',

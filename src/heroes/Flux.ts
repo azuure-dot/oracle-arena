@@ -7,7 +7,7 @@ import type { Decoy } from '../entities/Decoy';
 import { Projectile } from '../entities/Projectile';
 import type { Team } from '../entities/Team';
 import { t } from '../i18n';
-import { blaster, cached, drawTeamMarker, fluxHair, hand, head } from '../render/topdown';
+import { blaster, cached, drawTeamMarker, FLUX_LOOK, fluxCap, hand, head } from '../render/topdown';
 import { drawHealthBar } from '../ui/healthBar';
 import { Hero, MOVE_SPEED_SCALE, type AbilitySlot, type WeaponHud } from './Hero';
 import type { BuffKind } from '../ui/healthBar';
@@ -26,7 +26,7 @@ export const WEAPON = {
 /**
  * Clic D — Frappe fantôme : 2 téléportations courtes (distance réduite comme la marche,
  * 170 → 101). La première rend Flux invisible 0,5 s pour l'adversaire et laisse à sa place
- * un clone holographique qui court tout droit (vers la visée) pendant 1 s ; la seconde est
+ * un clone holographique, immortel, qui court tout droit (vers la visée) pendant 2 s ; la seconde est
  * une simple téléportation. Les deux reviennent ensemble 6 s après la première.
  */
 export const PHANTOM = {
@@ -34,7 +34,7 @@ export const PHANTOM = {
   cooldown: 6,
   distance: 170 * MOVE_SPEED_SCALE,
   stealth: 0.5,
-  cloneLife: 1,
+  cloneLife: 2,
 };
 /**
  * Espace — Permutation : Flux échange sa place avec son clone le plus proche ; un nouveau
@@ -45,10 +45,11 @@ export const PERMUTE = { cooldown: 10, heal: 75 };
 /** Vitesse de course d'un clone : celle de Flux qui marche. */
 const CLONE_SPEED = 330 * MOVE_SPEED_SCALE;
 
-/** Rayon de la boule (= hitbox), peau, gants. */
+/** Rayon de la boule (= hitbox), peau, gants cyber (bracelets lumineux cyan), d'après son concept. */
 const R = 13;
-const SKIN = '#ffd9c0';
+const SKIN = FLUX_LOOK.skin;
 const GLOVE = '#2a2f42';
+const CUFF = FLUX_LOOK.cyan;
 /** Couleurs du « glitch » (aberration chromatique des hologrammes). */
 const GLITCH_A = '#3ef2ff';
 const GLITCH_B = '#ff3ec8';
@@ -179,7 +180,7 @@ export class Flux extends Hero {
     const half = degToRad(WEAPON.spreadDeg) / 2;
 
     if (ctx.arena.pointInWall(muzzle.x, muzzle.y)) {
-      ctx.effects.sparks(muzzle.x, muzzle.y, COLORS.bullet, 3);
+      ctx.effects.sparks(muzzle.x, muzzle.y, CUFF, 3);
       return;
     }
     ctx.spawnProjectile(
@@ -192,6 +193,7 @@ export class Flux extends Hero {
         team: this.team,
         owner: this,
         range: WEAPON.range,
+        style: 'cyber', // balles bleu cyan, comme ses équipements cybernétiques
       }),
     );
   }
@@ -307,28 +309,28 @@ export class Flux extends Hero {
       ctx.translate(R * (1.0 - kicks[i] * 0.3), side * R * 0.55);
       cached(ctx, 'flux.blaster', R * 1.05, (c) => blaster(c, R));
       if (kicks[i] > 0.4 && this.muzzleSide === side) {
-        ctx.fillStyle = 'rgba(255,240,180,0.95)';
+        ctx.fillStyle = 'rgba(160,250,255,0.95)'; // éclair au canon cyan
         ctx.beginPath();
         ctx.arc(R * 1.05, 0, R * 0.25, 0, TAU);
         ctx.fill();
       }
       ctx.restore();
     });
-    cached(ctx, 'flux.head', R * 1.75, (c) => {
+    cached(ctx, 'flux.head', R * 1.8, (c) => {
       head(c, R, SKIN);
-      fluxHair(c, R);
+      fluxCap(c, R);
     });
-    [-1, 1].forEach((side, i) => hand(ctx, R * (1.0 - kicks[i] * 0.3), side * R * 0.55, R * 0.32, GLOVE, rot));
+    [-1, 1].forEach((side, i) => hand(ctx, R * (1.0 - kicks[i] * 0.3), side * R * 0.55, R * 0.32, GLOVE, rot, { band: CUFF }));
   }
 
   /** Un blaster dans chaque main, pointés vers la visée ; la main qui tire recule (éclair au canon). */
   protected drawTop(ctx: CanvasRenderingContext2D, rot: number): void {
     if (this.meleeAnim > 0) {
-      cached(ctx, 'flux.head', R * 1.75, (c) => {
+      cached(ctx, 'flux.head', R * 1.8, (c) => {
         head(c, R, SKIN);
-        fluxHair(c, R);
+        fluxCap(c, R);
       });
-      this.idleHands(ctx, R, GLOVE, rot);
+      this.idleHands(ctx, R, GLOVE, rot, { band: CUFF });
       return;
     }
     this.drawLocal(ctx, rot, [-1, 1].map((side) => this.recoil[side > 0 ? 1 : 0] / 0.07));
@@ -488,10 +490,12 @@ export class HoloClone implements Decoy {
     return { x: this.x, y: this.y, r: this.radius };
   }
 
-  /** Touché : l'hologramme éclate. Les dégâts « comptent » (chiffre affiché) pour ne pas le trahir. */
-  takeDamage(amount: number, ctx: GameContext): number {
+  /**
+   * Touché : l'hologramme est immortel (il continue sa course), mais les dégâts « comptent »
+   * (chiffre affiché, marqueur de touche) pour ne pas le trahir.
+   */
+  takeDamage(amount: number): number {
     if (!this.alive) return 0;
-    this.vanish(ctx);
     return Math.min(amount, this.owner.hp);
   }
   heal(): void {}
