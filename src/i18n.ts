@@ -14,6 +14,7 @@ const fr = {
   'role.tank': 'Tank',
   'role.damage': 'Dégâts',
   'role.support': 'Soutien',
+  'touch.rotate': 'Tourne ton téléphone en paysage',
   'unit.hp': 'PV',
 
   // Touches
@@ -268,6 +269,7 @@ const en: Record<TKey, string> = {
   'role.tank': 'Tank',
   'role.damage': 'Damage',
   'role.support': 'Support',
+  'touch.rotate': 'Turn your phone to landscape',
   'unit.hp': 'HP',
 
   'key.primary': 'LMB',

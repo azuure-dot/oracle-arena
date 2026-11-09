@@ -5,7 +5,8 @@ import type { Input } from '../core/Input';
 import type { Vec2 } from '../core/math';
 import { World, type DamageEvent } from '../game/World';
 import type { Hero } from '../heroes/Hero';
-import type { HeroEntry } from '../heroes/registry';
+import { HEROES, RETIRED_HEROES, type HeroEntry } from '../heroes/registry';
+import type { MetaButton, TouchControls, TouchSlot } from '../core/Touch';
 import { HUD } from '../ui/HUD';
 import type { MatchResult } from '../ui/screens/Scoreboard';
 import { Arena } from '../world/Arena';
@@ -33,6 +34,8 @@ export interface ScreenInfo {
   fps: number;
   /** Transformation monde → écran (indicateurs hors écran). */
   view: { scale: number; tx: number; ty: number };
+  /** Commandes tactiles en cours (sticks et boutons à dessiner), sinon absent. */
+  touch?: TouchControls;
 }
 
 /**
@@ -69,6 +72,7 @@ export abstract class GameMode {
       drawGround: (ctx, time) => this.drawGround(ctx, time),
     });
     this.playerControls = new PlayerControls(input);
+    input.touch.resetTouches();
     this.player = entry.create();
     this.player.controls = this.playerControls;
     this.player.isLocalPlayer = true;
@@ -95,7 +99,24 @@ export abstract class GameMode {
     if (input.wasPressed('KeyX')) this.showHitboxes = !this.showHitboxes;
     this.handleKeys();
 
-    const aim = this.camera.screenToWorld(input.mouseX, input.mouseY);
+    // Commandes tactiles (téléphone) : sticks et boutons, visée au doigt.
+    const touch = input.touch;
+    const p = this.player;
+    const slots: TouchSlot[] = p.abilitySlots().map((s) => s.input);
+    if (p.hasQuickMelee()) slots.push('melee');
+    if (p.weaponHud().magSize !== undefined) slots.push('reload');
+    touch.update({
+      width: this.camera.viewW,
+      height: this.camera.viewH,
+      player: p,
+      targets: this.world.ctx.targets,
+      arena: this.arena,
+      slots,
+      hints: [...HEROES, ...RETIRED_HEROES].find((e) => e.name === p.name)?.touch ?? {},
+      meta: this.touchMeta(),
+      dt,
+    });
+    const aim = touch.active ? touch.aimPoint(p) : this.camera.screenToWorld(input.mouseX, input.mouseY);
     this.playerControls.sample(aim.x, aim.y);
 
     this.countdown = Math.max(0, this.countdown - dt);
@@ -121,6 +142,10 @@ export abstract class GameMode {
 
   /** Touches propres au mode. */
   protected handleKeys(): void {}
+  /** Boutons tactiles en haut à gauche (touches simulées) : quitter, et ceux propres au mode. */
+  protected touchMeta(): MetaButton[] {
+    return [{ code: 'Escape', label: '✕' }];
+  }
   /** Avant la simulation (ex. IA des bots). */
   protected beforeWorld(_dt: number): void {}
   /** Après la simulation (ex. chrono). */

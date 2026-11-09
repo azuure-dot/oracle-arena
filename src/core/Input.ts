@@ -1,5 +1,7 @@
+import { TouchControls } from './Touch';
+
 /**
- * Gestion clavier + souris.
+ * Gestion clavier + souris (+ commandes tactiles, voir Touch.ts).
  * On utilise `KeyboardEvent.code` (position physique de la touche) :
  * KeyW/KeyA/KeyS/KeyD correspondent donc à ZQSD sur un clavier AZERTY
  * et à WASD sur un clavier QWERTY, sans configuration.
@@ -7,6 +9,8 @@
 export class Input {
   mouseX = 0; // coordonnées écran (px CSS)
   mouseY = 0;
+  /** Commandes tactiles (téléphone) : actives au premier toucher. */
+  readonly touch: TouchControls;
 
   private keysDown = new Set<string>();
   private keysPressed = new Set<string>();
@@ -25,6 +29,8 @@ export class Input {
   ]);
 
   constructor(private readonly canvas: HTMLCanvasElement) {
+    // Boutons tactiles « Quitter », « Changer de héros » : simulent Échap, C.
+    this.touch = new TouchControls(canvas, (code) => this.keysPressed.add(code));
     window.addEventListener('keydown', (e) => {
       if (!e.repeat) this.keysPressed.add(e.code);
       this.keysDown.add(e.code);
@@ -77,6 +83,7 @@ export class Input {
 
   /** À appeler à la fin de chaque frame pour vider les événements "pressés". */
   endFrame(): void {
+    this.touch.endFrame();
     this.keysPressed.clear();
     this.buttonsPressed.fill(false);
   }

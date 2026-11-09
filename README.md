@@ -311,6 +311,29 @@ Comportements par héros :
 
 Dans les menus : touches 1, 2, 3… pour choisir, Entrée pour valider, Échap pour revenir.
 
+
+### Sur téléphone (commandes tactiles)
+
+Le jeu se joue à deux pouces, en paysage (un message demande de tourner le téléphone en portrait).
+Le mode tactile s'active au premier toucher et se coupe dès qu'on touche la souris ou le clavier
+(`src/core/Touch.ts`, dessin dans `src/ui/touchHud.ts`).
+
+- **Pouce gauche** : stick de déplacement flottant, il apparaît là où le pouce se pose (moitié gauche).
+- **Pouce droit** : stick de tir en bas à droite. Poussé, le héros vise dans cette direction et tire
+  en continu ; une aide à la visée se cale sur l'ennemi le plus proche de la direction poussée.
+  Les munitions s'affichent au centre du stick, le rechargement en anneau autour.
+- **Compétences** : boutons en arc autour du stick de tir (icône, recharge, charges). Trois façons de
+  les utiliser, réglées par héros (`touch` dans `src/heroes/registry.ts`) :
+  - appui simple = lancer sur la cible automatique (ennemi le plus proche ; allié pour l'Envol de
+    Camellia ; elle-même pour son Sanctuaire ; allié blessé sinon ennemi pour ses petits anges) ;
+    glisser depuis le bouton = viser à la main (portée en pointillés, point visé), relâcher = lancer ;
+  - maintenu : mur de foudre de Keraun (glisser l'oriente), forme tortue de Kora ;
+  - immédiat : compétences qui choisissent seules (trick et aura d'Elio, Frappe fantôme dans le sens
+    du déplacement et Permutation de Flux).
+- **Petits boutons** : mêlée rapide (👊), rechargement. En haut à gauche : quitter (✕) et, dans le
+  spawn en Partie rapide, changer de héros (⇄). Les PV passent en haut à gauche.
+- Sans visée récente, le héros regarde là où il va. Plein écran au premier toucher si le navigateur
+  le permet ; menus compacts sur les écrans peu hauts.
 ## Structure
 
 ```

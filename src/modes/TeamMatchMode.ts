@@ -1,3 +1,4 @@
+import type { MetaButton } from '../core/Touch';
 import { NavGraph } from '../ai/nav';
 import { COLORS } from '../config';
 import type { Camera } from '../core/Camera';
@@ -62,6 +63,12 @@ export abstract class TeamMatchMode extends MatchMode {
   /** Le changement de héros est-il possible maintenant ? (pas pendant une transition) */
   canSwap(): boolean {
     return true;
+  }
+
+  /** Dans le spawn : bouton tactile de changement de héros (touche C). */
+  protected override touchMeta(): MetaButton[] {
+    const base = super.touchMeta();
+    return this.player.safe && this.canSwap() ? [...base, { code: 'KeyC', label: '⇄' }] : base;
   }
 
   protected override handleKeys(): void {

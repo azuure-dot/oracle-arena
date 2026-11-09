@@ -600,3 +600,75 @@ kbd {
   font-size: 14px;
   font-weight: 700;
 }
+
+/* Téléphone en paysage (écran peu haut) : menus compacts, tout tient sans trop défiler. */
+@media (max-height: 520px) {
+  .screen {
+    padding: 12px 14px;
+  }
+  .screen-inner h1,
+  .menu-title {
+    font-size: 26px !important;
+  }
+  .select-sub {
+    margin: 4px 0 12px;
+    font-size: 13px;
+  }
+  .select-foot {
+    display: none; /* raccourcis clavier : inutiles au doigt */
+  }
+  .lang-toggle {
+    top: 0;
+  }
+  .mode-cards,
+  .map-cards {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+  }
+  .mode-card {
+    gap: 6px;
+    padding: 16px 14px 14px;
+  }
+  .mode-card svg {
+    width: 34px;
+    height: 34px;
+  }
+  .mode-name {
+    font-size: 17px;
+  }
+  .mode-desc {
+    font-size: 12px;
+  }
+  .mode-index,
+  .hero-index {
+    display: none;
+  }
+  .role-columns {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .role-col {
+    gap: 8px;
+  }
+  .hero-card {
+    padding: 10px 12px;
+  }
+  .hero-avatar {
+    width: 34px;
+    height: 34px;
+    font-size: 17px;
+  }
+  .hero-name {
+    font-size: 16px;
+  }
+  .hero-tagline {
+    margin: 6px 0 0;
+    font-size: 12px;
+  }
+  .hero-abilities {
+    display: none; /* détail des compétences : visible sur grand écran */
+  }
+  .screen-actions {
+    margin-top: 12px;
+  }
+}

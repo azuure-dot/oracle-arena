@@ -287,6 +287,7 @@ export class Game {
       aimDistance: Math.hypot(aim.x - p.x, aim.y - p.y) * view.scale,
       fps: this.fps,
       view,
+      touch: this.input.touch.active ? this.input.touch : undefined,
     });
   }
 }

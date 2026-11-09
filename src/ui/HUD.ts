@@ -2,7 +2,9 @@ import { COLORS } from '../config';
 import { degToRad } from '../core/math';
 import { INPUT_LABEL_KEYS, type AbilityIcon, type AbilitySlot, type Hero } from '../heroes/Hero';
 import { t } from '../i18n';
+import type { TouchControls } from '../core/Touch';
 import type { Stats } from './Stats';
+import { drawTouchControls } from './touchHud';
 
 const FONT = 'system-ui, -apple-system, Segoe UI, sans-serif';
 
@@ -25,6 +27,10 @@ export interface HudFrame {
   helpTop?: number;
   /** Sous le compte à rebours de réapparition (ex. « Éliminé par Vex »). */
   deathMessage?: string;
+  /** Transformation monde → écran (aperçus de visée tactile). */
+  view?: { scale: number; tx: number; ty: number };
+  /** Commandes tactiles actives : sticks et boutons à l'écran, à la place de la barre et du viseur. */
+  touch?: TouchControls;
 }
 
 /** Interface en espace écran, générique : elle lit abilitySlots()/weaponHud() du héros. */
@@ -43,15 +49,32 @@ export class HUD {
   }
 
   draw(ctx: CanvasRenderingContext2D, f: HudFrame): void {
+    const touch = f.touch?.active ? f.touch : null;
     this.drawDamageVignette(ctx, f);
-    this.drawHealth(ctx, f);
-    this.drawAbilities(ctx, f);
-    this.drawWeapon(ctx, f);
+    if (touch) {
+      // Téléphone : PV en haut à gauche (sous les boutons Quitter / Héros), compétences et
+      // munitions sur les boutons tactiles, pas de viseur ni d'aide clavier.
+      this.drawHealth(ctx, f, 16, touch.unit * 0.04 + touch.unit * 0.11 + 58, 180);
+    } else {
+      this.drawHealth(ctx, f);
+      this.drawAbilities(ctx, f);
+      this.drawWeapon(ctx, f);
+    }
     this.drawStats(ctx, f);
-    if (this.showHelp) this.drawHelp(ctx, f);
+    if (this.showHelp && !touch) this.drawHelp(ctx, f);
     if (f.hero.dead) this.drawRespawn(ctx, f);
     else if (f.hero.stunTimer > 0) this.drawStunned(ctx, f);
-    this.drawCrosshair(ctx, f);
+    if (touch) {
+      drawTouchControls(ctx, f.width, f.height, f.hero, touch, f.view ?? { scale: 1, tx: 0, ty: 0 }, (c, icon, x, y, color) => this.drawIcon(c, icon, x, y, color));
+      this.drawHitmarkerAt(ctx, f, touch);
+    } else this.drawCrosshair(ctx, f);
+  }
+
+  /** Tactile : marqueur de touche au point visé. */
+  private drawHitmarkerAt(ctx: CanvasRenderingContext2D, f: HudFrame, touch: TouchControls): void {
+    if (this.hitmarker <= 0 || !f.view) return;
+    const p = touch.aimPoint(f.hero);
+    this.drawCrosshair(ctx, { ...f, mouseX: p.x * f.view.scale + f.view.tx, mouseY: p.y * f.view.scale + f.view.ty }, true);
   }
 
   /** Étourdi : rappel au-dessus de la barre de compétences. */
@@ -97,11 +120,8 @@ export class HUD {
     ctx.fillRect(0, 0, f.width, f.height);
   }
 
-  private drawHealth(ctx: CanvasRenderingContext2D, f: HudFrame): void {
+  private drawHealth(ctx: CanvasRenderingContext2D, f: HudFrame, x = 28, y = f.height - 34, w = 280): void {
     const h = f.hero;
-    const x = 28;
-    const y = f.height - 34;
-    const w = 280;
     const barH = 18;
 
     ctx.textAlign = 'left';
@@ -622,8 +642,12 @@ export class HUD {
 
   // ---------------------------------------------------------------- viseur
 
-  private drawCrosshair(ctx: CanvasRenderingContext2D, f: HudFrame): void {
+  private drawCrosshair(ctx: CanvasRenderingContext2D, f: HudFrame, hitmarkerOnly = false): void {
     const { mouseX: mx, mouseY: my } = f;
+    if (hitmarkerOnly) {
+      this.drawHitmarker(ctx, mx, my);
+      return;
+    }
     // Le cercle montre la vraie dispersion à la distance du curseur.
     const half = degToRad(f.hero.spreadDeg) / 2;
     const spreadR = Math.max(6, Math.tan(half) * f.aimDistance);
@@ -639,6 +663,10 @@ export class HUD {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(mx - 1.5, my - 1.5, 3, 3);
 
+    this.drawHitmarker(ctx, mx, my);
+  }
+
+  private drawHitmarker(ctx: CanvasRenderingContext2D, mx: number, my: number): void {
     if (this.hitmarker > 0) {
       const s = this.hitmarkerKill ? 12 : 9;
       const inner = 4;

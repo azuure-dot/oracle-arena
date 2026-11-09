@@ -1,3 +1,4 @@
+import type { TouchHint } from '../core/Touch';
 import type { TKey } from '../i18n';
 import { Camellia } from './Camellia';
 import { Flux } from './Flux';
@@ -26,6 +27,11 @@ export interface HeroEntry {
   color: string;
   tagline: TKey;
   abilities: { input: InputSlot; name: TKey; desc: TKey }[];
+  /**
+   * Commandes tactiles (voir core/Touch.ts) : comment chaque bouton de compétence se comporte.
+   * Par défaut : « aim » vers l'ennemi le plus proche (appui), ou visé en glissant.
+   */
+  touch?: Partial<Record<InputSlot, TouchHint>>;
   create(): Hero;
 }
 
@@ -48,6 +54,11 @@ export const HEROES: HeroEntry[] = [
       { input: 'ability1', name: 'thor.smash', desc: 'thor.smash.desc' },
       { input: 'ability2', name: 'thor.throw', desc: 'thor.throw.desc' },
     ],
+    touch: {
+      secondary: { mode: 'hold' }, // mur de foudre levé tant qu'on appuie ; glisser l'oriente
+      ability1: { mode: 'aim', range: 160 }, // ruée (vers le marteau s'il est lancé)
+      ability2: { mode: 'aim', range: 460 }, // lancer, puis rappel
+    },
     create: () => new Thor(),
   },
   {
@@ -63,6 +74,10 @@ export const HEROES: HeroEntry[] = [
       { input: 'ability1', name: 'flux.permute', desc: 'flux.permute.desc' },
       { input: 'melee', name: 'melee.name', desc: 'melee.desc' },
     ],
+    touch: {
+      secondary: { mode: 'tap' }, // Frappe fantôme : dans le sens du stick de déplacement
+      ability1: { mode: 'tap' }, // Permutation : vers le clone le plus proche
+    },
     create: () => new Flux(),
   },
   {
@@ -79,6 +94,11 @@ export const HEROES: HeroEntry[] = [
       { input: 'ability2', name: 'turty.bomb', desc: 'turty.bomb.desc' },
       { input: 'melee', name: 'melee.name', desc: 'melee.desc' },
     ],
+    touch: {
+      secondary: { mode: 'hold' }, // forme tortue tant qu'on appuie
+      ability1: { mode: 'aim', range: 600 }, // carapace : verrouille l'ennemi visé
+      ability2: { mode: 'aim', range: 560 }, // bombe à eau sur le point visé
+    },
     create: () => new Turty(),
   },
   {
@@ -94,6 +114,11 @@ export const HEROES: HeroEntry[] = [
       { input: 'ability1', name: 'skater.trick', desc: 'skater.trick.desc' },
       { input: 'ability2', name: 'skater.mode', desc: 'skater.mode.desc' },
     ],
+    touch: {
+      secondary: { mode: 'aim', range: 500 }, // lancer d'équipement
+      ability1: { mode: 'tap' }, // trick : cible choisie par le jeu
+      ability2: { mode: 'tap' }, // bascule d'aura
+    },
     create: () => new Skater(),
   },
   {
@@ -110,6 +135,11 @@ export const HEROES: HeroEntry[] = [
       { input: 'ability2', name: 'camellia.sanctuary', desc: 'camellia.sanctuary.desc' },
       { input: 'melee', name: 'melee.name', desc: 'melee.desc' },
     ],
+    touch: {
+      secondary: { mode: 'aim', range: 500, target: 'auto' }, // petit ange : allié blessé, sinon ennemi
+      ability1: { mode: 'aim', range: 460, target: 'ally' }, // Envol vers un allié
+      ability2: { mode: 'aim', range: 420, target: 'self' }, // Sanctuaire : sur elle, ou visé en glissant
+    },
     create: () => new Camellia(),
   },
 ];

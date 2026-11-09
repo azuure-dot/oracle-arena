@@ -29,7 +29,7 @@ const KEYS: Record<Exclude<Action, 'primary' | 'secondary' | 'melee'>, string[]>
 };
 const MOUSE: Partial<Record<Action, 0 | 1 | 2>> = { primary: 0, melee: 1, secondary: 2 };
 
-/** Commandes du joueur humain : clavier + souris. */
+/** Commandes du joueur humain : clavier + souris, ou commandes tactiles (sticks et boutons). */
 export class PlayerControls implements HeroControls {
   aimX = 0;
   aimY = 0;
@@ -42,6 +42,10 @@ export class PlayerControls implements HeroControls {
     this.aimX = aimX;
     this.aimY = aimY;
     const i = this.input;
+    if (i.touch.active) {
+      this.move = i.touch.move; // stick gauche
+      return;
+    }
     let mx = 0;
     let my = 0;
     if (i.isDown('KeyW', 'ArrowUp')) my -= 1;
@@ -52,12 +56,14 @@ export class PlayerControls implements HeroControls {
   }
 
   held(action: Action): boolean {
+    if (this.input.touch.held(action)) return true;
     const b = MOUSE[action];
     if (b !== undefined) return this.input.isMouseDown(b);
     return this.input.isDown(...KEYS[action as keyof typeof KEYS]);
   }
 
   pressed(action: Action): boolean {
+    if (this.input.touch.pressed(action)) return true;
     const b = MOUSE[action];
     if (b !== undefined) return this.input.wasMousePressed(b);
     return this.input.wasPressed(...KEYS[action as keyof typeof KEYS]);

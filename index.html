@@ -2,7 +2,9 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
     <title>Hero Shooter — Champ de tir</title>
     <style>
       html,
@@ -13,12 +15,19 @@
         height: 100%;
         overflow: hidden;
         background: #0d1117;
+        overscroll-behavior: none;
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+        -webkit-tap-highlight-color: transparent;
       }
       canvas {
         display: block;
         width: 100vw;
         height: 100vh;
         cursor: none;
+        /* Commandes tactiles : pas de défilement ni de zoom du navigateur sur le jeu. */
+        touch-action: none;
       }
     </style>
   </head>
