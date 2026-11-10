@@ -30,7 +30,16 @@ export interface WorldHooks {
   drawGround?(ctx: CanvasRenderingContext2D, time: number): void;
   /** Chaque tremblement demandé (serveur multijoueur : retransmis aux clients). */
   onShake?(magnitude: number, at: Vec2): void;
+  /**
+   * Qui agit en ce moment (héros mis à jour, lanceur du projectile ou de l'objet), ou null.
+   * Le serveur multijoueur attribue ainsi chaque effet à son auteur : le client de ce joueur
+   * l'affiche tout de suite au lieu d'attendre le retard d'interpolation.
+   */
+  onActor?(actor: Hero | null): void;
 }
+
+/** Lanceur d'un objet du monde (marteau, bombe, leurre...), s'il en a un. */
+const ownerOf = (o: object): Hero | null => (o as { owner?: Hero | null }).owner ?? null;
 
 /**
  * Ce qui tremble quand un héros frappe fort : la caméra du joueur. Le serveur multijoueur,
@@ -125,8 +134,17 @@ export class World {
     }
 
     // Auras d'abord : chaque héros profite des bonus de la frame, quel que soit l'ordre de mise à jour.
-    for (const h of this.heroes) if (h.alive) h.applyAura(dt, this.ctx);
-    for (const h of this.heroes) h.update(dt, this.ctx);
+    const act = this.hooks.onActor;
+    for (const h of this.heroes) {
+      if (!h.alive) continue;
+      act?.(h);
+      h.applyAura(dt, this.ctx);
+    }
+    for (const h of this.heroes) {
+      act?.(h);
+      h.update(dt, this.ctx);
+    }
+    act?.(null);
 
     const bctx: BotContext = {
       arena: this.arena,
@@ -138,8 +156,15 @@ export class World {
     for (const b of this.bots) b.update(dt, bctx);
 
     this.updateProjectiles(dt);
-    this.objects = this.objects.filter((o) => o.update(dt, this.ctx));
-    this.decoys = this.decoys.filter((d) => d.update(dt, this.ctx));
+    this.objects = this.objects.filter((o) => {
+      act?.(ownerOf(o));
+      return o.update(dt, this.ctx);
+    });
+    this.decoys = this.decoys.filter((d) => {
+      act?.(ownerOf(d));
+      return d.update(dt, this.ctx);
+    });
+    act?.(null);
     this.wet.update(dt, this.time);
     this.updateVisibility();
     this.effects.update(dt);
@@ -208,6 +233,7 @@ export class World {
 
   private updateProjectiles(dt: number): void {
     for (const p of this.projectiles) {
+      this.hooks.onActor?.(p.owner);
       const dx = p.vx * dt;
       const dy = p.vy * dt;
       const dist = Math.hypot(dx, dy);

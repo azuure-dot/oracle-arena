@@ -158,8 +158,12 @@ export interface ObjectTick {
   s?: NetFields;
 }
 
-/** Appel d'effet visuel enregistré sur le serveur : [méthode, ...arguments]. */
-export type FxCall = [string, ...(number | string | boolean)[]];
+/**
+ * Appel d'effet visuel enregistré sur le serveur : [auteur, méthode, ...arguments]. L'auteur (id
+ * du participant dont le héros, le projectile ou l'objet a déclenché l'effet, sinon null) permet
+ * à son client de l'afficher tout de suite, sans le retard d'interpolation.
+ */
+export type FxCall = [string | null, string, ...(number | string | boolean)[]];
 
 /** Dégât : [cible, source, dégâts, tué (0/1), cause]. Cible : id de héros ou { o: id } d'objet. */
 export type HitEvent = [string | number, string | null, number, 0 | 1, string | null];
@@ -176,7 +180,8 @@ export interface GameTick {
   fx: FxCall[];
   /** Sol mouillé : arguments de `WetGround.splash` (x, y, rayon, instant, équipe). */
   wet: [number, number, number, number, string][];
-  shakes: [number, number, number][];
+  /** Tremblements : [force, x, y, auteur]. */
+  shakes: [number, number, number, string | null][];
   hits: HitEvent[];
   match: {
     countdown: number;

@@ -35,6 +35,11 @@ import type { NetworkManager } from './NetworkManager';
  *    est nul en temps normal ; un vrai écart (recul, ruée...) est absorbé en quelques images au
  *    lieu de faire sauter la caméra.
  *
+ * 4. Ses propres actions au présent : les projectiles, objets (marteau, bombe, clones...) et effets
+ *    visuels déclenchés par le joueur local sont affichés dès réception, sans le retard
+ *    d'interpolation, et les projectiles sont prolongés jusqu'à l'instant présent. Le tir apparaît
+ *    ainsi un aller-retour réseau après le clic, et non un aller-retour + ~100 ms.
+ *
  * Les règles d'affichage (HUD, fil des éliminations, classement, tableau des scores) sont celles
  * du Deathmatch solo (DeathmatchMode, dont cette classe hérite) : seules les données viennent
  * du serveur.
@@ -58,6 +63,37 @@ interface NetObject {
   obj: Record<string, unknown> & Vec2;
   /** Dernier instantané (temps serveur) où l'objet existait. */
   lastSeen: number;
+  /** Lancé par le joueur local : affiché au présent (voir receive / advance). */
+  mine: boolean;
+  /** Objet du joueur local : dernière position reçue et vitesse, pour le prolonger jusqu'au présent. */
+  at: { t: number; x: number; y: number; vx: number; vy: number };
+}
+
+/**
+ * Certains objets calculent eux-mêmes leur position (le sanctuaire de Camellia suit son ange :
+ * `x` et `y` y sont des accesseurs en lecture seule). Les modifier lèverait une erreur et
+ * interromprait l'image : on ne place que les objets dont la position est un champ.
+ */
+const MOVABLE = new Map<object, boolean>();
+function place(obj: object, x: number, y: number): void {
+  const proto = Object.getPrototypeOf(obj) as object;
+  let movable = MOVABLE.get(proto);
+  if (movable === undefined) {
+    let d: PropertyDescriptor | undefined;
+    for (let o: object | null = proto; o && !d; o = Object.getPrototypeOf(o)) d = Object.getOwnPropertyDescriptor(o, 'x');
+    movable = !d || 'value' in d || !!d.set;
+    MOVABLE.set(proto, movable);
+  }
+  if (!movable) return;
+  const v = obj as Vec2;
+  v.x = x;
+  v.y = y;
+}
+
+/** Le champ `owner` (encodé `{ $h: id }`) désigne-t-il ce participant ? */
+function ownedBy(fields: Record<string, unknown> | undefined, id: string): boolean {
+  const owner = fields?.owner as { $h?: unknown } | null | undefined;
+  return !!owner && typeof owner === 'object' && owner.$h === id;
 }
 
 export class NetMatch extends DeathmatchMode {
@@ -216,26 +252,84 @@ export class NetMatch extends DeathmatchMode {
 
     // Objets apparus : créés tout de suite (le joueur local peut déjà y faire référence).
     const fresh: [NetObject, GameTick['objects'][number]][] = [];
+    const present = new Set<number>();
     for (const o of t.objects) {
+      present.add(o.id);
       let rec = this.objects.get(o.id);
       if (!rec) {
         const kind = (o.k ?? '') as NetKind;
         if (!(kind in NET_KINDS)) continue;
         const obj = Object.create(NET_KINDS[kind].proto) as NetObject['obj'];
-        rec = { kind, obj, lastSeen: t.t };
+        const mine = ownedBy(o.s, this.localId);
+        rec = { kind, obj, lastSeen: t.t, mine, at: { t: t.t, x: o.p[0], y: o.p[1], vx: 0, vy: 0 } };
         this.objects.set(o.id, rec);
         fresh.push([rec, o]);
+      } else if (rec.mine) {
+        // Objet du joueur local déjà connu : mis à jour tout de suite (pas d'attente).
+        if (o.s) applyFields(rec.obj, o.s, this.refs);
+        const span = t.t - rec.at.t;
+        if (span > 0) rec.at = { t: t.t, x: o.p[0], y: o.p[1], vx: (o.p[0] - rec.at.x) / span, vy: (o.p[1] - rec.at.y) / span };
       }
       rec.lastSeen = t.t;
     }
     for (const [rec, o] of fresh) {
       if (o.s) applyFields(rec.obj, o.s, this.refs);
-      rec.obj.x = o.p[0];
-      rec.obj.y = o.p[1];
+      place(rec.obj, o.p[0], o.p[1]);
+      // Projectile : vitesse exacte (ligne droite) ; autre objet : estimée au prochain instantané.
+      const v = rec.obj as { vx?: unknown; vy?: unknown };
+      if (rec.mine && typeof v.vx === 'number' && typeof v.vy === 'number') rec.at = { ...rec.at, vx: v.vx, vy: v.vy };
     }
+    // Objets du joueur local disparus (projectile arrivé, marteau rattrapé...) : retirés tout de suite.
+    for (const [id, rec] of this.objects) if (rec.mine && !present.has(id)) this.objects.delete(id);
 
+    // Effets, tremblements et dégâts déclenchés par le joueur local : tout de suite.
+    this.playEvents(t, true);
     this.reconcile(t);
+    this.rebuildLists();
     this.queue.push(t);
+  }
+
+  /**
+   * Effets visuels, tremblements et dégâts d'un instantané. `mine` : seulement ceux du joueur
+   * local (joués à la réception), sinon seulement ceux des autres (joués à l'instant affiché).
+   */
+  private playEvents(t: GameTick, mine: boolean): void {
+    const w = this.world;
+    const me = this.localId;
+    const fx = w.effects as unknown as Record<string, ((...args: unknown[]) => void) | undefined>;
+    for (const [actor, name, ...args] of t.fx) if ((actor === me) === mine) fx[name]?.call(w.effects, ...args);
+    for (const [m, x, y, actor] of t.shakes) if ((actor === me) === mine) w.shakeAt(m, { x, y });
+
+    // Dégâts : fil des éliminations, marqueur de touche, chiffres (règles de MatchMode).
+    for (const [targetRef, sourceId, dealt, killed, cause] of t.hits) {
+      if ((sourceId === me) !== mine) continue;
+      const target = (typeof targetRef === 'string' ? this.heroById.get(targetRef) : this.objects.get(targetRef)?.obj) as
+        | Combatant
+        | undefined;
+      if (!target) continue;
+      const source = sourceId ? (this.heroById.get(sourceId) ?? null) : null;
+      if (source === this.player && target !== this.player) {
+        w.effects.damageNumber(target.x, target.y - target.radius, dealt);
+      }
+      this.onDamage({ target, source, dealt, killed: killed === 1, cause: (cause ?? undefined) as DamageCause | undefined });
+    }
+  }
+
+  /**
+   * Listes du monde : objets des autres tels qu'à l'instant affiché (dans l'ordre du serveur),
+   * puis ceux du joueur local tels qu'au dernier instantané reçu.
+   */
+  private rebuildLists(): void {
+    const w = this.world;
+    const lists = { projectiles: [] as unknown[], objects: [] as unknown[], decoys: [] as unknown[] };
+    for (const o of this.current?.objects ?? []) {
+      const rec = this.objects.get(o.id);
+      if (rec && !rec.mine) lists[NET_KINDS[rec.kind].list].push(rec.obj);
+    }
+    for (const rec of this.objects.values()) if (rec.mine) lists[NET_KINDS[rec.kind].list].push(rec.obj);
+    w.projectiles = lists.projectiles as typeof w.projectiles;
+    w.objects = lists.objects as typeof w.objects;
+    w.decoys = lists.decoys as typeof w.decoys;
   }
 
   /** Joueur local : état du serveur, puis on rejoue les commandes pas encore traitées. */
@@ -306,14 +400,20 @@ export class NetMatch extends DeathmatchMode {
       h.y = lerp(pa[1], pb[1], a);
       h.aim = lerpAngle(pa[2], pb[2], a);
     }
+    // Ses propres objets : dernière position reçue, prolongée jusqu'à l'instant présent du serveur.
+    const now = performance.now() / 1000 + this.clockOffset;
+    for (const rec of this.objects.values()) {
+      if (!rec.mine) continue;
+      const ahead = Math.max(0, Math.min(0.1, now - rec.at.t));
+      place(rec.obj, rec.at.x + rec.at.vx * ahead, rec.at.y + rec.at.vy * ahead);
+    }
     if (next) {
       const nextPos = new Map(next.objects.map((o) => [o.id, o.p]));
       for (const o of cur.objects) {
         const rec = this.objects.get(o.id);
         const pb = nextPos.get(o.id);
-        if (!rec || !pb) continue;
-        rec.obj.x = lerp(o.p[0], pb[0], a);
-        rec.obj.y = lerp(o.p[1], pb[1], a);
+        if (!rec || !pb || rec.mine) continue;
+        place(rec.obj, lerp(o.p[0], pb[0], a), lerp(o.p[1], pb[1], a));
       }
     }
     // Temps du monde (animations, séchage des flaques) : celui de l'instant affiché.
@@ -334,45 +434,27 @@ export class NetMatch extends DeathmatchMode {
     // Joueur parti : son héros quitte le monde (ses points restent au classement).
     w.heroes = this.participants.map((p) => p.hero).filter((h) => h === this.player || t.heroes[this.idOf(h)]);
 
-    // --- objets du monde (projectiles, marteau, bombes, leurres...)
-    const lists = { projectiles: [] as unknown[], objects: [] as unknown[], decoys: [] as unknown[] };
+    // --- objets du monde des autres (ceux du joueur local sont déjà à jour : voir receive)
+    const present = new Set<number>();
     for (const o of t.objects) {
+      present.add(o.id);
       const rec = this.objects.get(o.id);
-      if (!rec) continue;
+      if (!rec || rec.mine) continue;
       if (o.s) applyFields(rec.obj, o.s, this.refs);
-      rec.obj.x = o.p[0];
-      rec.obj.y = o.p[1];
-      lists[NET_KINDS[rec.kind].list].push(rec.obj);
+      place(rec.obj, o.p[0], o.p[1]);
     }
-    w.projectiles = lists.projectiles as typeof w.projectiles;
-    w.objects = lists.objects as typeof w.objects;
-    w.decoys = lists.decoys as typeof w.decoys;
-    for (const [id, rec] of this.objects) if (rec.lastSeen <= t.t && !t.objects.some((o) => o.id === id)) this.objects.delete(id);
+    for (const [id, rec] of this.objects) if (!rec.mine && rec.lastSeen <= t.t && !present.has(id)) this.objects.delete(id);
 
-    // --- effets visuels, flaques, tremblements : rejoués tels quels
-    const fx = w.effects as unknown as Record<string, ((...args: unknown[]) => void) | undefined>;
-    for (const [name, ...args] of t.fx) fx[name]?.call(w.effects, ...args);
+    // --- effets visuels, flaques, tremblements, dégâts des autres : rejoués tels quels
     for (const [x, y, r, now, team] of t.wet) w.wet.splash(x, y, r, now, team);
-    for (const [m, x, y] of t.shakes) w.shakeAt(m, { x, y });
-
-    // --- dégâts : fil des éliminations, marqueur de touche, chiffres (règles de MatchMode)
-    for (const [targetRef, sourceId, dealt, killed, cause] of t.hits) {
-      const target = (typeof targetRef === 'string' ? this.heroById.get(targetRef) : this.objects.get(targetRef)?.obj) as
-        | Combatant
-        | undefined;
-      if (!target) continue;
-      const source = sourceId ? (this.heroById.get(sourceId) ?? null) : null;
-      if (source === this.player && target !== this.player) {
-        w.effects.damageNumber(target.x, target.y - target.radius, dealt);
-      }
-      this.onDamage({ target, source, dealt, killed: killed === 1, cause: (cause ?? undefined) as DamageCause | undefined });
-    }
+    this.playEvents(t, false);
 
     // --- règles du match
     this.countdown = t.match.countdown;
     this.remaining = t.match.remaining;
     this.setScores(t.match.scores);
     this.current = t;
+    this.rebuildLists();
   }
 
   private setScores(scores: Record<string, [number, number]>): void {

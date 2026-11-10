@@ -87,6 +87,8 @@ export class GameLoop {
 
   // --- enregistrement de ce qui se passe entre deux instantanés
   private fx: FxCall[] = [];
+  /** Participant qui agit en ce moment dans la simulation (voir WorldHooks.onActor). */
+  private actor: string | null = null;
   private wet: GameTick['wet'] = [];
   private shakes: GameTick['shakes'] = [];
   private hits: HitEvent[] = [];
@@ -109,7 +111,8 @@ export class GameLoop {
       {
         respawnPoint: (hero) => this.respawnPoint(hero),
         onDamage: (e) => this.onDamage(e),
-        onShake: (m, at) => this.shakes.push([round(m), round(at.x), round(at.y)]),
+        onShake: (m, at) => this.shakes.push([round(m), round(at.x), round(at.y), this.actor]),
+        onActor: (h) => (this.actor = h ? (this.refs.heroId(h) ?? null) : null),
       },
     );
     this.recordEffects();
@@ -273,7 +276,7 @@ export class GameLoop {
     const fx = this.world.effects as unknown as Record<string, (...args: unknown[]) => void>;
     for (const name of FX_METHODS) {
       fx[name] = (...args: unknown[]) => {
-        this.fx.push([name, ...args.map((a) => (typeof a === 'number' ? round(a) : (a as string | boolean)))]);
+        this.fx.push([this.actor, name, ...args.map((a) => (typeof a === 'number' ? round(a) : (a as string | boolean)))]);
       };
     }
     const wet = this.world.wet;

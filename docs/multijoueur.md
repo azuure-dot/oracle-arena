@@ -248,10 +248,23 @@ Un vrai écart (recul, ruée, étourdissement décidés par le serveur) n'est pa
 il est **absorbé en quelques images** (~90 % en 0,15 s) pour ne pas faire sauter la caméra, qui
 suit le héros. Au-delà de 64 px (réapparition, téléportation), on saute directement.
 
-Les tirs et compétences ne sont pas prédits : ils apparaissent après l'aller-retour réseau.
-L'aller-retour dépend surtout de la **région du serveur** : ~100 ms de la France vers les
-États-Unis, ~20-30 ms vers une région européenne. Choisir la région la plus proche des joueurs
-(Railway : Settings → Region).
+**Ses propres actions au présent.** Les autres joueurs sont affichés avec le retard
+d'interpolation, mais ce que le joueur local déclenche ne l'est pas :
+
+- le serveur note **qui agit** à chaque instant de la simulation (`WorldHooks.onActor` : le héros
+  mis à jour, le lanceur du projectile ou de l'objet) et attribue chaque effet visuel et chaque
+  tremblement à son auteur (`FxCall = [auteur, méthode, ...]`) ;
+- le client joue tout de suite les effets, tremblements et dégâts dont il est l'auteur, et affiche
+  ses projectiles et objets (`owner` = lui) dès réception, prolongés jusqu'à l'instant présent
+  (position + vitesse × temps écoulé) au lieu d'attendre l'instant affiché.
+
+Mesuré avec 100 ms d'aller-retour simulé : le tir apparaît ~150 ms après le clic, contre ~260 ms
+avant. Le reste, c'est l'aller-retour lui-même : les tirs ne partent qu'une fois validés par le
+serveur (pas de prédiction des tirs, voir « Ce qui reste à faire »).
+
+L'aller-retour dépend de la **région du serveur** (choisir la plus proche des joueurs, Railway :
+Settings → Region) et de la **connexion des joueurs** : le Wi-Fi ou une box 4G/5G peuvent ajouter
+50 ms et plus, avec beaucoup de gigue ; un câble Ethernet aide beaucoup.
 
 ### Tester avec un réseau lent
 
@@ -336,7 +349,8 @@ Par ordre de priorité suggéré :
 3. **Reconnexion** : un joueur qui perd la connexion quitte le salon. À ajouter : un jeton de
    session (localStorage) pour reprendre sa place quelques secondes.
 4. **Rejoindre en cours de partie** (spectateur, puis place libérée par un bot).
-5. **Prédiction des tirs** (projectile affiché tout de suite côté tireur) et **compensation de
+5. **Prédiction des tirs** (projectile créé dès le clic côté tireur, sans attendre le serveur ;
+   aujourd'hui il est affiché dès sa réception, voir plus haut) et **compensation de
    latence** pour les armes rapides.
 6. **Brouillard côté serveur** : aujourd'hui tout l'état est envoyé à chacun et le client cache ce
    que son héros ne voit pas ; un client modifié pourrait tout voir. Filtrer par ligne de vue sur
