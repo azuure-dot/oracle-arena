@@ -161,10 +161,11 @@ Commun à tous les modes :
 - **Torsten** : tank de mêlée au marteau de foudre (600 PV).
   - Clic G : coup de marteau en arc (75 dégâts), de droite à gauche puis de gauche
     à droite au coup suivant. Marteau lancé : petits coups de poing (25 dégâts).
-  - Clic D maintenu : mur de foudre droit, face à Torsten (1200 PV, bloque les tirs ennemis, ralentit Torsten de 30 %).
-  - Espace : ruée en avant sur la distance de la Frappe fantôme de Flux, coup de marteau au bout ou sur le premier ennemi
-    percuté (70 dégâts, gros recul). Marteau lancé : il fonce vers le marteau (même s'il revient), le ramasse
-    et déclenche une décharge de 70 dégâts autour de lui. Recharge 6 s.
+  - Clic D maintenu : mur de foudre droit, face à Torsten (800 PV, bloque les tirs ennemis, ralentit Torsten de 30 %).
+  - Espace : 1 s de charge sur place (la foudre s'accumule, la direction suit la visée, le couloir s'affiche au sol ;
+    un étourdissement l'annule), puis ruée en avant sur la distance de la Frappe fantôme de Flux, coup de marteau au
+    bout ou sur le premier ennemi percuté (70 dégâts, gros recul). Marteau lancé : même charge, puis il fonce vers le
+    marteau (même s'il revient), le ramasse et déclenche une décharge de 70 dégâts autour de lui. Recharge 6 s.
   - Maj : il lance son marteau vers le point visé (460 px max, arrêté par le premier mur). À l'impact, la foudre
     tombe : 80 dégâts au centre → 40 au bord. Le marteau reste planté au sol. Maj à nouveau : il revient à Torsten
     à travers les murs (45 dégâts aux ennemis traversés). Recharge 6 s à partir du moment où il l'a récupéré.
@@ -183,21 +184,21 @@ Commun à tous les modes :
       en avant sur sa planche (direction du déplacement, sinon de la visée) sur la distance de la Frappe fantôme de Flux,
       en un quart de seconde, et garde son coup de boost.
   - Maj : mode d'aura Vitesse / Soin. L'aura bénéficie à Elio et à ses alliés proches : active de base, puis 3 paliers selon les tricks enchaînés.
-    - Vitesse des alliés : +8 % de base, puis +11 / +16 / +22 %. Soin : 9,6 PV/s de base, puis 12 / 15,6 / 21,6 PV/s.
+    - Vitesse des alliés : +10 % de base, puis +13 / +18 / +25 %. Soin : 11 PV/s de base, puis 14 / 18 / 25 PV/s.
     - Vitesse d'Elio lui-même avec les paliers de tricks sur des ennemis : +15 / +26 / +37 %.
 - **Camellia, l'archange** : soutien à distance (200 PV). Ailes blanches, auréole dorée, longs cheveux rose crevette.
   - Clic G, rafale de plumes : tir automatique façon fusil d'assaut, 9 plumes/s, chargeur de 30, recharge 1,6 s.
-    Chaque plume fait 10 dégâts à un ennemi ; sur un allié, elle s'arrête et lui rend 10 PV (pas sur Camellia elle-même).
+    Chaque plume fait 10 dégâts à un ennemi ; sur un allié, elle s'arrête et lui rend 30 PV (pas sur Camellia elle-même).
   - Clic D, petit ange (2 charges, rechargées une par une en 8 s) : lancé sur la souris. Si un joueur est sous la souris, il
     file droit sur lui ; sinon il va au point visé puis rejoint le joueur le plus proche (260 autour, allié ou ennemi).
-    Il vole par-dessus les murs et se colle dans le dos de sa cible pendant 5 s : allié +30 PV/s, ennemi 20 dégâts/s.
+    Il vole par-dessus les murs et se colle dans le dos de sa cible pendant 5 s : allié +35 PV/s, ennemi 20 dégâts/s.
     Personne autour au bout de 3 s : il disparaît.
   - Espace, Envol : elle vole jusqu'à l'allié visé (le plus proche de la ligne de visée, en vue, à 460 max), ailes grandes
     ouvertes. Personne de visé : rien ne se passe (recharge non consommée). Recharge 5 s. L'allié visé est entouré.
   - Maj, Sanctuaire de plumes : un ange gardien se pose sous la souris (420 max, s'arrête aux murs) et ouvre une zone de
-    110 de rayon où tombe une pluie de plumes. Les alliés à l'intérieur (Camellia comprise) récupèrent 17,5 PV/s et ne
-    peuvent pas descendre sous 50 PV (la lave tue quand même). L'ange a 100 PV qui baissent petit à petit (0 au bout de
-    15 s) ; l'adversaire peut le viser et le tuer (les bots le prennent pour cible) : la zone disparaît avec lui.
+    110 de rayon où tombe une pluie de plumes. Elle ne soigne pas : c'est un anti-mort, les alliés à l'intérieur
+    (Camellia comprise) ne peuvent pas descendre sous 50 PV (la lave tue quand même). L'ange a 100 PV qui baissent petit
+    à petit (0 au bout de 10 s) ; l'adversaire peut le viser et le tuer (les bots le prennent pour cible) : la zone disparaît avec lui.
     Il ne compte ni dans le score ni dans le fil des éliminations. Recharge 20 s.
   - Les anges (petits anges et ange gardien) sont bleus pour une Camellia de l'équipe du joueur, rouges pour une adverse.
 - **Kora** : deux formes, humaine (vitesse moyenne) pour se battre, tortue pour se déplacer.
@@ -357,7 +358,7 @@ Comportements par héros :
 | ------- | ------------ |
 | Flux    | Distance moyenne, tire dès qu'il a la cible en vue. Esquive parfois en Frappe fantôme latérale (le clone file vers la cible et attire les tirs). Sous 45 % de PV : Permutation (+75 PV), sinon Frappe fantôme pour fuir. |
 | Torsten   | Fonce au corps à corps. Mur de foudre s'il est touché de loin. Lance son marteau à mi-distance, puis fonce le ramasser s'il est tombé près de la cible, sinon le rappelle. Ruée pour coller une cible un peu éloignée. |
-| Camellia | Distance moyenne, tire en rafale ; les soins passent avant le tir : elle tourne sa visée vers un allié pour poser son Sanctuaire (ange gardien) sur le plus blessé (ou sur elle-même), lui lancer un petit ange, ou s'envoler jusqu'à lui s'il est loin (et pour fuir vers un allié quand elle est à bout). Garde une charge de petit ange pour soigner, sinon le lance sur l'ennemi qu'elle combat. Hors combat, soigne un allié blessé en lui tirant ses plumes dessus. |
+| Camellia | Distance moyenne, tire en rafale ; les soins passent avant le tir : elle tourne sa visée vers un allié pour poser son Sanctuaire (ange gardien, anti-mort) sur un allié en danger, sous 45 % de PV (ou sur elle-même), lui lancer un petit ange, ou s'envoler jusqu'à lui s'il est loin (et pour fuir vers un allié quand elle est à bout). Garde une charge de petit ange pour soigner, sinon le lance sur l'ennemi qu'elle combat. Hors combat, soigne un allié blessé en lui tirant ses plumes dessus. |
 
 ## Commandes
 

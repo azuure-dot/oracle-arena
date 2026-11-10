@@ -435,7 +435,8 @@ export class CamelliaBrain extends HeroBrain<Camellia> {
       const low = h.hp / h.maxHp < 0.35;
       const hurtAlly = this.mostHurt(w, FLIGHT.range, 0.5, false);
       if (h.sanctuaryReady) {
-        const z = this.mostHurt(w, SANCTUARY.range, 0.6, true);
+        // Le Sanctuaire n'est plus un soin mais un anti-mort : posé quand un allié est en danger.
+        const z = this.mostHurt(w, SANCTUARY.range, 0.45, true);
         if (z) this.plan = { kind: 'zone', target: z, t: 0 };
       }
       if (!this.plan && h.angelCharges > 0 && this.angelDelay <= 0) {

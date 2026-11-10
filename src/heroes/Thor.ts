@@ -47,9 +47,9 @@ export const SWING = { ...REMPART_HAMMER, anim: 0.26 };
 /** Clic G sans marteau (lancé) : petits coups de poing. */
 export const PUNCH = { damage: 25, interval: 0.4, reach: 26, halfArc: degToRad(45), knockback: 60, anim: 0.16 };
 
-/** Clic D (maintenu) : mur de foudre droit, face à Thor. */
+/** Clic D (maintenu) : mur de foudre droit, face à Thor (800 PV). */
 export const BARRIER = {
-  maxHp: REMPART_SHIELD.maxHp,
+  maxHp: 800,
   distance: 64, // du centre de Thor au mur
   halfWidth: 70,
   thickness: 10,
@@ -60,12 +60,15 @@ export const BARRIER = {
 };
 
 /**
- * Espace : ruée en avant (même distance que le Transfert de Flux), coup de marteau au bout
- * ou sur le premier ennemi percuté. Sans marteau : ruée vers le marteau jusqu'à le ramasser,
- * avec une décharge de foudre autour de Thor.
+ * Espace : 1 s de charge sur place (la foudre s'accumule, la direction suit la visée), puis
+ * ruée en avant (même distance que le Transfert de Flux), coup de marteau au bout ou sur le
+ * premier ennemi percuté. Sans marteau : même charge, puis ruée vers le marteau jusqu'à le
+ * ramasser, avec une décharge de foudre autour de Thor.
  */
 export const SMASH = {
   cooldown: 6,
+  /** Charge avant la ruée (s) : Thor reste sur place, l'adversaire voit venir le coup. */
+  windup: 1,
   distance: PHANTOM.distance,
   speed: 1050 * MOVE_SPEED_SCALE, // ≈ 625 : ruée de ~0,16 s
   damage: 70,
@@ -110,6 +113,8 @@ interface Swing {
 
 interface Dash {
   t: number;
+  /** Charge restante avant de partir (s). */
+  charge: number;
   dir: number;
   /** Ruée vers le marteau lancé (ramassage) plutôt que ruée simple. */
   toHammer: boolean;
@@ -164,6 +169,10 @@ export class Thor extends Hero {
   }
   get isDashing(): boolean {
     return this.dash !== null;
+  }
+  /** En train de charger la ruée (pas encore parti). */
+  get isCharging(): boolean {
+    return this.dash !== null && this.dash.charge > 0;
   }
   get throwReady(): boolean {
     return this.hammer === null && this.throwCooldown <= 0;
@@ -241,6 +250,10 @@ export class Thor extends Hero {
 
   protected override onStunned(): void {
     this.setBarrier(false);
+    if (this.dash && this.dash.charge > 0) {
+      this.dash = null;
+      this.dashCooldown = SMASH.cooldown;
+    }
   }
 
   protected handleInput(dt: number, ctx: GameContext): void {
@@ -338,19 +351,48 @@ export class Thor extends Hero {
 
   // ------------------------------------------------------------ Ruée
 
+  /** Direction de la ruée : vers le marteau lancé, sinon vers la visée. */
+  private dashDir(toHammer: boolean): number {
+    const h = this.hammer;
+    return toHammer && h ? Math.atan2(h.y - this.y, h.x - this.x) : this.aim;
+  }
+
   private startDash(ctx: GameContext): void {
     this.setBarrier(false);
     const toHammer = this.hammer !== null;
-    const dir = toHammer ? Math.atan2(this.hammer!.y - this.y, this.hammer!.x - this.x) : this.aim;
-    this.dash = { t: 0, dir, toHammer, traveled: 0, trail: 0 };
+    this.dash = { t: 0, charge: SMASH.windup, dir: this.dashDir(toHammer), toHammer, traveled: 0, trail: 0 };
     this.swing = null;
     this.vx = this.vy = 0;
+    ctx.effects.ring(this.x, this.y, LIGHTNING, 30, 0.25);
+  }
+
+  /** Charge : Thor reste planté, la foudre s'accumule autour de lui ; au bout, il part. */
+  private chargeDash(dt: number, ctx: GameContext): void {
+    const d = this.dash!;
+    d.charge -= dt;
+    // Sans marteau, il vise toujours le marteau (qui peut encore voler ou revenir).
+    if (d.toHammer && !this.hammer) return this.endDash(ctx);
+    d.dir = this.dashDir(d.toHammer);
+    this.vx = this.vy = 0;
+    const k = 1 - Math.max(0, d.charge) / SMASH.windup; // 0 → 1 pendant la charge
+    d.trail -= dt;
+    if (d.trail <= 0) {
+      d.trail = 0.11 - k * 0.06;
+      const a = randRange(0, TAU);
+      const r = this.radius + 6 + (1 - k) * 18;
+      ctx.effects.bolt(this.x + Math.cos(a) * r, this.y + Math.sin(a) * r, this.x, this.y, LIGHTNING, 0.1, 1.2 + k, 6);
+    }
+    if (d.charge > 0) return;
+    // Départ
+    d.trail = 0;
     ctx.effects.ring(this.x, this.y, LIGHTNING, 46, 0.25);
-    ctx.effects.bolt(this.x, this.y, this.x - Math.cos(dir) * 50, this.y - Math.sin(dir) * 50, LIGHTNING, 0.2, 2, 10);
+    ctx.effects.bolt(this.x, this.y, this.x - Math.cos(d.dir) * 50, this.y - Math.sin(d.dir) * 50, LIGHTNING, 0.2, 2, 10);
+    ctx.shake(2, this);
   }
 
   private updateDash(dt: number, ctx: GameContext): void {
     const d = this.dash!;
+    if (d.charge > 0) return this.chargeDash(dt, ctx);
     d.t += dt;
     const h = this.hammer;
     if (d.toHammer) {
@@ -505,13 +547,14 @@ export class Thor extends Hero {
 
   override drawUnder(ctx: CanvasRenderingContext2D): void {
     if (this.dead || !this.dash || this.dash.toHammer) return;
-    // Couloir de la ruée (très bref) : la fin de la course, au sol.
+    // Couloir de la ruée au sol : annoncé pendant la charge, puis la fin de la course.
     const d = this.dash;
     const left = Math.max(0, SMASH.distance - d.traveled);
+    const charging = d.charge > 0 ? 1 - d.charge / SMASH.windup : 1;
     ctx.save();
     ctx.translate(this.x, this.y);
     ctx.rotate(d.dir);
-    ctx.globalAlpha = 0.18;
+    ctx.globalAlpha = d.charge > 0 ? 0.06 + 0.14 * charging : 0.18;
     ctx.fillStyle = LIGHTNING;
     ctx.fillRect(0, -this.radius * 0.8, left + SMASH.reach, this.radius * 1.6);
     ctx.restore();

@@ -30,13 +30,13 @@ import { Magazine } from './Magazine';
 /** Rayon de la boule (= hitbox). */
 const R = 14;
 
-/** Clic G — rafale de plumes, comme un fusil d'assaut : 10 dégâts par plume sur un ennemi, 10 PV rendus à un allié. */
+/** Clic G — rafale de plumes, comme un fusil d'assaut : 10 dégâts par plume sur un ennemi, 30 PV rendus à un allié. */
 export const FEATHER_GUN = {
   magSize: 30,
   fireRate: 9, // balles/s
   damage: 10, // 90 dégâts/s
-  /** Une plume qui touche un allié le soigne d'autant (90 PV/s en rafale). */
-  heal: 10,
+  /** Une plume qui touche un allié le soigne d'autant (270 PV/s en rafale). */
+  heal: 30,
   spreadDeg: 3,
   speed: 1300,
   range: 760,
@@ -46,11 +46,12 @@ export const FEATHER_GUN = {
 
 /**
  * Maj — Sanctuaire de plumes : un ange gardien (100 PV) se pose sous la souris (portée max,
- * arrêtée par les murs) et ouvre une zone où tombe une pluie de plumes : les alliés à
- * l'intérieur (Camellia comprise) récupèrent 17,5 PV/s et ne peuvent pas descendre sous 50 PV.
- * L'ange perd ses PV petit à petit (0 au bout de 15 s) et peut être tué : la zone disparaît avec lui.
+ * arrêtée par les murs) et ouvre une zone où tombe une pluie de plumes. Elle ne soigne pas :
+ * c'est un anti-mort — les alliés à l'intérieur (Camellia comprise) ne peuvent pas descendre
+ * sous 50 PV. L'ange perd ses PV petit à petit (0 au bout de 10 s) et peut être tué : la zone
+ * disparaît avec lui.
  */
-export const SANCTUARY = { cooldown: 20, radius: 110, hps: 17.5, range: 420, angelHp: 100, life: 15, hpFloor: 50 };
+export const SANCTUARY = { cooldown: 20, radius: 110, range: 420, angelHp: 100, life: 10, hpFloor: 50 };
 
 /**
  * Espace — Envol : Camellia vole jusqu'à l'allié visé (le plus proche de la ligne de visée,
@@ -68,7 +69,7 @@ export const FLIGHT = {
 /**
  * Clic D — Petit ange : lancé sur la souris. Si un joueur est sous la souris, il file droit sur
  * lui ; sinon il va jusqu'au point visé puis rejoint le joueur le plus proche (allié ou
- * ennemi). Il se colle à son dos : allié +30 PV/s, ennemi 20 dégâts/s, pendant 5 s.
+ * ennemi). Il se colle à son dos : allié +35 PV/s, ennemi 20 dégâts/s, pendant 5 s.
  * 2 charges, rechargées une par une.
  */
 export const ANGEL = {
@@ -85,7 +86,7 @@ export const ANGEL = {
   /** Poursuite maximale avant de renoncer. */
   chaseMax: 4,
   attachTime: 5,
-  heal: 30,
+  heal: 35,
   dps: 20,
 };
 
@@ -562,10 +563,10 @@ const GUARDIAN_R = 12;
  * Ange gardien du Sanctuaire : il flotte au centre de la zone et la fait exister. C'est un leurre
  * au sens du jeu (touchable, hors score et fil des éliminations) : les adversaires peuvent le
  * viser, le frapper, et les bots le prennent pour cible. Ses PV baissent petit à petit (100 → 0
- * en 15 s) ; à 0, cassé ou épuisé, il disparaît et la zone avec lui.
+ * en 10 s) ; à 0, cassé ou épuisé, il disparaît et la zone avec lui.
  *
- * Tant qu'il vit, les alliés dans la zone récupèrent 17,5 PV/s et ne peuvent pas descendre sous
- * 50 PV (voir `Combatant.guard`, appliqué par le monde à chaque dégât).
+ * Tant qu'il vit, les alliés dans la zone ne peuvent pas descendre sous 50 PV (pas de soin :
+ * voir `Combatant.guard`, appliqué par le monde à chaque dégât).
  */
 export class SanctuaryAngel implements Decoy {
   readonly decoy = true;
@@ -630,7 +631,7 @@ export class SanctuaryAngel implements Decoy {
     if (!this.alive) return false;
     this.t += dt;
     this.hurt = Math.max(0, this.hurt - dt);
-    // Il s'épuise : 100 PV perdus en 15 s.
+    // Il s'épuise : 100 PV perdus en 10 s.
     this.hp -= (SANCTUARY.angelHp / SANCTUARY.life) * dt;
     if (this.hp <= 0) {
       this.shatter(ctx);
@@ -639,9 +640,7 @@ export class SanctuaryAngel implements Decoy {
     for (const c of ctx.targets) {
       if (!c.alive || c.decoy || c.team !== this.team) continue;
       if (distToCircle(this.x, this.y, c.circle()) > SANCTUARY.radius) continue;
-      c.heal(SANCTUARY.hps * dt);
       c.guard = { floor: SANCTUARY.hpFloor, until: ctx.time + 0.1 };
-      addBuff(c, 'heal');
     }
     // Pluie de plumes
     this.spawn -= dt;

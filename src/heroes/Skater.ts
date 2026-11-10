@@ -115,11 +115,11 @@ export const TRICK_SPEED = [1, 1.15, 1.26, 1.37];
  */
 export const SKATE_AURA = {
   radius: 170,
-  // Vitesse réduite de 20 à 30 % (avant : +10/15/22/30 %) ; soin réduit puis remonté de 20 %
-  // (8/10/13/18 → 9,6/12/15,6/21,6 PV/s). Chaque palier reste au-dessus du précédent.
+  // Vitesse et soin légèrement remontés (avant : +8/11/16/22 % et 9,6/12/15,6/21,6 PV/s).
+  // Chaque palier reste au-dessus du précédent.
   //          base  palier 1  palier 2  palier 3
-  speedBonus: [0.08, 0.11, 0.16, 0.22],
-  heal: [8, 10, 13, 18].map((h) => h * 1.2), // PV/s
+  speedBonus: [0.1, 0.13, 0.18, 0.25],
+  heal: [11, 14, 18, 25], // PV/s
   swapCooldown: 0.3,
 };
 
