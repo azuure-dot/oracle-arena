@@ -16,6 +16,7 @@ import {
   encodeFields,
   FX_METHODS,
   HERO_SKIP,
+  heroMotion,
   kindOf,
   OBJECT_SKIP,
   type RefEncoder,
@@ -127,6 +128,7 @@ export class GameLoop {
         hero.damageMultiplier = BOT_DAMAGE_MULTIPLIER;
       } else {
         controls = new NetControls();
+        hero.externalMovement = true; // la marche suit les commandes reçues (voir input())
       }
       hero.controls = controls;
       const slot: Slot = { info, hero, controls, brain, kills: 0, deaths: 0, last: new Map(), left: false };
@@ -156,10 +158,19 @@ export class GameLoop {
     this.timer = null;
   }
 
-  /** Commandes reçues d'un joueur. */
+  /**
+   * Commandes reçues d'un joueur. Sa MARCHE est appliquée tout de suite, avec la durée de son
+   * image (`input.dt`) : c'est exactement ce que sa prédiction a fait dans le navigateur, donc la
+   * position renvoyée pour cette commande (`acks`) tombe juste et la réconciliation ne corrige
+   * rien en temps normal. Tirs et compétences, eux, attendent le prochain pas de simulation.
+   */
   input(playerId: string, input: PlayerInput): void {
     const slot = this.byId.get(playerId);
-    if (slot && slot.controls instanceof NetControls && !slot.left) slot.controls.apply(input);
+    if (!slot || !(slot.controls instanceof NetControls) || slot.left) return;
+    const ctl = slot.controls;
+    if (!ctl.apply(input) || this.countdown > 0 || this.over) return;
+    const dt = ctl.consume(input.dt);
+    if (dt > 0) slot.hero.predictMove(dt, ctl.move, this.world.arena);
   }
 
   /** Un joueur quitte la partie : son héros disparaît, ses points restent au classement. */
@@ -196,6 +207,12 @@ export class GameLoop {
     }
     const bw = this.brainWorld();
     for (const s of this.slots) if (s.brain && !s.left) s.brain.update(dt, bw);
+    for (const s of this.slots) {
+      if (!(s.controls instanceof NetControls) || s.left) continue;
+      // Joueur muet (onglet en arrière-plan, coupure) : la physique continue sans lui (recul,
+      // freinage), sans marche. Un joueur qui envoie ses commandes n'est jamais déplacé ici.
+      if (s.controls.credit(dt)) s.hero.predictMove(dt, { x: 0, y: 0 }, this.world.arena);
+    }
     this.world.update(dt);
     for (const s of this.slots) {
       if (s.controls instanceof NetControls) s.controls.endStep();
@@ -274,7 +291,7 @@ export class GameLoop {
       if (s.left) continue;
       const h = s.hero;
       const diff = diffFields(encodeFields(h, HERO_SKIP, this.refs), s.last);
-      heroes[s.info.id] = diff ? { p: [round(h.x), round(h.y), round(h.aim)], s: diff } : { p: [round(h.x), round(h.y), round(h.aim)] };
+      heroes[s.info.id] = diff ? { p: heroMotion(h, round), s: diff } : { p: heroMotion(h, round) };
     }
 
     // Identifiants des objets du monde : attribués avant l'encodage (références croisées).

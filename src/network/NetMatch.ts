@@ -15,7 +15,7 @@ import {
   type GameTick,
   type PlayerInput,
 } from '../../server/src/types/network';
-import { applyFields, NET_KINDS, type NetKind, type RefDecoder } from './netState';
+import { applyFields, applyHeroMotion, NET_KINDS, type NetKind, type RefDecoder } from './netState';
 import type { NetworkManager } from './NetworkManager';
 
 /**
@@ -23,22 +23,33 @@ import type { NetworkManager } from './NetworkManager';
  *
  * Le serveur simule ; le client AFFICHE ce qu'il reçoit, avec trois techniques classiques :
  *
- * 1. Interpolation des autres joueurs : on affiche le monde avec ~100 ms de retard sur le dernier
- *    instantané reçu (INTERP_DELAY), en glissant entre les deux instantanés qui encadrent cet
- *    instant. Les autres héros, projectiles et objets bougent donc sans à-coups, même à 30 Hz.
+ * 1. Interpolation des autres joueurs : on affiche le monde avec un petit retard (75 ms au moins,
+ *    plus si le réseau est irrégulier) sur l'horloge estimée du serveur, en glissant entre les
+ *    deux instantanés qui encadrent cet instant. Les autres héros, projectiles et objets bougent
+ *    donc sans à-coups, même à 30 Hz.
  * 2. Prédiction du joueur local : son déplacement est appliqué TOUT DE SUITE (Hero.predictMove),
  *    sans attendre l'aller-retour réseau. Sa visée aussi.
  * 3. Réconciliation : à chaque instantané, on repart de la position que le serveur a calculée
  *    pour la dernière commande qu'il a traitée (`acks`), puis on rejoue les commandes envoyées
- *    depuis. Le joueur ne « recule » donc jamais, et un écart (recul, ruée...) est corrigé.
+ *    depuis. Le serveur appliquant chaque commande avec la même durée que le navigateur, l'écart
+ *    est nul en temps normal ; un vrai écart (recul, ruée...) est absorbé en quelques images au
+ *    lieu de faire sauter la caméra.
  *
  * Les règles d'affichage (HUD, fil des éliminations, classement, tableau des scores) sont celles
  * du Deathmatch solo (DeathmatchMode, dont cette classe hérite) : seules les données viennent
  * du serveur.
  */
 
-/** Retard d'affichage des autres joueurs (s) : ~3 instantanés à 30 Hz. */
-const INTERP_DELAY = 0.1;
+/**
+ * Retard d'affichage des autres joueurs (s) : au moins 2 intervalles d'instantanés (2 × 33 ms),
+ * plus une marge qui s'adapte à la gigue mesurée du réseau (voir advance()).
+ */
+const INTERP_MIN = 0.075;
+const INTERP_MAX = 0.25;
+/** Correction du joueur local plus grande que ça (px) : téléportation, réapparition... on saute. */
+const SNAP_DISTANCE = 64;
+/** Vitesse d'absorption d'une petite correction du joueur local (1/s) : ~90 % en 0,15 s. */
+const SMOOTH_RATE = 15;
 /** Commandes gardées en attente au maximum (≈ 2 s à 60 i/s). */
 const MAX_PENDING = 120;
 
@@ -59,13 +70,30 @@ export class NetMatch extends DeathmatchMode {
   private queue: GameTick[] = [];
   /** Dernier instantané affiché. */
   private current: GameTick | null = null;
-  /** Instant affiché (horloge serveur, en retard de INTERP_DELAY). */
+  /** Instant affiché (horloge serveur, en retard du délai d'interpolation). */
   private renderT = 0;
   private latestT = 0;
+  /**
+   * Horloge du serveur estimée = horloge locale + `clockOffset`. On retient l'instantané arrivé le
+   * plus « tôt » (le moins retardé par le réseau) : l'estimation ne tremble pas avec la gigue.
+   */
+  private clockOffset: number | null = null;
+  /** Gigue moyenne des arrivées (s) : élargit le délai d'interpolation si le réseau est irrégulier. */
+  private jitter = 0;
+
+  /**
+   * Correction du joueur local pas encore absorbée (px) : le héros est dessiné à
+   * position prédite + écart, et l'écart fond en quelques images (pas de saut de caméra).
+   */
+  private smoothX = 0;
+  private smoothY = 0;
+  private shifted = false;
 
   private seq = 0;
   private pending: PlayerInput[] = [];
   private over = false;
+  /** Mesures (débogage, console : __game.mode.netStats) : écart corrigé à chaque instantané (px). */
+  readonly netStats = { corrections: [] as number[], starved: 0, frames: 0 };
   private readonly unsubscribe: (() => void)[] = [];
 
   constructor(
@@ -122,6 +150,7 @@ export class NetMatch extends DeathmatchMode {
   // ------------------------------------------------------------ image
 
   override update(dt: number): void {
+    this.unshift();
     if (!this.handleMetaKeys()) return;
     this.sampleControls(dt);
     const input = this.sendInput(dt);
@@ -137,6 +166,27 @@ export class NetMatch extends DeathmatchMode {
     this.countdown = Math.max(0, this.countdown - dt);
     this.afterWorld(dt);
     this.hud.update(dt);
+
+    // Le reste d'une correction fond peu à peu ; le héros (et la caméra) est dessiné décalé d'autant.
+    const k = Math.exp(-SMOOTH_RATE * dt);
+    this.smoothX *= k;
+    this.smoothY *= k;
+    this.shift();
+  }
+
+  /** Dessin à la position lissée (appelé après la logique de l'image). */
+  private shift(): void {
+    if (this.shifted) return;
+    this.player.x += this.smoothX;
+    this.player.y += this.smoothY;
+    this.shifted = true;
+  }
+  /** Retour à la position prédite « vraie » (avant toute logique). */
+  private unshift(): void {
+    if (!this.shifted) return;
+    this.player.x -= this.smoothX;
+    this.player.y -= this.smoothY;
+    this.shifted = false;
   }
 
   private sendInput(dt: number): PlayerInput {
@@ -159,7 +209,10 @@ export class NetMatch extends DeathmatchMode {
   private receive(t: GameTick): void {
     if (t.t < this.latestT) return;
     this.latestT = t.t;
-    if (!this.current) this.renderT = t.t - INTERP_DELAY;
+    const sample = t.t - performance.now() / 1000;
+    if (this.clockOffset === null || sample > this.clockOffset) this.clockOffset = sample;
+    else this.clockOffset += (sample - this.clockOffset) * 0.01; // lente dérive (latence qui augmente)
+    this.jitter += (this.clockOffset - sample - this.jitter) * 0.05;
 
     // Objets apparus : créés tout de suite (le joueur local peut déjà y faire référence).
     const fresh: [NetObject, GameTick['objects'][number]][] = [];
@@ -190,13 +243,25 @@ export class NetMatch extends DeathmatchMode {
     const mine = t.heroes[this.localId];
     if (!mine) return;
     const p = this.player;
+    this.unshift();
+    const bx = p.x;
+    const by = p.y;
     if (mine.s) applyFields(p, mine.s, this.refs);
-    p.x = mine.p[0];
-    p.y = mine.p[1];
+    applyHeroMotion(p, mine.p, false); // la visée reste celle de la souris
     const ack = t.acks[this.localId] ?? 0;
     this.pending = this.pending.filter((i) => i.seq > ack);
-    if (t.match.countdown > 0) return;
-    for (const i of this.pending) p.predictMove(i.dt, { x: i.mx, y: i.my }, this.arena);
+    if (t.match.countdown <= 0) for (const i of this.pending) p.predictMove(i.dt, { x: i.mx, y: i.my }, this.arena);
+
+    // L'écart corrigé n'est pas appliqué d'un coup : il est absorbé en douceur (voir update()).
+    const dx = bx - p.x;
+    const dy = by - p.y;
+    const c = this.netStats.corrections;
+    c.push(Math.hypot(dx, dy));
+    if (c.length > 600) c.shift();
+    this.smoothX += dx;
+    this.smoothY += dy;
+    if (Math.hypot(this.smoothX, this.smoothY) > SNAP_DISTANCE || p.dead) this.smoothX = this.smoothY = 0;
+    this.shift();
   }
 
   private end(r: GameOver): void {
@@ -211,17 +276,20 @@ export class NetMatch extends DeathmatchMode {
 
   /** Avance l'instant affiché, applique les instantanés passés, interpole les positions. */
   private advance(dt: number): void {
-    // L'horloge d'affichage suit le dernier instantané reçu, avec INTERP_DELAY de retard :
-    // légèrement accélérée ou ralentie pour rattraper la cible, recalée si l'écart est grand.
-    const target = this.latestT - INTERP_DELAY;
-    const gap = target - this.renderT;
-    if (Math.abs(gap) > 0.5) this.renderT = target;
-    else this.renderT += dt * (1 + Math.max(-0.2, Math.min(0.2, gap * 2)));
+    // Instant affiché = horloge du serveur estimée − délai d'interpolation. Il avance au rythme
+    // exact de l'horloge locale (aucune accélération / ralentissement), jamais en arrière.
+    if (this.clockOffset === null) return;
+    const delay = Math.min(INTERP_MAX, Math.max(INTERP_MIN, 2 / this.info.tickRate + 3 * this.jitter));
+    const target = performance.now() / 1000 + this.clockOffset - delay;
+    if (target - this.renderT > 0.5 || !this.current) this.renderT = target; // départ, ou gros retard
+    else this.renderT = Math.max(this.renderT + dt * 0.5, Math.min(target, this.renderT + dt * 1.5));
 
     while (this.queue.length && this.queue[0].t <= this.renderT) this.apply(this.queue.shift()!);
     const cur = this.current;
     if (!cur) return;
     const next = this.queue[0];
+    this.netStats.frames++;
+    if (!next) this.netStats.starved++; // plus d'instantané d'avance : les autres se figent
     const span = next ? next.t - cur.t : 0;
     const a = span > 0 ? Math.max(0, Math.min(1, (this.renderT - cur.t) / span)) : 0;
 
@@ -261,7 +329,7 @@ export class NetMatch extends DeathmatchMode {
       const ht = t.heroes[id];
       if (!ht) continue;
       if (ht.s) applyFields(h, ht.s, this.refs);
-      [h.x, h.y, h.aim] = ht.p;
+      applyHeroMotion(h, ht.p, true);
     }
     // Joueur parti : son héros quitte le monde (ses points restent au classement).
     w.heroes = this.participants.map((p) => p.hero).filter((h) => h === this.player || t.heroes[this.idOf(h)]);

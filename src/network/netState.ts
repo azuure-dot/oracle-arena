@@ -66,12 +66,39 @@ export const HERO_SKIP = new Set([
   'visible', // calculé par chaque client (sa ligne de vue)
   'team', // donné par la liste des participants
   'damageMultiplier',
+  'externalMovement',
   'radius',
   'moveDir', // peut pointer vers l'objet des commandes : jamais recopié
-  'x', // x, y, visée : envoyés à part à chaque instantané (interpolation)
+  // Position, visée et état de marche : envoyés à part, EN ENTIER, à chaque instantané (voir
+  // HeroTick.p). La prédiction du client les modifie elle-même : un envoi « seulement si changé »
+  // le laisserait repartir de ses propres valeurs au lieu de celles du serveur.
+  'x',
   'y',
   'aim',
+  'vx',
+  'vy',
+  'kvx',
+  'kvy',
 ]);
+
+/** État de marche d'un héros : [x, y, visée, vx, vy, kvx, kvy] (kv = recul subi). */
+export type HeroMotion = [number, number, number, number, number, number, number];
+
+export function heroMotion(h: Hero, round: (n: number) => number): HeroMotion {
+  const k = h as unknown as { kvx: number; kvy: number };
+  return [round(h.x), round(h.y), round(h.aim), round(h.vx), round(h.vy), round(k.kvx), round(k.kvy)];
+}
+
+export function applyHeroMotion(h: Hero, m: HeroMotion, withAim: boolean): void {
+  const k = h as unknown as { kvx: number; kvy: number };
+  h.x = m[0];
+  h.y = m[1];
+  if (withAim) h.aim = m[2];
+  h.vx = m[3];
+  h.vy = m[4];
+  k.kvx = m[5];
+  k.kvy = m[6];
+}
 /** Champs jamais transmis pour un objet du monde. */
 export const OBJECT_SKIP = new Set(['visible', 'x', 'y']);
 

@@ -143,8 +143,8 @@ export interface PlayerInput {
 
 /** Un héros dans un instantané. */
 export interface HeroTick {
-  /** Position et visée : [x, y, aim], à chaque instantané (interpolation). */
-  p: [number, number, number];
+  /** [x, y, visée, vx, vy, kvx, kvy] à chaque instantané : interpolation et réconciliation. */
+  p: [number, number, number, number, number, number, number];
   /** Champs modifiés depuis l'instantané précédent (absent : rien n'a changé). */
   s?: NetFields;
 }

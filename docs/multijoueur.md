@@ -221,18 +221,49 @@ Mesuré en local (2 joueurs + 4 bots) : ~1,9 Ko par instantané en moyenne (4 Ko
 `src/network/NetMatch.ts` hérite de `DeathmatchMode` : HUD, fil des éliminations, classement et
 tableau des scores sont ceux du solo ; seules les données viennent du serveur.
 
-1. **Interpolation** des autres joueurs et des objets : le client affiche le monde ~100 ms en retard
-   sur le dernier instantané reçu (`INTERP_DELAY`), en glissant entre les deux instantanés qui
-   encadrent cet instant. À 30 Hz, ça laisse ~3 instantanés de marge contre les à-coups du réseau.
+1. **Interpolation** des autres joueurs et des objets : le client estime l'horloge du serveur (en
+   retenant l'instantané arrivé le moins retardé, pour ne pas trembler avec la gigue) et affiche le
+   monde avec un petit retard sur elle : 75 ms au moins, jusqu'à 250 ms si le réseau est
+   irrégulier (3 × la gigue mesurée). Il glisse entre les deux instantanés qui encadrent cet
+   instant, au rythme exact de l'horloge locale.
 2. **Prédiction** du joueur local : chaque image, `Hero.predictMove()` le déplace tout de suite avec
    la commande qui part au serveur. La visée est locale aussi.
-3. **Réconciliation** : à chaque instantané, le héros local repart de la position calculée par le
-   serveur pour la dernière commande traitée (`acks`), puis les commandes envoyées depuis sont
-   rejouées. Un recul, une ruée ou un étourdissement décidés par le serveur sont ainsi corrigés sans
-   faire « reculer » le joueur dans le cas normal.
+3. **Réconciliation** : à chaque instantané, le héros local repart de l'état calculé par le serveur
+   pour la dernière commande traitée (`acks`), puis les commandes envoyées depuis sont rejouées.
 
-Les tirs et compétences ne sont pas prédits : ils apparaissent après l'aller-retour réseau (quasi
-instantané en local, ~50-100 ms sur internet).
+Pour que la réconciliation ne corrige rien en temps normal, le serveur applique la **marche de
+chaque commande dès sa réception, avec la durée de l'image du client** (`input.dt`, même fonction
+`Hero.predictMove()`), au lieu de la faire avancer à son propre rythme de 60 Hz :
+
+- le héros d'un joueur a `externalMovement = true` : `Hero.update()` ne le fait plus marcher ;
+- un **budget de temps** (`NetControls`) empêche un client trafiqué d'annoncer des images plus
+  longues que le temps réel (accélération) ; au-delà de 0,25 s d'avance, la durée en trop est ignorée ;
+- un joueur **muet** depuis 0,2 s (onglet en arrière-plan, coupure) garde une physique vivante
+  (recul, freinage) côté serveur ;
+- position, visée, vitesse et recul (`HeroTick.p`) partent **en entier à chaque instantané** : la
+  prédiction les modifie elle-même, un envoi « seulement si changé » la ferait repartir de ses
+  propres valeurs.
+
+Un vrai écart (recul, ruée, étourdissement décidés par le serveur) n'est pas appliqué d'un coup :
+il est **absorbé en quelques images** (~90 % en 0,15 s) pour ne pas faire sauter la caméra, qui
+suit le héros. Au-delà de 64 px (réapparition, téléportation), on saute directement.
+
+Les tirs et compétences ne sont pas prédits : ils apparaissent après l'aller-retour réseau.
+L'aller-retour dépend surtout de la **région du serveur** : ~100 ms de la France vers les
+États-Unis, ~20-30 ms vers une région européenne. Choisir la région la plus proche des joueurs
+(Railway : Settings → Region).
+
+### Tester avec un réseau lent
+
+En développement, ajouter `?lag=100&jitter=30` à l'adresse du client (ex.
+http://localhost:5173/?lag=100&jitter=30) : ~100 ms d'aller-retour et jusqu'à 30 ms de gigue
+sont ajoutés aux messages de partie, dans l'ordre (comme TCP). Mesures dans la console :
+`__game.mode.netStats` (écart corrigé à chaque instantané, images où les autres joueurs se figent
+faute d'instantané).
+
+Mesures après ces réglages (1 joueur + bots, 150 ms d'aller-retour, 60 ms de gigue simulés) :
+aucune correction du joueur local en marchant, à-coup image par image < 0,5 px, aucune image
+sans instantané pour les autres joueurs.
 
 ## Hébergement
 

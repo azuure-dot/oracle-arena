@@ -1,6 +1,16 @@
 import type { Action, HeroControls } from '../../../src/core/Controls';
-import { normalize, type Vec2 } from '../../../src/core/math';
+import type { Vec2 } from '../../../src/core/math';
 import { ACTION_BITS, type PlayerInput } from '../types/network';
+
+/**
+ * Temps de marche qu'un joueur peut « avoir d'avance » sur l'horloge du serveur (s). Ses commandes
+ * arrivent par paquets (gigue du réseau) : on les accepte tant que leur durée cumulée ne dépasse
+ * pas le temps réellement écoulé, plus cette marge. Au-delà (client trafiqué qui annonce des
+ * images trop longues), la durée en trop est ignorée : impossible d'aller plus vite que les autres.
+ */
+export const MOVE_BUDGET_MAX = 0.25;
+/** Sans commande depuis ce temps (s), le joueur est « muet » : le serveur fait vivre sa physique. */
+export const SILENCE = 0.2;
 
 /**
  * Commandes d'un héros piloté À DISTANCE : remplies par les messages PLAYER_INPUT du joueur.
@@ -16,16 +26,42 @@ export class NetControls implements HeroControls {
   private heldMask = 0;
   /** Pressions reçues depuis le dernier pas de simulation (aucune n'est perdue). */
   private pressedMask = 0;
+  /** Temps de marche disponible (s) : crédité par la simulation, consommé par les commandes. */
+  private budget = 0.1;
+  /** Temps de simulation écoulé depuis la dernière commande reçue (s). */
+  private silence = 0;
 
-  /** Applique une commande reçue (valeurs déjà vérifiées). */
-  apply(input: PlayerInput): void {
-    if (input.seq <= this.lastSeq) return; // doublon ou message en retard
+  /** Applique une commande reçue (valeurs déjà vérifiées). false : doublon ou message en retard. */
+  apply(input: PlayerInput): boolean {
+    if (input.seq <= this.lastSeq) return false;
     this.lastSeq = input.seq;
-    this.move = normalize(input.mx, input.my);
+    this.silence = 0;
+    // Longueur ≤ 1 (stick analogique tactile : une petite inclinaison = marche lente, comme en solo).
+    const len = Math.hypot(input.mx, input.my);
+    this.move = len > 1 ? { x: input.mx / len, y: input.my / len } : { x: input.mx, y: input.my };
     this.aimX = input.ax;
     this.aimY = input.ay;
     this.heldMask = input.held;
     this.pressedMask |= input.pressed;
+    return true;
+  }
+
+  /**
+   * Le temps de la simulation avance : crédit de marche (le trop-plein est perdu : un client dont
+   * les images sont plafonnées envoie un peu moins de temps que le réel, sans conséquence).
+   * Retourne true si le joueur est muet depuis plus de SILENCE secondes.
+   */
+  credit(dt: number): boolean {
+    this.budget = Math.min(MOVE_BUDGET_MAX, this.budget + dt);
+    this.silence += dt;
+    return this.silence > SILENCE;
+  }
+
+  /** Durée de marche accordée pour une commande de `dt` secondes. */
+  consume(dt: number): number {
+    const ok = Math.min(dt, this.budget);
+    this.budget -= ok;
+    return ok;
   }
 
   held(action: Action): boolean {

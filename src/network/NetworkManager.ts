@@ -34,6 +34,32 @@ export class NetError extends Error {
   }
 }
 
+/**
+ * Simulateur de réseau lent, pour tester en local (développement seulement) :
+ * http://localhost:5173/?lag=100&jitter=30 ajoute ~100 ms d'aller-retour (50 ms dans chaque sens)
+ * et jusqu'à 30 ms de gigue aux messages de partie, dans l'ordre (comme TCP).
+ */
+function lagSimulator(): ((fn: () => void, dir: 'in' | 'out') => void) | null {
+  if (!import.meta.env.DEV || typeof location === 'undefined') return null;
+  const q = new URLSearchParams(location.search);
+  const lag = Number(q.get('lag') ?? 0);
+  const jitter = Number(q.get('jitter') ?? 0);
+  if (!(lag > 0 || jitter > 0)) return null;
+  // Une file par sens, vidée dans l'ordre : comme TCP, jamais de message qui en double un autre.
+  const queues = { in: [] as { at: number; fn: () => void }[], out: [] as { at: number; fn: () => void }[] };
+  const drain = (dir: 'in' | 'out') => {
+    const q = queues[dir];
+    while (q.length && q[0].at <= performance.now()) q.shift()!.fn();
+    if (q.length) setTimeout(() => drain(dir), Math.max(0, q[0].at - performance.now()));
+  };
+  return (fn, dir) => {
+    const q = queues[dir];
+    const at = Math.max(q.length ? q[q.length - 1].at : 0, performance.now() + lag / 2 + Math.random() * jitter);
+    q.push({ at, fn });
+    if (q.length === 1) setTimeout(() => drain(dir), at - performance.now());
+  };
+}
+
 type Listener<T> = (value: T) => void;
 
 class Emitter<T> {
@@ -51,6 +77,7 @@ export class NetworkManager {
   private socket: Socket | null = null;
   private connecting: Promise<Socket> | null = null;
   status: ConnectionStatus = 'idle';
+  private readonly lag = lagSimulator();
   /** Mon identifiant de joueur dans le salon (donné par le serveur). */
   you: string | null = null;
   /** Dernier état connu du salon (null : dans aucun salon). */
@@ -117,9 +144,10 @@ export class NetworkManager {
       this.room = null;
       this.roomClosed.emit();
     });
-    socket.on(EVENTS.GAME_STARTED, (g: GameStarted) => this.gameStarted.emit(g));
-    socket.on(EVENTS.GAME_TICK, (t: GameTick) => this.gameTick.emit(t));
-    socket.on(EVENTS.GAME_OVER, (r: GameOver) => this.gameOver.emit(r));
+    const delayed = (fn: () => void) => (this.lag ? this.lag(fn, 'in') : fn());
+    socket.on(EVENTS.GAME_STARTED, (g: GameStarted) => delayed(() => this.gameStarted.emit(g)));
+    socket.on(EVENTS.GAME_TICK, (t: GameTick) => delayed(() => this.gameTick.emit(t)));
+    socket.on(EVENTS.GAME_OVER, (r: GameOver) => delayed(() => this.gameOver.emit(r)));
   }
 
   private setStatus(s: ConnectionStatus): void {
@@ -181,7 +209,9 @@ export class NetworkManager {
 
   /** Commandes d'une image (sans accusé : envoyées en continu). */
   sendInput(input: PlayerInput): void {
-    if (this.socket?.connected) this.socket.emit(EVENTS.PLAYER_INPUT, input);
+    const send = () => this.socket?.connected && this.socket.emit(EVENTS.PLAYER_INPUT, input);
+    if (this.lag) this.lag(send, 'out');
+    else send();
   }
 }
 

@@ -141,6 +141,12 @@ export abstract class Hero implements Combatant {
   stunTimer = 0;
   /** Multiplicateur des dégâts infligés (bots : 0,7). */
   damageMultiplier = 1;
+  /**
+   * Partie en ligne (serveur) : la marche est appliquée à la réception de chaque commande du
+   * joueur, avec la durée de SON image (voir server/src/game/GameLoop.ts), exactement comme la
+   * prédiction de son navigateur. update() ne déplace alors plus le héros quand il est libre.
+   */
+  externalMovement = false;
   /** Temps depuis les derniers dégâts subis (soin passif). */
   private sinceDamage = 0;
   /** Dans la zone de spawn de son équipe : invincible (mis à jour par le mode). */
@@ -247,7 +253,7 @@ export abstract class Hero implements Combatant {
       this.kvx = this.kvy = 0;
       this.updateLocked(dt, ctx);
     } else {
-      this.move(dt, ctx);
+      if (!this.externalMovement) this.move(dt, ctx);
       if (this.hasQuickMelee() && c.pressed('melee') && this.meleeCooldown <= 0) this.quickMelee(ctx);
       this.handleInput(dt, ctx);
     }
