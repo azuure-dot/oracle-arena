@@ -30,6 +30,32 @@ relatifs (`base: './'` dans `vite.config.ts`), il marche donc dans ce sous-dossi
 À faire une fois sur GitHub : Settings → Pages → Source : **GitHub Actions**. GitHub Pages demande un dépôt
 public (ou un abonnement payant pour un dépôt privé). Le suivi des déploiements est dans l'onglet Actions.
 
+## Menu principal (lobby)
+
+Style « Grèce antique » (aussi sur les écrans de choix de la carte, réglages du Deathmatch, sélection
+du héros et scores) : marbre veiné, blanc et or, frises à méandres dorées, groupe en façade de temple
+(fronton, colonnes, marches), couronne d'olivier, numéros grecs. Polices Marcellus et EB Garamond.
+La sélection du héros a le même fond de marbre que l'accueil.
+
+La feuille est `src/ui/themes/greece.css`, posée par `src/ui/theme.ts`. Ce qui change dans le HTML
+(icônes, décor, numéros des places, couronne) est dans `src/ui/lobby/kits.ts`, dessiné en SVG dans
+`src/ui/lobby/ornaments.ts`. Deux anciens styles restent dans le dépôt sans être chargés ni proposés :
+`myth.css` (mythologique, nuit étoilée) et `esport.css` (e-sport néon) ; `src/ui/theme.ts` explique
+comment en remettre un (il réapparaît alors dans les Paramètres).
+
+- **Onglets en haut** : Accueil (actif), Passe de combat et Boutique (verrouillés, badge « Bientôt »).
+  La roue dentée ouvre les **Paramètres** : langue FR/EN (tous les textes changent aussitôt), pseudo,
+  photo de profil et bannière (5 de chaque, une par héros).
+- **Groupe de 6 au centre** : la carte 1 est le joueur, chef du groupe (bannière, avatar, pseudo).
+  Les places 2 à 6 ajoutent ou retirent un bot (héros tiré au sort). Pour l'instant ces bots sont
+  décoratifs : la composition des équipes en partie ne change pas.
+- **JOUER en bas à gauche** ouvre le tiroir des modes : Partie rapide, Deathmatch, Champ de tir
+  (Classé verrouillé jusqu'au multijoueur), avec la note sur les adversaires IA. Raccourcis :
+  `1`-`3` choisissent un mode, `Entrée` lance, `Échap` ferme.
+- **Visuels** : avatars et bannières sont des SVG générés dans `src/ui/lobby/art.ts`.
+- **État** : `src/ui/lobby/profile.ts` (pseudo, avatar, bannière, mode, groupe), mémorisé dans le
+  navigateur ; le menu se redessine à chaque changement.
+
 ## Modes de jeu
 
 Le menu principal propose trois modes. En **Partie rapide**, c'est la carte qui décide du mode.

@@ -1,8 +1,14 @@
+import '@fontsource/marcellus/400.css';
+import '@fontsource/eb-garamond/400.css';
+import '@fontsource/eb-garamond/500.css';
+import '@fontsource/eb-garamond/400-italic.css';
 import './style.css';
+import { applyTheme } from './ui/theme';
 import { Game } from './Game';
 import { t } from './i18n';
 
 document.title = t('menu.title');
+applyTheme();
 
 const canvas = document.getElementById('game');
 const overlay = document.getElementById('overlay');
