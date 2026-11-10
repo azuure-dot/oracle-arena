@@ -12,14 +12,14 @@ import { Screen, digitOf } from './Screen';
  * - en haut, les onglets (Accueil ; Passe de combat et Boutique verrouillés, « Bientôt ») et la
  *   roue des paramètres ;
  * - au centre, le groupe de 6 : le joueur (chef de groupe, avatar, pseudo, bannière) et 5 places
- *   où ajouter des bots (le jeu en ligne n'existe pas encore) ;
+ *   où ajouter des bots (le groupe en ligne n'existe pas encore : voir les parties privées) ;
  * - en bas à gauche, JOUER ouvre le tiroir des modes (Partie rapide, Deathmatch, Champ de tir ;
- *   Classé verrouillé) avec la note sur les bots ;
+ *   Classé verrouillé) avec la note sur les bots ; à côté, PARTIE PRIVÉE (en ligne, code de salon) ;
  * - la modale des paramètres : langue, style d'interface, pseudo, photo de profil, bannière.
  * L'état (profil, mode, groupe) vit dans `profile` (src/ui/lobby/profile.ts), mémorisé.
  */
 
-export type MenuChoice = 'quickplay' | 'practice' | 'deathmatch';
+export type MenuChoice = 'quickplay' | 'practice' | 'deathmatch' | 'private';
 
 const MODE_KEYS: Record<ModeId, { name: TKey; desc: TKey; tag: TKey }> = {
   quickplay: { name: 'menu.quickplay', desc: 'menu.quickplay.desc', tag: 'lobby.tag.quickplay' },
@@ -221,6 +221,10 @@ export class MainMenu extends Screen {
             <span class="lb-play-main">${t('lobby.play')}</span>
             <span class="lb-play-sub">${t(MODE_KEYS[s.mode].name)}</span>
           </button>
+          <button type="button" class="lb-private-btn" data-action="private" data-key="private" title="${t('menu.private.desc')}">
+            <span class="lb-private-main">${t('menu.private')}</span>
+            <span class="lb-private-sub">${t('menu.private.desc')}</span>
+          </button>
           <div class="lb-info">
             <button type="button" class="lb-info-btn" aria-describedby="lb-note" data-key="info" aria-label="${t('lobby.notice.title')}">${INFO}</button>
             <p class="lb-tip" id="lb-note" role="tooltip">${t('lobby.notice')}</p>
@@ -369,6 +373,10 @@ export class MainMenu extends Screen {
       }
       case 'launch':
         this.launch();
+        return;
+      case 'private':
+        this.settingsOpen = this.drawerOpen = false;
+        this.onChoose('private');
         return;
       case 'slot':
         profile.toggleBot(Number(el.dataset.slot));

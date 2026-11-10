@@ -2,6 +2,11 @@ node_modules
 dist
 *.log
 
+# Variables d'environnement locales (les modèles .env.example restent suivis)
+.env
+.env.local
+.env.*.local
+
 # Éditeurs / OS
 .vscode/
 .idea/

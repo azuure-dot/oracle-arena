@@ -1,5 +1,4 @@
 import { COLORS } from '../config';
-import type { Camera } from '../core/Camera';
 import type { DamageCause, GameContext } from '../core/GameContext';
 import { circleTouches } from '../core/geometry';
 import { clamp, type Vec2 } from '../core/math';
@@ -29,6 +28,16 @@ export interface WorldHooks {
   onDamage?(e: DamageEvent): void;
   /** Dessin au sol propre au mode (point de contrôle, packs de soin...), sous les entités. */
   drawGround?(ctx: CanvasRenderingContext2D, time: number): void;
+  /** Chaque tremblement demandé (serveur multijoueur : retransmis aux clients). */
+  onShake?(magnitude: number, at: Vec2): void;
+}
+
+/**
+ * Ce qui tremble quand un héros frappe fort : la caméra du joueur. Le serveur multijoueur,
+ * sans écran, passe un objet vide (`{ shake() {} }`) : le monde ne dépend pas de la caméra.
+ */
+export interface ShakeTarget {
+  shake(magnitude: number): void;
 }
 
 export interface ViewTransform {
@@ -66,7 +75,7 @@ export class World {
 
   constructor(
     readonly arena: Arena,
-    private readonly camera: Camera,
+    private readonly camera: ShakeTarget,
     private readonly hooks: WorldHooks,
   ) {
     const world = this;
@@ -87,7 +96,7 @@ export class World {
       get respawnDelay() {
         return world.respawnDelay;
       },
-      shake: (m, at) => this.shake(m, at),
+      shake: (m, at) => this.shakeAt(m, at),
     };
   }
 
@@ -107,12 +116,7 @@ export class World {
   update(dt: number): void {
     this.time += dt;
     this.ctx.time = this.time;
-    // Liste réutilisée à chaque image (pas de nouveau tableau 60 fois par seconde).
-    const list = this.targetList;
-    list.length = 0;
-    for (const c of this.bots) list.push(c);
-    for (const c of this.heroes) list.push(c);
-    for (const c of this.decoys) list.push(c);
+    this.rebuildTargets();
 
     // Les buffs d'aura sont réappliqués à chaque frame par les Tempo.
     for (const c of this.targetList) {
@@ -136,6 +140,28 @@ export class World {
     this.updateProjectiles(dt);
     this.objects = this.objects.filter((o) => o.update(dt, this.ctx));
     this.decoys = this.decoys.filter((d) => d.update(dt, this.ctx));
+    this.wet.update(dt, this.time);
+    this.updateVisibility();
+    this.effects.update(dt);
+  }
+
+  /** Liste réutilisée à chaque image (pas de nouveau tableau 60 fois par seconde). */
+  private rebuildTargets(): void {
+    const list = this.targetList;
+    list.length = 0;
+    for (const c of this.bots) list.push(c);
+    for (const c of this.heroes) list.push(c);
+    for (const c of this.decoys) list.push(c);
+  }
+
+  /**
+   * Partie en ligne (client) : le serveur simule, ce monde ne fait qu'AFFICHER. On ne fait vivre
+   * que ce qui est purement visuel : ligne de vue du joueur, effets, séchage des flaques.
+   * `time` est réglé par le client réseau (temps du serveur, voir src/network/NetMatch.ts).
+   */
+  updateDisplay(dt: number): void {
+    this.ctx.time = this.time;
+    this.rebuildTargets();
     this.wet.update(dt, this.time);
     this.updateVisibility();
     this.effects.update(dt);
@@ -171,7 +197,9 @@ export class World {
     return dealt;
   }
 
-  private shake(magnitude: number, at: Vec2): void {
+  /** Tremblement d'écran, atténué avec la distance au joueur. */
+  shakeAt(magnitude: number, at: Vec2): void {
+    this.hooks.onShake?.(magnitude, at);
     const p = this.player;
     if (!p) return;
     const f = clamp(1 - Math.hypot(at.x - p.x, at.y - p.y) / 900, 0, 1);

@@ -10,9 +10,14 @@ import { TeamMatchMode } from './modes/TeamMatchMode';
 import { DeathmatchMode, type DeathmatchConfig } from './modes/DeathmatchMode';
 import type { GameMode, ModeKind } from './modes/GameMode';
 import { PracticeMode, createRangeBots } from './modes/PracticeMode';
+import { NetMatch } from './network/NetMatch';
+import { net } from './network/NetworkManager';
+import type { GameStarted } from '../server/src/types/network';
 import { DeathmatchSetup } from './ui/screens/DeathmatchSetup';
 import { MainMenu } from './ui/screens/MainMenu';
 import { MapSelect } from './ui/screens/MapSelect';
+import { PrivateHub } from './ui/screens/PrivateHub';
+import { PrivateLobby } from './ui/screens/PrivateLobby';
 import type { Screen } from './ui/screens/Screen';
 import { Scoreboard } from './ui/screens/Scoreboard';
 import { SelectScreen } from './ui/screens/SelectScreen';
@@ -35,9 +40,11 @@ const MIN_FRAME_MS = 11.5;
  *   Menu ─┬─ Partie rapide ─▶ Carte ───────▶ Sélection ─▶ En jeu ─▶ Victoire / défaite
  *         │   (la carte décide du mode : Sanctuaire → Contrôle, Route 66 → Escorte)
  *         ├─ Champ de tir ───────────────▶ Sélection ─▶ En jeu (Échap → Sélection)
- *         └─ Deathmatch ─▶ Configuration ─▶ Sélection ─▶ En jeu ─▶ Scores
+ *         ├─ Deathmatch ─▶ Configuration ─▶ Sélection ─▶ En jeu ─▶ Scores
+ *         └─ Partie privée (en ligne) ─▶ Salon ─▶ En jeu ─▶ Scores ─▶ Salon
+ *              (créer / rejoindre par code)   (le serveur lance la partie : src/network/)
  */
-export type Scene = 'menu' | 'mapSelect' | 'dmSetup' | 'select' | 'playing' | 'scoreboard';
+export type Scene = 'menu' | 'mapSelect' | 'dmSetup' | 'select' | 'playing' | 'scoreboard' | 'netHub' | 'netLobby';
 
 export class Game {
   private readonly ctx: CanvasRenderingContext2D;
@@ -50,6 +57,8 @@ export class Game {
   private readonly dmSetup: DeathmatchSetup;
   private readonly selectScreen: SelectScreen;
   private readonly scoreboard: Scoreboard;
+  private readonly netHub: PrivateHub;
+  private readonly netLobby: PrivateLobby;
   private readonly screens: Screen[];
 
   scene: Scene = 'menu';
@@ -90,6 +99,7 @@ export class Game {
     this.mainMenu = new MainMenu(overlay, (choice) => {
       if (choice === 'quickplay') this.goTo('mapSelect');
       else if (choice === 'deathmatch') this.goTo('dmSetup');
+      else if (choice === 'private') this.goTo('netHub');
       else {
         this.pendingKind = 'practice';
         this.goTo('select');
@@ -127,10 +137,27 @@ export class Game {
     );
     this.scoreboard = new Scoreboard(
       overlay,
-      () => this.goTo('menu'),
-      () => this.lastEntry && this.startMode(this.lastEntry),
+      () => this.goTo(this.mode instanceof NetMatch ? 'netLobby' : 'menu'),
+      () => (this.mode instanceof NetMatch ? this.goTo('netLobby') : this.lastEntry && this.startMode(this.lastEntry)),
     );
-    this.screens = [this.mainMenu, this.mapSelect, this.dmSetup, this.selectScreen, this.scoreboard];
+
+    // --- parties privées en ligne
+    this.netHub = new PrivateHub(
+      overlay,
+      () => this.goTo('netLobby'),
+      () => this.goTo('menu'),
+    );
+    this.netLobby = new PrivateLobby(overlay, () => this.goTo('netHub'));
+    net.gameStarted.on((info) => this.startNetMatch(info));
+    net.roomClosed.on(() => {
+      // Connexion perdue ou salon fermé : retour à l'écran des parties privées, avec un message.
+      if (this.scene === 'netLobby' || this.mode instanceof NetMatch) {
+        this.goTo('netHub');
+        this.netHub.showWith('net.err.closed');
+      }
+    });
+
+    this.screens = [this.mainMenu, this.mapSelect, this.dmSetup, this.selectScreen, this.scoreboard, this.netHub, this.netLobby];
 
     // Le clavier des menus va à l'écran affiché (un seul à la fois).
     window.addEventListener('keydown', (e) => {
@@ -178,9 +205,16 @@ export class Game {
         break;
       case 'scoreboard': {
         const result = this.mode?.result();
+        this.scoreboard.online = this.mode instanceof NetMatch;
         if (result) this.scoreboard.showResult(result);
         break;
       }
+      case 'netHub':
+      case 'netLobby':
+        this.endMode();
+        this.backdropMap = PRACTICE_MAP;
+        (scene === 'netHub' ? this.netHub : this.netLobby).show();
+        break;
       case 'playing':
         break;
     }
@@ -188,8 +222,21 @@ export class Game {
 
   /** Quitte la partie en cours en libérant ses ressources (images du décor, listes du monde). */
   private endMode(): void {
+    if (this.mode instanceof NetMatch) this.mode.dispose();
     this.mode?.world.dispose();
     this.mode = null;
+  }
+
+  /** Le serveur lance la partie du salon : on passe en jeu (Deathmatch en ligne). */
+  private startNetMatch(info: GameStarted): void {
+    if (!net.you || !net.room) return;
+    this.endMode();
+    for (const w of this.mapBackdrops.values()) w.dispose();
+    this.mapBackdrops.clear();
+    this.mode = new NetMatch(this.camera, this.input, info, net.you, net);
+    this.camera.centerOn(this.mode.player.x, this.mode.player.y);
+    this.input.endFrame();
+    this.goTo('playing');
   }
 
   private startMode(entry: HeroEntry): void {
@@ -279,6 +326,12 @@ export class Game {
     if (this.scene === 'playing' && mode) {
       mode.update(dt);
       if (mode.exitRequested) {
+        if (mode instanceof NetMatch) {
+          // En ligne : on quitte le salon (la partie continue pour les autres).
+          void net.leaveRoom();
+          this.goTo('netHub');
+          return;
+        }
         // Champ de tir : retour à la sélection · autres modes : abandon, retour au menu.
         this.goTo(mode.kind === 'practice' ? 'select' : 'menu');
         return;

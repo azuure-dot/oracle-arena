@@ -689,7 +689,7 @@ export class SanctuaryAngel implements Decoy {
 }
 
 /** Partie au sol du Sanctuaire : cercle doré sous les entités, plumes qui tombent par-dessus. */
-class SanctuaryZone implements WorldObject {
+export class SanctuaryZone implements WorldObject {
   readonly team: Team;
 
   constructor(private readonly angel: SanctuaryAngel) {

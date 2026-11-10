@@ -1,0 +1,32 @@
+{
+  // Le serveur compile ses fichiers ET la logique de jeu du client qu'il importe
+  // (../src/game, ../src/heroes, ../src/modes/rules.ts...) : rootDir est donc la racine du dépôt.
+  // Sortie : dist/server/src/server.js (serveur) et dist/src/... (logique partagée).
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    // DOM : seulement pour les TYPES du code partagé (signatures de dessin, jamais appelées ici).
+    "lib": ["ES2022", "DOM"],
+    "types": ["node"],
+    "rootDir": "..",
+    "outDir": "dist",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "useDefineForClassFields": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "sourceMap": true
+  },
+  "include": ["src"],
+  // ts-node-dev (npm run dev) : la racine du dépôt est en "type": "module" (Vite) ;
+  // on force le CommonJS pour le code partagé chargé par le serveur.
+  "ts-node": {
+    "transpileOnly": true,
+    "moduleTypes": {
+      "../src/**/*": "cjs"
+    }
+  }
+}

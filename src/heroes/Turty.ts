@@ -856,7 +856,7 @@ export class Turty extends Hero {
  * s'écrase, s'amorce un instant, puis explose. Une zone d'ombre au sol montre
  * l'impact pendant tout le vol. L'explosion mouille le sol.
  */
-class WaterBomb implements WorldObject {
+export class WaterBomb implements WorldObject {
   readonly team: Team;
   private phase: 'air' | 'prime' | 'blast' = 'air';
   private t = 0;

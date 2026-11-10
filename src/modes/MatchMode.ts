@@ -28,19 +28,9 @@ export interface KillFeedEntry {
   lava?: boolean;
 }
 
-/** Les bots héros infligent 30 % de dégâts en moins que le joueur. */
-export const BOT_DAMAGE_MULTIPLIER = 0.7;
-
-export const BOT_NAMES = ['Nova', 'Vex', 'Krono', 'Echo', 'Rook', 'Zéphyr', 'Pulse', 'Onyx'];
-
-export function shuffle<T>(arr: readonly T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
+// Règles pures (partagées avec le serveur multijoueur) : voir rules.ts.
+export { BOT_DAMAGE_MULTIPLIER, BOT_NAMES, shuffle } from './rules';
+import { BOT_DAMAGE_MULTIPLIER } from './rules';
 
 /**
  * Base des matchs contre des bots héros (Deathmatch, Contrôle) :

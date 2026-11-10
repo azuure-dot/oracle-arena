@@ -19,7 +19,7 @@ import type { MapDef } from '../world/maps';
  * - Deathmatch : 3 s. Champ de tir : aucun.
  */
 export const START_COUNTDOWN = 10;
-export const DEATHMATCH_COUNTDOWN = 3;
+export { DEATHMATCH_COUNTDOWN } from './rules';
 
 export type ModeKind = 'practice' | 'deathmatch' | 'control' | 'escort';
 
@@ -85,20 +85,36 @@ export abstract class GameMode {
   }
 
   update(dt: number): void {
-    const input = this.input;
-    if (this.uiOpen) {
-      this.player.controls = NO_CONTROLS;
-    } else {
-      this.player.controls = this.playerControls;
+    if (!this.handleMetaKeys()) return;
+    this.sampleControls(dt);
+
+    this.countdown = Math.max(0, this.countdown - dt);
+
+    if (!this.simulationPaused()) {
+      this.beforeWorld(dt);
+      this.world.update(dt);
     }
+    this.afterWorld(dt);
+    this.hud.update(dt);
+  }
+
+  /** Échap (quitter), H (aide), X (hitbox) et touches du mode. false : la partie est quittée. */
+  protected handleMetaKeys(): boolean {
+    const input = this.input;
+    this.player.controls = this.uiOpen ? NO_CONTROLS : this.playerControls;
     if (!this.uiOpen && input.wasPressed('Escape')) {
       this.exitRequested = true;
-      return;
+      return false;
     }
     if (input.wasPressed('KeyH')) this.hud.showHelp = !this.hud.showHelp;
     if (input.wasPressed('KeyX')) this.showHitboxes = !this.showHitboxes;
     this.handleKeys();
+    return true;
+  }
 
+  /** Lit le clavier / la souris ou les commandes tactiles dans `playerControls` (visée comprise). */
+  protected sampleControls(dt: number): void {
+    const input = this.input;
     // Commandes tactiles (téléphone) : sticks et boutons, visée au doigt.
     const touch = input.touch;
     const p = this.player;
@@ -118,15 +134,6 @@ export abstract class GameMode {
     });
     const aim = touch.active ? touch.aimPoint(p) : this.camera.screenToWorld(input.mouseX, input.mouseY);
     this.playerControls.sample(aim.x, aim.y);
-
-    this.countdown = Math.max(0, this.countdown - dt);
-
-    if (!this.simulationPaused()) {
-      this.beforeWorld(dt);
-      this.world.update(dt);
-    }
-    this.afterWorld(dt);
-    this.hud.update(dt);
   }
 
   /** true pendant une pause (transition entre deux manches) : le monde est figé. */

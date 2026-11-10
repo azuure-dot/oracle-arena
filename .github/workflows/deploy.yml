@@ -29,6 +29,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+        env:
+          # Adresse du serveur multijoueur (Settings → Secrets and variables → Actions → Variables).
+          # Vide : le client vise http://localhost:3001 (parties privées seulement en local).
+          VITE_SERVER_URL: ${{ vars.VITE_SERVER_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

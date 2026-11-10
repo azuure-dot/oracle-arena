@@ -6,6 +6,18 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["vite", "--port", "5173", "--open", "false"],
       "port": 5173
+    },
+    {
+      "name": "net-client",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--port", "5180", "--strictPort", "--open", "false"],
+      "port": 5180
+    },
+    {
+      "name": "net-server",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "server"],
+      "port": 3001
     }
   ]
 }

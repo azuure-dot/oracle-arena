@@ -22,6 +22,8 @@ export type MatchResult =
 /** Tableau des scores de fin de match (Deathmatch : classement · Contrôle : victoire / défaite). */
 export class Scoreboard extends Screen {
   private result: MatchResult = { kind: 'deathmatch', rows: [], playerRank: 1, playerWon: false };
+  /** Partie en ligne : un seul bouton, « Retour au salon ». */
+  online = false;
 
   constructor(
     parent: HTMLElement,
@@ -82,8 +84,12 @@ export class Scoreboard extends Screen {
         <tbody>${rows}</tbody>
       </table>
       <div class="screen-actions">
-        <button type="button" class="btn" data-action="menu">${t('ui.mainMenu')}</button>
-        <button type="button" class="btn btn-primary" data-action="replay">${t('ui.replay')}</button>
+        ${
+          this.online
+            ? `<button type="button" class="btn btn-primary" data-action="menu">${t('net.backToLobby')}</button>`
+            : `<button type="button" class="btn" data-action="menu">${t('ui.mainMenu')}</button>
+        <button type="button" class="btn btn-primary" data-action="replay">${t('ui.replay')}</button>`
+        }
       </div>`;
   }
 

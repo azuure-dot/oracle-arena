@@ -10,6 +10,7 @@ import { ALLY, type Team } from '../entities/Team';
 import type { TKey } from '../i18n';
 import { drawTeamMarker, hand } from '../render/topdown';
 import { drawBuffIndicators, drawHealthBar, drawStunStars, type BuffKind } from '../ui/healthBar';
+import type { Arena } from '../world/Arena';
 import { lineOfSight } from '../world/Visibility';
 
 /** Emplacement de touche : le libellé affiché est traduit par le HUD (Clic D / RMB...). */
@@ -366,6 +367,19 @@ export abstract class Hero implements Combatant {
       this.kvx = this.kvy = 0;
     }
     ctx.arena.resolveCircle(this, this.radius, this.team, knocked);
+  }
+
+  /**
+   * Prédiction du client en ligne (src/network/NetMatch.ts) : rejoue SEULEMENT le déplacement
+   * (marche, recul, murs) dans cette direction, sans tirer ni lancer de compétence — le serveur
+   * reste seul juge. Retourne false si le héros ne se déplace pas librement (mort, étourdi,
+   * épinglé, compétence qui pilote le mouvement) : on suit alors simplement le serveur.
+   */
+  predictMove(dt: number, dir: Vec2, arena: Arena): boolean {
+    if (this.dead || this.pinned || this.stunTimer > 0 || this.isLocked()) return false;
+    this.moveDir = dir;
+    this.move(dt, { arena } as GameContext);
+    return true;
   }
 
   applyImpulse(ix: number, iy: number, source?: Hero): void {

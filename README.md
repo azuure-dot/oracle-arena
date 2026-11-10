@@ -1,7 +1,8 @@
 # Web Hero Shooter
 
 Prototype de hero shooter 2D en vue de dessus, jouable dans le navigateur.
-Vite + TypeScript + Canvas 2D, sans backend pour l'instant.
+Vite + TypeScript + Canvas 2D. Solo contre des bots, et **parties privées en ligne** (serveur Node +
+Socket.io dans `server/`, voir [Multijoueur](#multijoueur-parties-privées)).
 
 ## Lancer le projet
 
@@ -20,6 +21,46 @@ Galerie des personnages (pour travailler les designs) : http://localhost:5173/ga
 | `npm run build`     | Vérification TypeScript + build dans `dist/`  |
 | `npm run preview`   | Sert le build de production                   |
 | `npm run typecheck` | Vérification TypeScript seule                 |
+
+## Multijoueur (parties privées)
+
+Menu principal → **Partie privée** : créer un salon (code de 6 caractères à partager) ou en rejoindre
+un avec son code, sans compte. Dans le salon, l'hôte choisit le mode, la carte, la durée et
+« Remplir avec des bots » ; chacun choisit son héros et se met **Prêt** ; l'hôte lance la partie
+quand tous les joueurs sont prêts. Jusqu'à 6 joueurs.
+
+- **Serveur autoritaire** (`server/`, Node + TypeScript + Express + Socket.io) : il fait tourner la
+  même simulation que le solo (`src/game/World.ts`, les héros, l'IA des bots) à 60 Hz et envoie
+  30 instantanés par seconde. Les clients n'envoient que leurs commandes.
+- **Client** (`src/network/`) : prédiction du déplacement du joueur local avec réconciliation,
+  interpolation des autres joueurs, HUD et scores du Deathmatch solo.
+- **Disponible en ligne : Deathmatch FFA**, avec toutes les compétences des 5 héros. Champ de tir,
+  Contrôle et Escorte sont affichés « Bientôt » dans le salon.
+
+En local, deux terminaux :
+
+```bash
+cd server && npm install && cp .env.example .env && npm run dev   # serveur : http://localhost:3001
+```
+
+```bash
+npm run dev                                                       # client : http://localhost:5173
+```
+
+Puis deux onglets : l'un crée le salon, l'autre le rejoint par le code. Le client vise
+`VITE_SERVER_URL` (fichier `.env.local`, voir `.env.example`), par défaut `http://localhost:3001`.
+
+| Commande (dans `server/`) | Rôle                                                   |
+| ------------------------- | ------------------------------------------------------ |
+| `npm run dev`             | Serveur de développement (`ts-node-dev`, redémarrage auto) |
+| `npm run build`           | Compilation TypeScript dans `server/dist/`             |
+| `npm start`               | Lance le serveur compilé                               |
+
+Hébergement : le site reste statique (GitHub Pages aujourd'hui, ou Vercel / Netlify) avec la
+variable `VITE_SERVER_URL` au build ; le serveur WebSocket doit être un **processus permanent**
+(Railway, Render ou Fly.io, pas de fonctions serverless). Redis / Upstash seulement pour plusieurs
+instances, plus tard. Architecture, protocole, marche à suivre et reste à faire :
+**[docs/multijoueur.md](docs/multijoueur.md)**.
 
 ## Version en ligne (GitHub Pages)
 
@@ -57,6 +98,8 @@ comment en remettre un (il s'ajoute alors au choix du thème).
 - **JOUER en bas à gauche** ouvre le tiroir des modes : Partie rapide, Deathmatch, Champ de tir
   (Classé verrouillé jusqu'au multijoueur), avec la note sur les adversaires IA. Raccourcis :
   `1`-`3` choisissent un mode, `Entrée` lance, `Échap` ferme.
+- **PARTIE PRIVÉE**, à côté : jeu en ligne avec un code de salon (voir
+  [Multijoueur](#multijoueur-parties-privées)).
 - **Visuels** : avatars et bannières sont des SVG générés dans `src/ui/lobby/art.ts`.
 - **État** : `src/ui/lobby/profile.ts` (pseudo, avatar, bannière, mode, groupe), mémorisé dans le
   navigateur ; le menu se met à jour à chaque changement.
@@ -418,5 +461,13 @@ src/
   render/          personnages vus de dessus : têtes, cheveux, mains et armes (topdown.ts)
   entities/        bots du champ de tir, projectiles, interface Combatant
   world/           cartes (maps.ts), arène, ligne de vue, brouillard, thèmes pixel art (themes/)
-  ui/              HUD, HUD du Deathmatch, écrans HTML (menus, sélection, scores)
+  ui/              HUD, HUD du Deathmatch, écrans HTML (menus, sélection, scores, parties privées)
+  network/         jeu en ligne : connexion (NetworkManager), partie en ligne (NetMatch), état réseau (netState)
+server/
+  src/server.ts    Express + Socket.io (CORS, événements)
+  src/rooms/       salons privés en mémoire (codes, hôte, prêts)
+  src/game/        simulation autoritaire (GameLoop) et commandes réseau
+  src/types/       protocole réseau partagé avec le client
+docs/
+  multijoueur.md   architecture et marche à suivre du multijoueur
 ```
