@@ -199,11 +199,17 @@ export const OLIVE_ICON = `<svg viewBox="-12 -12 24 24" aria-hidden="true"><g fi
 /** Casque hoplite (marque du jeu en Grèce antique). */
 export const HELMET = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">${MYTH_MODE_ICONS.quickplay}</svg>`;
 
-/** Numéraux grecs des places du groupe (alpha, bêta, gamma…). */
-export const GREEK_NUMERALS = ['Αʹ', 'Βʹ', 'Γʹ', 'Δʹ', 'Εʹ', 'Ϛʹ', 'Ζʹ', 'Ηʹ', 'Θʹ', 'Ιʹ'];
+interface ColumnTones {
+  flute: string;
+  neck: string;
+  abacus: string;
+  edge: string;
+}
+const DAY_STONE: ColumnTones = { flute: '#9d907a', neck: '#cfc4ad', abacus: '#e9e2d2', edge: '#b5a98f' };
+const NIGHT_STONE: ColumnTones = { flute: '#11182a', neck: '#3b4764', abacus: '#4a5674', edge: '#283149' };
 
 /** Colonne dorique (chapiteau, fût cannelé) dans le repère 1600×900 du décor. */
-function doricColumn(cx: number, w: number, top: number, uid: string): string {
+function doricColumn(cx: number, w: number, top: number, uid: string, tone: ColumnTones = DAY_STONE): string {
   const flutes: string[] = [];
   for (let i = 1; i < 10; i++) {
     const x = cx - w / 2 + (w * i) / 10;
@@ -213,10 +219,10 @@ function doricColumn(cx: number, w: number, top: number, uid: string): string {
   const e = w * 0.66;
   return `<g>
     <rect x="${f(cx - w / 2)}" y="${top + 44}" width="${w}" height="${900 - top - 44}" fill="url(#col-${uid})"/>
-    <g stroke="#9d907a" stroke-width="1.6" opacity=".45">${flutes.join('')}</g>
-    <rect x="${f(cx - w / 2 - 2)}" y="${top + 38}" width="${w + 4}" height="6" fill="#cfc4ad"/>
+    <g stroke="${tone.flute}" stroke-width="1.6" opacity=".45">${flutes.join('')}</g>
+    <rect x="${f(cx - w / 2 - 2)}" y="${top + 38}" width="${w + 4}" height="6" fill="${tone.neck}"/>
     <path d="M${f(cx - e)} ${top + 16}H${f(cx + e)}C${f(cx + e - 4)} ${top + 30} ${f(cx + w / 2 + 8)} ${top + 36} ${f(cx + w / 2 + 2)} ${top + 38}H${f(cx - w / 2 - 2)}C${f(cx - w / 2 - 8)} ${top + 36} ${f(cx - e + 4)} ${top + 30} ${f(cx - e)} ${top + 16}Z" fill="url(#col-${uid})"/>
-    <rect x="${f(cx - a)}" y="${top}" width="${f(a * 2)}" height="16" fill="#e9e2d2" stroke="#b5a98f" stroke-width="1"/>
+    <rect x="${f(cx - a)}" y="${top}" width="${f(a * 2)}" height="16" fill="${tone.abacus}" stroke="${tone.edge}" stroke-width="1"/>
   </g>`;
 }
 
@@ -244,5 +250,46 @@ export function greeceDecor(): string {
     <rect width="1600" height="900" fill="url(#gr-sky)"/>
     <rect width="1600" height="900" fill="url(#gr-sun)"/>
     <g opacity=".4">${doricColumn(40, 92, 70, 'a')}${doricColumn(1560, 92, 70, 'a')}</g>
+  </svg>`;
+}
+
+/**
+ * Décor « Nuit » : ciel bleu nuit étoilé, pleine lune et son halo, colonnes au clair de lune.
+ * Immobile.
+ */
+export function greeceNightDecor(): string {
+  const r = rng(23);
+  const stars: string[] = [];
+  for (let i = 0; i < 120; i++) {
+    const x = r() * 1600;
+    const y = Math.pow(r(), 1.6) * 560; // plus d'étoiles en haut du ciel
+    const big = r() < 0.1;
+    stars.push(`<circle cx="${f(x)}" cy="${f(y)}" r="${f(big ? 1.3 + r() * 0.8 : 0.5 + r() * 0.7)}" opacity="${f(big ? 0.85 : 0.3 + r() * 0.45)}"/>`);
+  }
+  return `<svg class="lb-sky" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+    <defs>
+      <linearGradient id="gn-sky" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#22325c" stop-opacity=".95"/>
+        <stop offset=".4" stop-color="#1b2848" stop-opacity=".5"/>
+        <stop offset=".68" stop-color="#141b2a" stop-opacity="0"/>
+      </linearGradient>
+      <radialGradient id="gn-halo" cx="1270" cy="120" r="380" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stop-color="#dfe8ff" stop-opacity=".42"/>
+        <stop offset=".3" stop-color="#9fb4e6" stop-opacity=".14"/>
+        <stop offset="1" stop-color="#9fb4e6" stop-opacity="0"/>
+      </radialGradient>
+      <radialGradient id="gn-moon" cx=".42" cy=".38" r=".7">
+        <stop offset="0" stop-color="#fbf8ee"/><stop offset=".7" stop-color="#e3e1d6"/><stop offset="1" stop-color="#c9c8c0"/>
+      </radialGradient>
+      <linearGradient id="col-n" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0" stop-color="#1c2438"/><stop offset=".35" stop-color="#4b5878"/><stop offset=".7" stop-color="#2f3a54"/><stop offset="1" stop-color="#171e30"/>
+      </linearGradient>
+    </defs>
+    <rect width="1600" height="900" fill="url(#gn-sky)"/>
+    <g fill="#f4f1e6">${stars.join('')}</g>
+    <rect width="1600" height="900" fill="url(#gn-halo)"/>
+    <circle cx="1270" cy="120" r="46" fill="url(#gn-moon)"/>
+    <g fill="#b9b8b0" opacity=".35"><circle cx="1255" cy="108" r="9"/><circle cx="1288" cy="136" r="6"/><circle cx="1262" cy="140" r="4"/></g>
+    <g opacity=".75">${doricColumn(40, 92, 70, 'n', NIGHT_STONE)}${doricColumn(1560, 92, 70, 'n', NIGHT_STONE)}</g>
   </svg>`;
 }

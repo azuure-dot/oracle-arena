@@ -29,6 +29,7 @@ const MODE_KEYS: Record<ModeId, { name: TKey; desc: TKey; tag: TKey }> = {
 
 const THEME_NAMES: Record<ThemeId, TKey> = {
   greece: 'lobby.theme.greece',
+  night: 'lobby.theme.night',
   myth: 'lobby.theme.myth',
   esport: 'lobby.theme.esport',
 };

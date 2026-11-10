@@ -34,18 +34,23 @@ public (ou un abonnement payant pour un dépôt privé). Le suivi des déploieme
 
 Style « Grèce antique » (aussi sur les écrans de choix de la carte, réglages du Deathmatch, sélection
 du héros et scores) : marbre veiné, blanc et or, frises à méandres dorées, groupe en façade de temple
-(fronton, colonnes, marches), couronne d'olivier, numéros grecs. Polices Marcellus et EB Garamond.
+(fronton, colonnes, marches), couronne d'olivier, places numérotées de 1 à 6. Polices Marcellus et EB Garamond.
 La sélection du héros a le même fond de marbre que l'accueil.
+
+Deux thèmes au choix dans les Paramètres (« Thème », mémorisé) : **Jour** (par défaut, marbre au
+soleil) et **Nuit** (même temple au clair de lune : marbre sombre, panneaux bleu nuit, or, ciel
+étoilé et pleine lune). La Nuit ne change que les couleurs : `src/ui/themes/greece-night.css` se pose
+par-dessus `greece.css`, et son décor (ciel, lune, colonnes) est `greeceNightDecor` dans `ornaments.ts`.
 
 La feuille est `src/ui/themes/greece.css`, posée par `src/ui/theme.ts`. Ce qui change dans le HTML
 (icônes, décor, numéros des places, couronne) est dans `src/ui/lobby/kits.ts`, dessiné en SVG dans
 `src/ui/lobby/ornaments.ts`. Deux anciens styles restent dans le dépôt sans être chargés ni proposés :
 `myth.css` (mythologique, nuit étoilée) et `esport.css` (e-sport néon) ; `src/ui/theme.ts` explique
-comment en remettre un (il réapparaît alors dans les Paramètres).
+comment en remettre un (il s'ajoute alors au choix du thème).
 
 - **Onglets en haut** : Accueil (actif), Passe de combat et Boutique (verrouillés, badge « Bientôt »).
-  La roue dentée ouvre les **Paramètres** : langue FR/EN (tous les textes changent aussitôt), pseudo,
-  photo de profil et bannière (5 de chaque, une par héros).
+  La roue dentée ouvre les **Paramètres** : langue FR/EN (tous les textes changent aussitôt), thème
+  Jour / Nuit, pseudo, photo de profil et bannière (5 de chaque, une par héros).
 - **Groupe de 6 au centre** : la carte 1 est le joueur, chef du groupe (bannière, avatar, pseudo).
   Les places 2 à 6 ajoutent ou retirent un bot (héros tiré au sort). Pour l'instant ces bots sont
   décoratifs : la composition des équipes en partie ne change pas.
@@ -123,10 +128,10 @@ Commun à tous les modes :
 - **Soin passif** : après 5 s sans subir de dégâts, chaque héros récupère 15 PV/s (0,5 s sur l'eau de Kora, voir plus bas). Il ne se cumule pas avec les autres soins (aura d'Elio, zone de soin) : seul le plus fort des deux s'applique.
 - **Vitesse de marche** : celle de chaque héros est réduite de 30 % puis encore de 15 % (×0,6 au total,
   `MOVE_SPEED_SCALE` dans `src/heroes/Hero.ts`) ;
-  les compétences de déplacement sont ralenties d'autant (ruée de Keraun, course du trick, carapace ; distance de la Frappe fantôme).
+  les compétences de déplacement sont ralenties d'autant (ruée de Torsten, course du trick, carapace ; distance de la Frappe fantôme).
 - **Bots héros** : ils infligent 30 % de dégâts en moins que le joueur.
-- **5 héros** : Keraun (tank), Flux (dégâts), Kora (dégâts), Elio (soutien), Camellia (soutien).
-  Dans le code, trois gardent leur ancien nom (fichiers, classes, identifiants) : Keraun = `Thor`, Kora = `Turty`,
+- **5 héros** : Torsten (tank), Flux (dégâts), Kora (dégâts), Elio (soutien), Camellia (soutien).
+  Dans le code, trois gardent leur ancien nom (fichiers, classes, identifiants) : Torsten = `Thor`, Kora = `Turty`,
   Elio = `Skater`.
 - **Flux, le glitcheur** (leurres et faux-semblants : l'adversaire doit deviner le vrai du faux), 175 PV, petite boule.
   - Clic G : blasters jumeaux (20 balles/s, 40 munitions, 7,8 dégâts).
@@ -145,15 +150,15 @@ Commun à tous les modes :
   Rempart (tank) et Tempo (soutien) sont retirés de la sélection : ni le joueur ni les bots ne les jouent plus,
   mais leur code reste en place (`RETIRED_HEROES` dans `src/heroes/registry.ts` : déplacer une entrée dans
   `HEROES` pour le remettre).
-- **Keraun** : tank de mêlée au marteau de foudre (600 PV).
+- **Torsten** : tank de mêlée au marteau de foudre (600 PV).
   - Clic G : coup de marteau en arc (75 dégâts), de droite à gauche puis de gauche
     à droite au coup suivant. Marteau lancé : petits coups de poing (25 dégâts).
-  - Clic D maintenu : mur de foudre droit, face à Keraun (1200 PV, bloque les tirs ennemis, ralentit Keraun de 30 %).
+  - Clic D maintenu : mur de foudre droit, face à Torsten (1200 PV, bloque les tirs ennemis, ralentit Torsten de 30 %).
   - Espace : ruée en avant sur la distance de la Frappe fantôme de Flux, coup de marteau au bout ou sur le premier ennemi
     percuté (70 dégâts, gros recul). Marteau lancé : il fonce vers le marteau (même s'il revient), le ramasse
     et déclenche une décharge de 70 dégâts autour de lui. Recharge 6 s.
   - Maj : il lance son marteau vers le point visé (460 px max, arrêté par le premier mur). À l'impact, la foudre
-    tombe : 80 dégâts au centre → 40 au bord. Le marteau reste planté au sol. Maj à nouveau : il revient à Keraun
+    tombe : 80 dégâts au centre → 40 au bord. Le marteau reste planté au sol. Maj à nouveau : il revient à Torsten
     à travers les murs (45 dégâts aux ennemis traversés). Recharge 6 s à partir du moment où il l'a récupéré.
   - Démarche lourde : il se dandine (le corps se décale et penche vers le pied posé, rebondit et s'écrase
     un peu à chaque pas, poussière sous le pied ; le marteau balance au rythme des pas).
@@ -216,7 +221,7 @@ Commun à tous les modes :
   - la caméra est juste au-dessus des têtes : chaque héros est une boule (sa tête vue d'en haut) qu'on reconnaît
     à ses cheveux ou à son couvre-chef, avec deux mains rondes qui tiennent l'arme et l'animent (recul au tir,
     arcs de marteau, coups de poing, lancers) ; tout le personnage tourne avec la souris ;
-  - Keraun : cheveux bleus, barbe tressée, mains bandées, marteau
+  - Torsten : cheveux bleus, barbe tressée, mains bandées, marteau
     à runes lumineuses · Flux : casquette noire à l'envers (visière dans la nuque, liseré cyan), peau foncée, gants cyber à
     bracelets lumineux, deux blasters aux balles bleu cyan · Kora : afro bouclée et bandana orange, peau verte, carapace à autocollants sur le dos,
     pistolet à eau-bouteille ; en tortue, carapace ronde avec tête et pattes · Elio : bonnet violet à pompon (qui
@@ -227,7 +232,7 @@ Commun à tous les modes :
     blanches et mini-auréole dorée ;
   - liseré aux couleurs de l'équipe autour de la tête, ombre au sol décalée, lumière fixe à l'écran ;
   - **hitbox ronde** : la boule dessinée est exactement la hitbox (dégâts reçus et collisions avec les murs, qui font
-    glisser le long des parois et contourner les coins). Rayons : Keraun 23, Kora 15,
+    glisser le long des parois et contourner les coins). Rayons : Torsten 23, Kora 15,
     Elio 15, Camellia 14, Flux 13 (petite boule : fragile mais difficile à toucher) ; robots 17, tourelles 18 ;
   - les robots d'entraînement (dôme d'acier, visière aux couleurs de l'équipe) et les tourelles (socle boulonné,
     canon double) sont dessinés de la même façon, comme les projectiles (équipement d'Elio, bombe à eau) ;
@@ -244,7 +249,7 @@ Commun à tous les modes :
   - brouillard : le champ de vision ne lance des rayons que vers les coins de murs autour du joueur.
   - galerie : `galerie.html` (chaque héros au repos, en action, et une version animée qui tourne et marche ;
     robots, tourelles, projectiles) ;
-    croquis de référence dans `concept/` (Kora, Elio, Keraun).
+    croquis de référence dans `concept/` (Kora, Elio, Torsten).
 - **Ligne de vue** : les murs bloquent la vision (raycasting + brouillard de guerre).
   L'ombre des murs est calculée en quart de résolution puis agrandie avec lissage : bords doux sans filtre
   de flou, qui coûtait cher à chaque image sur une carte graphique intégrée.
@@ -285,8 +290,8 @@ scientifique installé dans un volcan. Elle est symétrique par rotation de 180�
     extérieurs sont fermés par des garde-corps.
 - **La lave** :
   - Impossible d'y entrer en marchant : on s'arrête au bord.
-  - Un recul (marteau et ruée de Keraun, bombe à eau, coup de planche, mêlée) peut y projeter un héros.
-    Il meurt dès que son centre passe au-dessus de la lave. Keraun, lui, s'arrête au bord pendant sa ruée.
+  - Un recul (marteau et ruée de Torsten, bombe à eau, coup de planche, mêlée) peut y projeter un héros.
+    Il meurt dès que son centre passe au-dessus de la lave. Torsten, lui, s'arrête au bord pendant sa ruée.
   - La chute est créditée au dernier héros qui a poussé la victime (dans les 4 s).
     Le fil des éliminations affiche « LAVE ».
 - **Formes arrondies** (fosses, arcs, cuves) : décrites telles qu'on les voit (`shapes` dans
@@ -343,7 +348,7 @@ Comportements par héros :
 | Héros   | Comportement |
 | ------- | ------------ |
 | Flux    | Distance moyenne, tire dès qu'il a la cible en vue. Esquive parfois en Frappe fantôme latérale (le clone file vers la cible et attire les tirs). Sous 45 % de PV : Permutation (+75 PV), sinon Frappe fantôme pour fuir. |
-| Keraun    | Fonce au corps à corps. Mur de foudre s'il est touché de loin. Lance son marteau à mi-distance, puis fonce le ramasser s'il est tombé près de la cible, sinon le rappelle. Ruée pour coller une cible un peu éloignée. |
+| Torsten   | Fonce au corps à corps. Mur de foudre s'il est touché de loin. Lance son marteau à mi-distance, puis fonce le ramasser s'il est tombé près de la cible, sinon le rappelle. Ruée pour coller une cible un peu éloignée. |
 | Camellia | Distance moyenne, tire en rafale ; les soins passent avant le tir : elle tourne sa visée vers un allié pour poser son Sanctuaire (ange gardien) sur le plus blessé (ou sur elle-même), lui lancer un petit ange, ou s'envoler jusqu'à lui s'il est loin (et pour fuir vers un allié quand elle est à bout). Garde une charge de petit ange pour soigner, sinon le lance sur l'ennemi qu'elle combat. Hors combat, soigne un allié blessé en lui tirant ses plumes dessus. |
 
 ## Commandes
@@ -355,7 +360,7 @@ Comportements par héros :
 | Clic gauche       | Arme principale                     |
 | Clic droit        | Compétence 1                        |
 | Espace / Maj      | Compétences 2 et 3                  |
-| Clic molette      | Mêlée rapide (sauf Keraun et Elio)  |
+| Clic molette      | Mêlée rapide (sauf Torsten et Elio)  |
 | R                 | Recharger                           |
 | H                 | Aide                                |
 | X                 | Afficher les hitbox                 |
@@ -382,7 +387,7 @@ Le mode tactile s'active au premier toucher et se coupe dès qu'on touche la sou
   - appui simple = lancer sur la cible automatique (ennemi le plus proche ; allié pour l'Envol de
     Camellia ; elle-même pour son Sanctuaire ; allié blessé sinon ennemi pour ses petits anges) ;
     glisser depuis le bouton = viser à la main (portée en pointillés, point visé), relâcher = lancer ;
-  - maintenu : mur de foudre de Keraun (glisser l'oriente), forme tortue de Kora ;
+  - maintenu : mur de foudre de Torsten (glisser l'oriente), forme tortue de Kora ;
   - immédiat : compétences qui choisissent seules (trick et aura d'Elio, Frappe fantôme dans le sens
     du déplacement et Permutation de Flux).
 - **Petits boutons** : mêlée rapide (👊), rechargement. En haut à gauche : quitter (✕) et, dans le

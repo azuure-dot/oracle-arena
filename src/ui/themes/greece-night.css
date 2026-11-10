@@ -1,0 +1,203 @@
+/* =====================================================================
+   THÈME « NUIT » : la Grèce antique au clair de lune.
+   Se pose APRÈS greece.css (src/ui/theme.ts concatène les deux) : mêmes formes, mêmes
+   ornements, seules les couleurs changent. Marbre sombre bleuté, panneaux bleu nuit,
+   or plus lumineux, texte clair ; le décor (ciel étoilé, lune, colonnes) vient du kit « night ».
+   ===================================================================== */
+
+:root {
+  --g-marble: #141b2a;
+  --g-marble-2: #1b2334;
+  --g-stone: #2a3346;
+  /* --g-ink sert au texte fort : il devient clair */
+  --g-ink: #f1ebdc;
+  --g-white: #182032;
+  --g-white-2: #212a3d;
+  --g-gold: #d4b05a;
+  --g-gold-hi: #ecd28c;
+  --g-gold-deep: #e2c06e;
+  --g-blue: #8fb4ee;
+  --g-text: #e8e2d3;
+  --g-muted: rgba(232, 226, 211, 0.66);
+  --g-line: rgba(232, 226, 211, 0.16);
+  --g-line-2: rgba(232, 226, 211, 0.38);
+  /* veines claires, très discrètes, sur marbre sombre */
+  --g-veins: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='700' height='700'%3E%3Cfilter id='m' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.0035 .009' numOctaves='5' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .62 0 0 0 0 .68 0 0 0 0 .8 1 0 0 0 0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='table' tableValues='0 0 0 0 .08 0 0 0 0'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='700' height='700' filter='url(%23m)'/%3E%3C/svg%3E");
+  color-scheme: dark;
+}
+
+/* ------------------------------------------------------------------ menu principal */
+
+.main-menu {
+  background:
+    var(--g-veins),
+    radial-gradient(ellipse 70% 60% at 50% 55%, transparent 35%, rgba(3, 6, 14, 0.5)),
+    var(--g-marble) !important;
+}
+.lb-tab.is-locked {
+  color: rgba(232, 226, 211, 0.36);
+}
+.lb-foot {
+  color: rgba(232, 226, 211, 0.5);
+}
+.lb-field input::placeholder {
+  color: rgba(232, 226, 211, 0.35);
+}
+.lb-modes,
+.lb-modal-body {
+  scrollbar-color: rgba(232, 226, 211, 0.3) transparent;
+}
+/* Fronton et marches : marbre au clair de lune */
+.lb-party-head {
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1000 60' preserveAspectRatio='none'%3E%3Cpath d='M2 59L500 2L998 59Z' fill='%231c2538' stroke='%23d4b05a' stroke-width='2' vector-effect='non-scaling-stroke'/%3E%3Cpath d='M60 55L500 12L940 55Z' fill='none' stroke='%23a88a46' stroke-width='1.2' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E") center bottom / 100% 100% no-repeat;
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.45));
+}
+.lb-main::after {
+  background:
+    linear-gradient(180deg, #3a4560, #232c40) center 0 / calc(100% - 28px) 7px no-repeat,
+    linear-gradient(180deg, #333d56, #1f2739) center 7px / calc(100% - 14px) 7px no-repeat,
+    linear-gradient(180deg, #2c3550, #1a2133) center 14px / 100% 7px no-repeat;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.5));
+}
+.lb-card {
+  box-shadow: 0 16px 28px -14px rgba(0, 0, 0, 0.8);
+}
+/* Numéro de place : clair sur la bannière */
+.lb-slot {
+  color: #f3ede1;
+}
+/* Place libre : colonne cannelée éclairée par la lune */
+.lb-card.is-empty {
+  background:
+    linear-gradient(90deg, rgba(0, 0, 0, 0.35), transparent 28%, transparent 64%, rgba(0, 0, 0, 0.4)),
+    repeating-linear-gradient(90deg, #232c40 0 2px, #3b4662 2px 8px, #313b54 8px 13px, #252e43 13px 16px);
+  box-shadow: 0 16px 28px -16px rgba(0, 0, 0, 0.75);
+}
+.lb-card.is-empty::before {
+  background: linear-gradient(180deg, #3d4864, #262f45);
+  box-shadow: 0 1px 0 var(--g-line-2), 0 3px 0 rgba(0, 0, 0, 0.25);
+}
+.lb-invite {
+  background: rgba(20, 27, 42, 0.9);
+}
+/* Boutons principaux : bleu nuit, cadre et lettres d'or */
+.lb-play-btn,
+.lb-launch {
+  background:
+    radial-gradient(ellipse 90% 70% at 30% 0%, rgba(236, 210, 140, 0.16), transparent 70%),
+    linear-gradient(180deg, #212b40, #161d2d);
+  box-shadow:
+    inset 0 0 0 2px var(--g-gold),
+    0 14px 26px -12px rgba(0, 0, 0, 0.8),
+    0 0 26px -8px rgba(212, 176, 90, 0.35);
+}
+.lb-scrim {
+  background: rgba(2, 4, 10, 0.5);
+}
+.lb-scrim--modal {
+  background: rgba(2, 4, 10, 0.62);
+}
+.lb-drawer,
+.lb-modal {
+  box-shadow:
+    inset 0 0 0 2px var(--g-white),
+    inset 0 0 0 5px var(--g-marble-2),
+    inset 0 0 0 6px var(--g-gold),
+    0 30px 60px -20px rgba(0, 0, 0, 0.8);
+}
+.lb-mode {
+  background: rgba(255, 255, 255, 0.04);
+}
+.lb-mode.is-selected {
+  background: rgba(212, 176, 90, 0.12);
+}
+.lb-note {
+  background: rgba(143, 180, 238, 0.08);
+}
+@media (hover: hover) and (pointer: fine) {
+  .lb-mode:not(.is-locked):hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+  .lb-mode.is-selected:hover {
+    background: rgba(212, 176, 90, 0.17);
+  }
+}
+
+/* ------------------------------------------------------------------ autres écrans */
+
+.screen:not(.main-menu):not(.select-screen) {
+  background:
+    var(--g-veins),
+    radial-gradient(ellipse 80% 70% at 50% 45%, rgba(27, 35, 52, 0.94), rgba(10, 14, 24, 0.98)),
+    rgba(20, 27, 42, 0.96);
+}
+.screen:not(.select-screen) .lang-toggle,
+.select-screen .lang-toggle {
+  background: rgba(20, 27, 42, 0.85);
+}
+.screen:not(.select-screen) .btn-primary kbd {
+  box-shadow: inset 0 0 0 1px rgba(212, 176, 90, 0.6);
+}
+.segmented button:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.score-table tr.team-head.team-blue td {
+  background: rgba(143, 180, 238, 0.14);
+  color: #9cc0f5;
+}
+.score-table tr.team-head.team-red td {
+  background: rgba(240, 120, 100, 0.13);
+  color: #f29a88;
+}
+.score-table tr.team-blue td:first-child {
+  box-shadow: inset 4px 0 0 #6f9fe6;
+}
+.score-table tr.team-red td:first-child {
+  box-shadow: inset 4px 0 0 #e0705c;
+}
+.screen-inner h1.result-title.lose {
+  color: #ee8a74 !important;
+}
+/* Sélection du héros : nuit étoilée, halo de lune derrière l'illustration */
+.select-screen {
+  background:
+    radial-gradient(1.5px 1.5px at 12% 14%, rgba(255, 255, 255, 0.8), transparent),
+    radial-gradient(1px 1px at 27% 8%, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(1.5px 1.5px at 44% 18%, rgba(255, 255, 255, 0.6), transparent),
+    radial-gradient(1px 1px at 63% 6%, rgba(255, 255, 255, 0.75), transparent),
+    radial-gradient(1.5px 1.5px at 81% 16%, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(1px 1px at 92% 9%, rgba(255, 255, 255, 0.6), transparent),
+    var(--g-veins),
+    linear-gradient(180deg, rgba(32, 48, 88, 0.85), rgba(20, 30, 56, 0.4) 35%, transparent 60%),
+    radial-gradient(ellipse 45% 60% at 50% 48%, rgba(150, 175, 230, 0.22), transparent 70%),
+    radial-gradient(ellipse 80% 70% at 50% 45%, transparent 40%, rgba(3, 6, 14, 0.55)),
+    var(--g-marble);
+}
+.select-screen .hs-art {
+  filter: drop-shadow(0 18px 24px rgba(0, 0, 0, 0.6));
+}
+.hs-abilities li {
+  background: rgba(24, 32, 50, 0.92);
+  box-shadow:
+    inset 0 0 0 1px rgba(212, 176, 90, 0.4),
+    0 6px 14px -10px rgba(0, 0, 0, 0.6);
+}
+.hs-taken {
+  background: rgba(20, 27, 42, 0.92);
+}
+.hs-group.role-tank .hs-group-head {
+  color: #8fb4ee;
+}
+.hs-group.role-damage .hs-group-head {
+  color: #f0907c;
+}
+.hs-ready {
+  background:
+    radial-gradient(ellipse 90% 70% at 30% 0%, rgba(236, 210, 140, 0.16), transparent 70%),
+    linear-gradient(180deg, #212b40, #161d2d);
+  box-shadow:
+    inset 0 0 0 2px var(--g-gold),
+    inset 0 0 0 5px var(--g-white),
+    inset 0 0 0 6px rgba(212, 176, 90, 0.7),
+    0 14px 26px -12px rgba(0, 0, 0, 0.8);
+}

@@ -37,13 +37,13 @@ export interface HeroEntry {
 
 /**
  * Héros jouables, triés par rôle (Tank → Dégâts → Soutien). Touches 1/2/3 = cet ordre.
- * Noms affichés et noms dans le code : Keraun = Thor, Kora = Turty, Elio = Skater (fichiers,
+ * Noms affichés et noms dans le code : Torsten = Thor, Kora = Turty, Elio = Skater (fichiers,
  * classes, identifiants et clés de texte gardent l'ancien nom).
  */
 export const HEROES: HeroEntry[] = [
   {
     id: 'thor',
-    name: 'Keraun',
+    name: 'Torsten',
     role: 'tank',
     hp: 600,
     color: '#5ab4ff',

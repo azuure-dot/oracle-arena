@@ -1,13 +1,13 @@
 import type { ThemeId } from '../theme';
 import {
   BOLT,
-  GREEK_NUMERALS,
   HELMET,
   LAUREL_ICON,
   MYTH_MODE_ICONS,
   OLIVE_ICON,
   ROMAN,
   greeceDecor,
+  greeceNightDecor,
   laurelWreath,
   oliveWreath,
   skySvg,
@@ -54,9 +54,17 @@ export const KITS: Record<ThemeId, LobbyKit> = {
   greece: {
     mark: HELMET,
     leaderIcon: OLIVE_ICON,
-    slot: (i) => GREEK_NUMERALS[i],
+    slot: (i) => String(i + 1),
     modeIcons: MYTH_MODE_ICONS,
     decor: once(greeceDecor),
+    wreath: oliveWreath,
+  },
+  night: {
+    mark: HELMET,
+    leaderIcon: OLIVE_ICON,
+    slot: (i) => String(i + 1),
+    modeIcons: MYTH_MODE_ICONS,
+    decor: once(greeceNightDecor),
     wreath: oliveWreath,
   },
   myth: {

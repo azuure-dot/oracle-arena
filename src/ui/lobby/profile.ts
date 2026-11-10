@@ -31,8 +31,8 @@ type Stored = Omit<ProfileState, 'lang'>;
 
 const DEFAULTS: Stored = {
   name: '',
-  avatar: 'keraun',
-  banner: 'keraun',
+  avatar: 'torsten',
+  banner: 'torsten',
   mode: 'quickplay',
   party: [null, null, null, null, null],
 };
@@ -41,9 +41,13 @@ function load(): Stored {
   try {
     const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null') as Partial<Stored> | null;
     if (!raw) return { ...DEFAULTS, party: [...DEFAULTS.party] };
+    // Ancien nom de Torsten (avant le renommage) : les profils enregistrés le gardent.
+    const renamed = (v: unknown): unknown => (v === 'keraun' ? 'torsten' : v);
+    if (raw.avatar) raw.avatar = renamed(raw.avatar) as ArtId;
+    if (raw.banner) raw.banner = renamed(raw.banner) as ArtId;
     const isArt = (v: unknown): v is ArtId => ART_IDS.includes(v as ArtId);
     const party = Array.from({ length: PARTY_SIZE - 1 }, (_, i) => {
-      const v = raw.party?.[i];
+      const v = renamed(raw.party?.[i]);
       return isArt(v) ? v : null;
     });
     return {

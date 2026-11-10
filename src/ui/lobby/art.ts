@@ -3,20 +3,20 @@
  * Un thème par héros, d'après leurs couleurs :
  * - Elio : bonnet violet, lignes urbaines ; bannière street-art avec traces de roues de skate.
  * - Kora : lunettes de protection turquoise, éclaboussures ; bannière taches d'eau azur et orange.
- * - Keraun : marteau runique électrique ; bannière éclairs et runes sur acier.
+ * - Torsten : marteau runique électrique ; bannière éclairs et runes sur acier.
  * - Camellia : auréole dorée et ailes sur rose crevette ; bannière plumes or et blanches.
  * - Flux : viseur cybernétique et circuits ; bannière grille « glitch » et lignes de code.
  * `uid` rend uniques les identifiants (dégradés, filtres) quand plusieurs SVG cohabitent.
  */
 
-export type ArtId = 'elio' | 'kora' | 'keraun' | 'camellia' | 'flux';
-export const ART_IDS: ArtId[] = ['elio', 'kora', 'keraun', 'camellia', 'flux'];
+export type ArtId = 'elio' | 'kora' | 'torsten' | 'camellia' | 'flux';
+export const ART_IDS: ArtId[] = ['elio', 'kora', 'torsten', 'camellia', 'flux'];
 
 /** Nom affiché et couleur d'accent de chaque thème. */
 export const ART_META: Record<ArtId, { name: string; accent: string }> = {
   elio: { name: 'Elio', accent: '#b07cff' },
   kora: { name: 'Kora', accent: '#3ef2d0' },
-  keraun: { name: 'Keraun', accent: '#5ad0ff' },
+  torsten: { name: 'Torsten', accent: '#5ad0ff' },
   camellia: { name: 'Camellia', accent: '#ffb3b9' },
   flux: { name: 'Flux', accent: '#3ef2ff' },
 };
@@ -102,7 +102,7 @@ const AVATARS: Record<ArtId, (u: string) => string> = {
       <rect x="1.5" y="1.5" width="97" height="97" fill="none" stroke="#bff9ff" stroke-opacity=".5" stroke-width="1.5"/>`;
   },
 
-  keraun: (u) => `
+  torsten: (u) => `
       <defs>
         <radialGradient id="g${u}" cx=".5" cy=".45" r=".75"><stop offset="0" stop-color="#1d3550"/><stop offset="1" stop-color="#070b12"/></radialGradient>
         <filter id="b${u}" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3.2"/></filter>
@@ -249,7 +249,7 @@ const BANNERS: Record<ArtId, (u: string) => string> = {
       <path d="M0 140 C 40 120 80 160 120 140 C 160 120 180 150 200 140" stroke="#c9fbff" stroke-width="2.5" fill="none" opacity=".5"/>`;
   },
 
-  keraun: (u) => {
+  torsten: (u) => {
     const r = rng(31);
     const bolt = (x: number, y: number, len: number) => {
       let d = `M${f(x)} ${f(y)}`;

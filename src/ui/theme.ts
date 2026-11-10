@@ -1,21 +1,23 @@
 import greeceCss from './themes/greece.css?inline';
+import nightCss from './themes/greece-night.css?inline';
 
 /**
- * Style d'interface des menus. Seul « greece » (Grèce antique : marbre, blanc et or, temple)
- * est proposé et chargé.
+ * Thème des menus, au choix dans les Paramètres (« Thème » : Jour / Nuit) et mémorisé :
+ * - « greece » (Jour) : Grèce antique au soleil — marbre, blanc et or, temple ; par défaut ;
+ * - « night » (Nuit) : la même Grèce antique au clair de lune — marbre sombre, bleu nuit, or,
+ *   ciel étoilé et lune ; c'est greece.css + greece-night.css (les couleurs seulement).
  *
  * Deux autres styles complets restent dans le dépôt, hors du jeu (ni chargés, ni proposés) :
  * - src/ui/themes/myth.css : mythologique (nuit étoilée, or, constellations ; police Cinzel) ;
  * - src/ui/themes/esport.css : e-sport (sombre, néon, coins biseautés ; police Chakra Petch).
  * Pour en remettre un : l'importer ici en `?inline`, l'ajouter à CSS et à THEMES, et réinstaller
  * sa police (`@fontsource/cinzel` ou `@fontsource/chakra-petch`, importée dans src/main.ts).
- * Le choix apparaît alors tout seul dans les Paramètres (« Style de l'interface ») dès qu'il y a
- * plus d'un style, et il est mémorisé.
+ * Il apparaît alors tout seul dans le choix « Thème » des Paramètres (mémorisé).
  */
 
-export type ThemeId = 'greece' | 'myth' | 'esport';
+export type ThemeId = 'greece' | 'night' | 'myth' | 'esport';
 
-const CSS: Partial<Record<ThemeId, string>> = { greece: greeceCss };
+const CSS: Partial<Record<ThemeId, string>> = { greece: greeceCss, night: `${greeceCss}\n${nightCss}` };
 /** Styles proposés au joueur (le premier est le style par défaut). */
 export const THEMES = Object.keys(CSS) as ThemeId[];
 

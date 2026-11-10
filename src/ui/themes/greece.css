@@ -347,6 +347,7 @@
   z-index: 2;
   color: var(--g-marble-2);
   font: 600 17px/1 var(--g-body);
+  font-variant-numeric: lining-nums;
   text-align: center;
   text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
 }
