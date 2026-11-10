@@ -129,7 +129,7 @@
   background:
     var(--g-veins),
     radial-gradient(ellipse 80% 70% at 50% 45%, rgba(27, 35, 52, 0.94), rgba(10, 14, 24, 0.98)),
-    rgba(20, 27, 42, 0.96);
+    var(--g-marble);
 }
 .screen:not(.select-screen) .lang-toggle,
 .select-screen .lang-toggle {

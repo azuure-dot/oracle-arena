@@ -2,6 +2,7 @@ import { LANGS, t, type TKey } from '../../i18n';
 import { ART_IDS, ART_META, avatarSvg, bannerSvg, type ArtId } from '../lobby/art';
 import { KITS } from '../lobby/kits';
 import { MODES, PARTY_SIZE, PLAYABLE, profile, type ModeId } from '../lobby/profile';
+import { morph } from '../morph';
 import { THEMES, getTheme, onThemeChange, setTheme, type ThemeId } from '../theme';
 import { Screen, digitOf } from './Screen';
 
@@ -44,6 +45,8 @@ export class MainMenu extends Screen {
   private settingsOpen = false;
   private drawerOpen = false;
   private enterTimer = 0;
+  /** L'entrée animée n'a lieu qu'au premier affichage (pas à chaque retour au menu). */
+  private entered = false;
   /** Un panneau vient de s'ouvrir : le focus va à son premier élément utile. */
   private justOpened = false;
 
@@ -92,17 +95,23 @@ export class MainMenu extends Screen {
 
   override show(): void {
     this.settingsOpen = this.drawerOpen = false;
-    // Entrée une seule fois à l'affichage (pas à chaque mise à jour de l'état).
-    this.root.classList.add('is-entering');
-    window.clearTimeout(this.enterTimer);
-    this.enterTimer = window.setTimeout(() => this.root.classList.remove('is-entering'), 1300);
+    // Entrée animée au tout premier affichage seulement : revenir au menu est instantané.
+    if (!this.entered) {
+      this.entered = true;
+      this.root.classList.add('is-entering');
+      window.clearTimeout(this.enterTimer);
+      this.enterTimer = window.setTimeout(() => this.root.classList.remove('is-entering'), 1300);
+    }
     super.show();
   }
 
-  /** Rendu sans la bascule de langue générique (elle est dans les paramètres) ; garde le focus. */
+  /**
+   * Rendu sans la bascule de langue générique (elle est dans les paramètres). Mise à jour en place :
+   * un clic (mode, avatar, bot…) ne modifie que ce qui change, sans rejouer les apparitions.
+   */
   protected override render(): void {
     const focusKey = (document.activeElement as HTMLElement | null)?.dataset?.key;
-    this.root.innerHTML = `<div class="screen-inner">${this.html()}</div>`;
+    morph(this.root, `<div class="screen-inner">${this.html()}</div>`);
     const opened = this.justOpened
       ? this.root.querySelector<HTMLElement>('.lb-modal [data-autofocus], .lb-drawer [data-autofocus], .lb-drawer .lb-launch')
       : null;

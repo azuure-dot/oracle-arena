@@ -59,7 +59,15 @@ comment en remettre un (il s'ajoute alors au choix du thème).
   `1`-`3` choisissent un mode, `Entrée` lance, `Échap` ferme.
 - **Visuels** : avatars et bannières sont des SVG générés dans `src/ui/lobby/art.ts`.
 - **État** : `src/ui/lobby/profile.ts` (pseudo, avatar, bannière, mode, groupe), mémorisé dans le
-  navigateur ; le menu se redessine à chaque changement.
+  navigateur ; le menu se met à jour à chaque changement.
+- **Navigation rapide** :
+  - les écrans se mettent à jour en place (`src/ui/morph.ts`) : un clic ne modifie que ce qui
+    change, sans rejouer les apparitions ni perdre le focus ;
+  - l'entrée animée de l'accueil n'a lieu qu'au premier affichage ;
+  - les menus sont opaques (`--screen-covers: 1` dans le thème) : le jeu ne dessine plus rien
+    derrière eux ;
+  - les veines du marbre sont converties une fois en image au démarrage (`src/ui/theme.ts`) ;
+  - les vignettes et illustrations des héros sont préparées pendant que le joueur est sur l'accueil.
 
 ## Modes de jeu
 

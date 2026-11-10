@@ -49,6 +49,43 @@ export function applyTheme(): void {
   }
   el.textContent = CSS[current] ?? '';
   document.documentElement.dataset.theme = current;
+  void bakeVeins(current);
+}
+
+/** Veines du marbre déjà converties en image, par source SVG. */
+const bakedVeins = new Map<string, string>();
+
+/**
+ * Les veines du marbre (`--g-veins`) sont un SVG à filtre de bruit : joli mais coûteux à
+ * redessiner à chaque fois qu'un écran s'affiche. On le dessine UNE fois dans une image (PNG
+ * en mémoire) que le navigateur affiche ensuite comme une simple texture. En cas d'échec, le
+ * SVG d'origine reste utilisé : seul le coût change, pas l'apparence.
+ */
+async function bakeVeins(theme: ThemeId): Promise<void> {
+  const root = document.documentElement;
+  root.style.removeProperty('--g-veins');
+  const raw = getComputedStyle(root).getPropertyValue('--g-veins').trim();
+  const src = /^url\(["']?(data:image\/svg\+xml,.+?)["']?\)$/s.exec(raw)?.[1];
+  if (!src) return;
+  try {
+    let url = bakedVeins.get(src);
+    if (!url) {
+      const img = new Image();
+      img.src = src;
+      await img.decode();
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth || 700;
+      canvas.height = img.naturalHeight || 700;
+      canvas.getContext('2d')?.drawImage(img, 0, 0);
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve));
+      if (!blob) return;
+      url = URL.createObjectURL(blob);
+      bakedVeins.set(src, url);
+    }
+    if (theme === current) root.style.setProperty('--g-veins', `url("${url}")`);
+  } catch {
+    /* image non convertible : on garde le SVG */
+  }
 }
 
 export function setTheme(id: ThemeId): void {

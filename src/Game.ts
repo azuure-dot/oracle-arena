@@ -292,6 +292,8 @@ export class Game {
       }
       this.camera.centerOn(mode.player.x, mode.player.y); // caméra verrouillée sur le joueur
     } else if (!mode) {
+      // Menu opaque par-dessus : le décor animé ne se voit pas, inutile de le faire vivre.
+      if (this.menuCoversGame()) return;
       const w = this.backdropWorld();
       w.update(dt);
       // Lent travelling sur la carte, derrière les menus.
@@ -302,7 +304,14 @@ export class Game {
     this.camera.update(dt);
   }
 
+  /** Un menu affiché cache entièrement le jeu (fond opaque du thème). */
+  private menuCoversGame(): boolean {
+    return this.screens.some((s) => s.covers);
+  }
+
   draw(): void {
+    // Menu opaque par-dessus : rien à dessiner (le canvas garde sa dernière image, invisible).
+    if (this.menuCoversGame()) return;
     const ctx = this.ctx;
     const dpr = this.dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);

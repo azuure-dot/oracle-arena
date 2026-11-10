@@ -60,7 +60,7 @@ export interface SwapContext {
 
 /**
  * Sélection du héros, façon Overwatch / Valorant :
- * - au fond, la carte de la partie, floutée (dessinée par le jeu derrière l'écran) ;
+ * - au fond, le marbre du thème (comme l'accueil et le choix de la carte) ;
  * - au centre, la grande illustration du héros sélectionné, son nom, son rôle, ses compétences ;
  * - en bas, la grille des héros (vignettes = le héros vu en jeu), regroupés par rôle, et le
  *   bouton « Prêt » qui lance la partie.
@@ -85,6 +85,17 @@ export class SelectScreen extends Screen {
     super(parent, 'select-screen');
     this.ordered = ROLE_ORDER.flatMap((role) => heroes.filter((h) => h.role === role));
     this.selected = this.ordered[0];
+    // Préparation en avance (pendant que le joueur est sur l'accueil) : vignettes dessinées et
+    // illustrations décodées, pour que la première ouverture de l'écran soit immédiate.
+    const idle = window.requestIdleCallback ?? ((cb: () => void) => window.setTimeout(cb, 400));
+    idle(() => {
+      for (const h of this.ordered) tileArt(h);
+      for (const src of Object.values(ART)) {
+        const img = new Image();
+        img.src = src;
+        img.decode().catch(() => {});
+      }
+    });
     this.root.addEventListener('dblclick', (e) => {
       const el = (e.target as HTMLElement).closest<HTMLElement>('[data-hero]');
       if (el) this.ready();
@@ -132,7 +143,7 @@ export class SelectScreen extends Screen {
       </header>
 
       <section class="hs-stage" style="--hero-color:${h.color}">
-        <div class="hs-info">
+        <div class="hs-info" data-morph-key="${h.id}">
           <div class="hs-role role-${h.role}">
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">${ROLE_ICONS[h.role]}</svg>
             ${t(ROLE_KEYS[h.role])} · ${h.hp} ${t('unit.hp')}
@@ -142,9 +153,9 @@ export class SelectScreen extends Screen {
         </div>
         <div class="hs-art-wrap">
           <div class="hs-art-glow"></div>
-          ${ART[h.id] ? `<img class="hs-art" src="${ART[h.id]}" alt="${h.name}" draggable="false">` : ''}
+          ${ART[h.id] ? `<img class="hs-art" data-morph-key="${h.id}" src="${ART[h.id]}" alt="${h.name}" draggable="false">` : ''}
         </div>
-        <ul class="hs-abilities">
+        <ul class="hs-abilities" data-morph-key="${h.id}">
           ${h.abilities
             .map(
               (a) =>
