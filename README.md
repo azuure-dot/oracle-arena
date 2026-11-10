@@ -65,7 +65,7 @@ instances, plus tard. Architecture, protocole, marche à suivre et reste à fair
 ## Version en ligne (GitHub Pages)
 
 À chaque push sur `main`, le workflow `.github/workflows/deploy.yml` compile le jeu et le publie sur
-https://azuure-dot.github.io/web-hero-shooter/ (galerie : `…/galerie.html`). Le build utilise des chemins
+https://azuure-dot.github.io/oracle-arena/ (galerie : `…/galerie.html`). Le build utilise des chemins
 relatifs (`base: './'` dans `vite.config.ts`), il marche donc dans ce sous-dossier.
 
 À faire une fois sur GitHub : Settings → Pages → Source : **GitHub Actions**. GitHub Pages demande un dépôt
