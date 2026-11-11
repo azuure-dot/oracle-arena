@@ -414,11 +414,14 @@ Comportements par héros :
 | Espace / Maj      | Compétences 2 et 3                  |
 | Clic molette      | Mêlée rapide (sauf Torsten et Elio)  |
 | R                 | Recharger                           |
-| H                 | Aide                                |
+| Tab (maintenu)    | Tableau des scores (translucide, avec le ping en ligne) |
+| H                 | Changer de héros (champ de tir ; Partie rapide, dans ton spawn) |
 | X                 | Afficher les hitbox                 |
 | B / T             | Tourelles on/off · reset des stats (champ de tir) |
-| C                 | Changer de héros (Contrôle, dans ton spawn) |
-| Échap             | Champ de tir : sélection du héros · autres modes : quitter la partie |
+| Échap             | Menu : Revenir au jeu · Options (les Paramètres de l'accueil) · Quitter la partie |
+
+L'aide des touches (en haut à gauche) ne s'affiche qu'au champ de tir. Le menu Échap fige la partie
+en solo ; en ligne, elle continue pendant qu'il est ouvert.
 
 Dans les menus : touches 1, 2, 3… pour choisir, Entrée pour valider, Échap pour revenir (sélection du héros :
 les touches sélectionnent, Entrée lance).
@@ -442,7 +445,8 @@ Le mode tactile s'active au premier toucher et se coupe dès qu'on touche la sou
   - maintenu : mur de foudre de Torsten (glisser l'oriente), forme tortue de Kora ;
   - immédiat : compétences qui choisissent seules (trick et aura d'Elio, Frappe fantôme dans le sens
     du déplacement et Permutation de Flux).
-- **Petits boutons** : mêlée rapide (👊), rechargement. En haut à gauche : quitter (✕) et, dans le
+- **Petits boutons** : mêlée rapide (👊), rechargement. En haut à gauche : menu (☰), tableau des
+  scores (★, appui pour l'afficher ou le masquer), changer de héros (⇄) au champ de tir et, dans le
   spawn en Partie rapide, changer de héros (⇄). Les PV passent en haut à gauche.
 - Sans visée récente, le héros regarde là où il va. Plein écran au premier toucher si le navigateur
   le permet ; menus compacts sur les écrans peu hauts.

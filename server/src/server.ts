@@ -130,6 +130,11 @@ io.on('connection', (socket: Socket) => {
   socket.on(EVENTS.SET_READY, (ready: boolean, ack: unknown) => handle(ack, () => rooms.setReady(playerId, ready)));
   socket.on(EVENTS.START_GAME, (ack: unknown) => handle(ack, () => rooms.start(playerId)));
 
+  socket.on(EVENTS.PING, (last: unknown, ack: unknown) => {
+    if (typeof last === 'number' && Number.isFinite(last)) rooms.setPing(playerId, Math.min(9999, Math.max(0, Math.round(last))));
+    if (typeof ack === 'function') ack();
+  });
+
   socket.on(EVENTS.PLAYER_INPUT, (raw: unknown) => {
     if (!canInput()) return;
     const input = sanitizeInput(raw);

@@ -20,6 +20,11 @@ export const EVENTS = {
   START_GAME: 'start_game',
   /** Commandes du joueur, envoyées à chaque image pendant la partie. */
   PLAYER_INPUT: 'player_input',
+  /**
+   * Mesure du ping, toutes les 2 s : le serveur répond aussitôt (accusé de réception) ; le client
+   * joint son dernier ping mesuré (ms), que le serveur partage avec tout le salon (GameTick.pings).
+   */
+  PING: 'net_ping',
 
   // serveur → client
   /** État complet du salon (joueurs, réglages, hôte) à chaque changement. */
@@ -183,6 +188,8 @@ export interface GameTick {
   /** Tremblements : [force, x, y, auteur]. */
   shakes: [number, number, number, string | null][];
   hits: HitEvent[];
+  /** Dernier ping mesuré (ms) de chaque joueur (pas les bots), pour le tableau des scores. */
+  pings?: Record<string, number>;
   match: {
     countdown: number;
     remaining: number;

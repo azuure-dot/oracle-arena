@@ -7,6 +7,7 @@ import type { HeroEntry } from '../heroes/registry';
 import type { Team } from '../entities/Team';
 import { t } from '../i18n';
 import { drawKillBanner, drawKillFeed, type FeedName } from '../ui/matchHud';
+import type { MetaButton } from '../core/Touch';
 import { GameMode, type ScreenInfo } from './GameMode';
 
 export interface Participant {
@@ -86,6 +87,11 @@ export abstract class MatchMode extends GameMode {
 
   displayName(p: Participant): string {
     return p.isPlayer ? t('score.you') : p.name;
+  }
+
+  /** Bouton tactile du tableau des scores (Tab au clavier). */
+  protected override touchMeta(): MetaButton[] {
+    return [...super.touchMeta(), { code: 'Tab', label: '★' }];
   }
 
   /** Couleur du nom dans le fil des éliminations. */

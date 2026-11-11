@@ -1,6 +1,7 @@
 import { PLAYER_SPAWN } from '../config';
 import type { Camera } from '../core/Camera';
 import type { Input } from '../core/Input';
+import type { MetaButton } from '../core/Touch';
 import type { Vec2 } from '../core/math';
 import { Bot, type BotOptions } from '../entities/Bot';
 import { ALLY, ENEMY, type Team } from '../entities/Team';
@@ -55,11 +56,18 @@ export class PracticeMode extends GameMode {
     this.world.player = this.player;
     this.world.heroes = [this.player];
     this.world.bots = createRangeBots();
+    this.hud.showHelp = true; // l'aide des touches ne s'affiche qu'ici
   }
 
   protected override handleKeys(): void {
+    if (this.input.wasPressed('KeyH')) this.heroSelectRequested = true; // changer de héros
     if (this.input.wasPressed('KeyT')) this.stats.reset();
     if (this.input.wasPressed('KeyB')) this.world.turretsEnabled = !this.world.turretsEnabled;
+  }
+
+  /** Bouton tactile « changer de héros » (touche H). */
+  protected override touchMeta(): MetaButton[] {
+    return [...super.touchMeta(), { code: 'KeyH', label: '⇄' }];
   }
 
   /** Pas de salle de spawn : tout est figé pendant le compte à rebours. */

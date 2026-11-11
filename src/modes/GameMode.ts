@@ -54,8 +54,12 @@ export abstract class GameMode {
   uiOpen = false;
   /** Touche X : affiche les hitbox. */
   showHitboxes = false;
-  /** Échap pressé : le jeu quitte le mode. */
+  /** « Quitter la partie » (menu Échap) : le jeu quitte le mode. */
   exitRequested = false;
+  /** Échap pressé : le jeu ouvre le menu (Revenir au jeu, Options, Quitter la partie). */
+  pauseRequested = false;
+  /** H au champ de tir : retour à la sélection du héros. */
+  heroSelectRequested = false;
   /** Temps restant avant le début de la partie. */
   countdown = START_COUNTDOWN;
 
@@ -77,6 +81,8 @@ export abstract class GameMode {
     this.player.controls = this.playerControls;
     this.player.isLocalPlayer = true;
     this.player.outline = COLORS.ally;
+    // Aide des touches (en haut à gauche) : seulement au champ de tir (voir PracticeMode).
+    this.hud.showHelp = false;
   }
 
   /** La partie est terminée (fin du chrono en Deathmatch). */
@@ -98,15 +104,14 @@ export abstract class GameMode {
     this.hud.update(dt);
   }
 
-  /** Échap (quitter), H (aide), X (hitbox) et touches du mode. false : la partie est quittée. */
+  /** Échap (menu), X (hitbox) et touches du mode. false : le menu s'ouvre, l'image s'arrête là. */
   protected handleMetaKeys(): boolean {
     const input = this.input;
     this.player.controls = this.uiOpen ? NO_CONTROLS : this.playerControls;
     if (!this.uiOpen && input.wasPressed('Escape')) {
-      this.exitRequested = true;
+      this.pauseRequested = true;
       return false;
     }
-    if (input.wasPressed('KeyH')) this.hud.showHelp = !this.hud.showHelp;
     if (input.wasPressed('KeyX')) this.showHitboxes = !this.showHitboxes;
     this.handleKeys();
     return true;
@@ -149,9 +154,9 @@ export abstract class GameMode {
 
   /** Touches propres au mode. */
   protected handleKeys(): void {}
-  /** Boutons tactiles en haut à gauche (touches simulées) : quitter, et ceux propres au mode. */
+  /** Boutons tactiles en haut à gauche (touches simulées) : menu, et ceux propres au mode. */
   protected touchMeta(): MetaButton[] {
-    return [{ code: 'Escape', label: '✕' }];
+    return [{ code: 'Escape', label: '☰' }];
   }
   /** Avant la simulation (ex. IA des bots). */
   protected beforeWorld(_dt: number): void {}

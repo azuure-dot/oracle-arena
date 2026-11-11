@@ -8,6 +8,8 @@ import type { Hero } from '../heroes/Hero';
 import { HEROES } from '../heroes/registry';
 import { DeathmatchMode } from '../modes/DeathmatchMode';
 import type { Participant } from '../modes/MatchMode';
+import { t } from '../i18n';
+import type { MatchResult } from '../ui/screens/Scoreboard';
 import {
   ACTION_BITS,
   type GameOver,
@@ -128,6 +130,8 @@ export class NetMatch extends DeathmatchMode {
   private seq = 0;
   private pending: PlayerInput[] = [];
   private over = false;
+  /** Dernier ping annoncé de chaque joueur (ms), d'après le serveur. */
+  private pings: Record<string, number> = {};
   /** Mesures (débogage, console : __game.mode.netStats) : écart corrigé à chaque instantané (px). */
   readonly netStats = { corrections: [] as number[], starved: 0, frames: 0 };
   private readonly unsubscribe: (() => void)[] = [];
@@ -233,7 +237,11 @@ export class NetMatch extends DeathmatchMode {
       if (c.held(a)) held |= 1 << i;
       if (c.pressed(a)) pressed |= 1 << i;
     });
-    const input: PlayerInput = { seq: ++this.seq, dt, mx: c.move.x, my: c.move.y, ax: c.aimX, ay: c.aimY, held, pressed };
+    // Menu ouvert (Échap) : le héros s'arrête et ne tire plus (la partie continue pour les autres).
+    const idle = this.uiOpen;
+    const input: PlayerInput = idle
+      ? { seq: ++this.seq, dt, mx: 0, my: 0, ax: c.aimX, ay: c.aimY, held: 0, pressed: 0 }
+      : { seq: ++this.seq, dt, mx: c.move.x, my: c.move.y, ax: c.aimX, ay: c.aimY, held, pressed };
     this.net.sendInput(input);
     this.pending.push(input);
     if (this.pending.length > MAX_PENDING) this.pending.shift();
@@ -245,6 +253,7 @@ export class NetMatch extends DeathmatchMode {
   private receive(t: GameTick): void {
     if (t.t < this.latestT) return;
     this.latestT = t.t;
+    if (t.pings) this.pings = t.pings;
     const sample = t.t - performance.now() / 1000;
     if (this.clockOffset === null || sample > this.clockOffset) this.clockOffset = sample;
     else this.clockOffset += (sample - this.clockOffset) * 0.01; // lente dérive (latence qui augmente)
@@ -455,6 +464,24 @@ export class NetMatch extends DeathmatchMode {
     this.setScores(t.match.scores);
     this.current = t;
     this.rebuildLists();
+  }
+
+  /** Classement du Deathmatch (solo), plus le ping de chacun pour le tableau en jeu (Tab). */
+  override result(): MatchResult {
+    const r = super.result();
+    // Les lignes suivent l'ordre du classement (voir DeathmatchMode.result).
+    const order = this.ranking();
+    r.rows.forEach((row, i) => (row.ping = this.pingLabel(order[i])));
+    return r;
+  }
+
+  private pingLabel(p: Participant | undefined): string {
+    if (!p) return '';
+    if (p.isPlayer) return this.net.ping === null ? '—' : `${Math.round(this.net.ping)} ms`;
+    const id = [...this.participantById].find(([, q]) => q === p)?.[0];
+    if (this.info.participants.find((q) => q.id === id)?.isBot) return t('scores.bot');
+    const ms = id ? this.pings[id] : undefined;
+    return ms === undefined ? '—' : `${ms} ms`;
   }
 
   private setScores(scores: Record<string, [number, number]>): void {

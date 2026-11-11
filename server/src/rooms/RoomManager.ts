@@ -215,6 +215,11 @@ export class RoomManager {
   }
 
   /** Commandes d'un joueur en partie (ignorées hors partie). */
+  /** Ping mesuré par un joueur (ms), partagé avec son salon pendant la partie. */
+  setPing(playerId: string, ms: number): void {
+    this.roomOfPlayer(playerId)?.game?.setPing(playerId, ms);
+  }
+
   input(playerId: string, input: Parameters<GameLoop['input']>[1]): void {
     this.roomOfPlayer(playerId)?.game?.input(playerId, input);
   }

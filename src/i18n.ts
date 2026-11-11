@@ -138,7 +138,7 @@ const fr = {
   'help.move': 'ZQSD / WASD : se déplacer · Souris : viser',
   'help.line': '{key} : {name}',
   'help.misc1': 'R : recharger · B : tourelles on/off',
-  'help.misc2': 'T : reset stats · H : aide · Échap : héros',
+  'help.misc2': 'T : reset stats · H : changer de héros · Échap : menu',
   'help.hitbox': 'X : afficher les hitbox',
 
   // Monde
@@ -214,7 +214,7 @@ const fr = {
   'feed.lava': 'LAVE',
   'hud.dm.elimination': 'ÉLIMINATION',
   'help.title.dm': '{hero} — DEATHMATCH',
-  'help.dm.misc': 'H : aide · Échap : quitter la partie',
+  'help.dm.misc': 'Tab : scores · Échap : menu',
 
   // Tableau des scores
   'score.title': 'Fin du match',
@@ -261,10 +261,10 @@ const fr = {
   'control.objective': 'OBJECTIF',
   'control.capturedBlue': 'Point capturé par l’équipe bleue',
   'control.capturedRed': 'Point capturé par l’équipe rouge',
-  'control.swapHint': 'C : changer de héros',
+  'control.swapHint': 'H : changer de héros',
   'help.title.control': '{hero} — CONTRÔLE',
-  'help.control.misc': 'C (au spawn) : changer de héros',
-  'help.control.misc2': 'H : aide · Échap : quitter la partie',
+  'help.control.misc': 'H (au spawn) : changer de héros',
+  'help.control.misc2': 'Tab : scores · Échap : menu',
   'score.rounds': 'Manches {a} – {b}',
   'score.teamBlue': 'Équipe bleue',
   'score.teamRed': 'Équipe rouge',
@@ -359,6 +359,17 @@ const fr = {
   'net.lobby.inGame': 'Partie en cours…',
   'net.backToLobby': 'Retour au salon',
   'net.lobby.arena': 'Arène',
+  // Menu Échap et tableau des scores en jeu (Tab)
+  'pause.title': 'Menu',
+  'pause.resume': 'Revenir au jeu',
+  'pause.options': 'Options',
+  'pause.quit': 'Quitter la partie',
+  'pause.hint': 'Échap : revenir au jeu',
+  'pause.online': 'Partie en ligne : elle continue pendant que ce menu est ouvert.',
+  'scores.ping': 'Ping',
+  'scores.online': 'En ligne',
+  'scores.bot': 'Bot',
+  'scores.hold': 'Maintiens Tab pour garder le tableau affiché',
 };
 
 export type TKey = keyof typeof fr;
@@ -486,7 +497,7 @@ const en: Record<TKey, string> = {
   'help.move': 'WASD / ZQSD: move · Mouse: aim',
   'help.line': '{key}: {name}',
   'help.misc1': 'R: reload · B: toggle turrets',
-  'help.misc2': 'T: reset stats · H: help · Esc: heroes',
+  'help.misc2': 'T: reset stats · H: change hero · Esc: menu',
   'help.hitbox': 'X: show hitboxes',
 
   'tag.ally': 'ALLY',
@@ -558,7 +569,7 @@ const en: Record<TKey, string> = {
   'feed.lava': 'LAVA',
   'hud.dm.elimination': 'ELIMINATION',
   'help.title.dm': '{hero} — DEATHMATCH',
-  'help.dm.misc': 'H: help · Esc: leave the match',
+  'help.dm.misc': 'Tab: scores · Esc: menu',
 
   'score.title': 'Match over',
   'score.victory': 'Victory!',
@@ -602,10 +613,10 @@ const en: Record<TKey, string> = {
   'control.objective': 'OBJECTIVE',
   'control.capturedBlue': 'Point captured by the blue team',
   'control.capturedRed': 'Point captured by the red team',
-  'control.swapHint': 'C: change hero',
+  'control.swapHint': 'H: change hero',
   'help.title.control': '{hero} — CONTROL',
-  'help.control.misc': 'C (in spawn): change hero',
-  'help.control.misc2': 'H: help · Esc: leave the match',
+  'help.control.misc': 'H (in spawn): change hero',
+  'help.control.misc2': 'Tab: scores · Esc: menu',
   'score.rounds': 'Rounds {a} – {b}',
   'score.teamBlue': 'Blue team',
   'score.teamRed': 'Red team',
@@ -697,6 +708,16 @@ const en: Record<TKey, string> = {
   'net.lobby.inGame': 'Match in progress…',
   'net.backToLobby': 'Back to the room',
   'net.lobby.arena': 'Arena',
+  'pause.title': 'Menu',
+  'pause.resume': 'Back to the game',
+  'pause.options': 'Options',
+  'pause.quit': 'Leave the match',
+  'pause.hint': 'Esc: back to the game',
+  'pause.online': 'Online match: it keeps running while this menu is open.',
+  'scores.ping': 'Ping',
+  'scores.online': 'Online',
+  'scores.bot': 'Bot',
+  'scores.hold': 'Hold Tab to keep the board open',
 };
 
 export type Lang = 'fr' | 'en';

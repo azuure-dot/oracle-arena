@@ -20,6 +20,9 @@ import { PrivateHub } from './ui/screens/PrivateHub';
 import { PrivateLobby } from './ui/screens/PrivateLobby';
 import type { Screen } from './ui/screens/Screen';
 import { Scoreboard } from './ui/screens/Scoreboard';
+import { PauseMenu } from './ui/screens/PauseMenu';
+import { ScoreOverlay } from './ui/ScoreOverlay';
+import { t } from './i18n';
 import { SelectScreen } from './ui/screens/SelectScreen';
 import { Arena } from './world/Arena';
 import { Fog } from './world/Fog';
@@ -59,6 +62,12 @@ export class Game {
   private readonly scoreboard: Scoreboard;
   private readonly netHub: PrivateHub;
   private readonly netLobby: PrivateLobby;
+  /** Menu Échap en jeu (Revenir au jeu, Options, Quitter la partie). */
+  private readonly pauseMenu: PauseMenu;
+  /** Tableau des scores en jeu (Tab maintenu). */
+  private readonly scoreOverlay: ScoreOverlay;
+  /** Téléphone : le bouton ★ affiche / masque le tableau des scores (pas de touche à maintenir). */
+  private scoresToggled = false;
   private readonly screens: Screen[];
 
   scene: Scene = 'menu';
@@ -157,7 +166,23 @@ export class Game {
       }
     });
 
-    this.screens = [this.mainMenu, this.mapSelect, this.dmSetup, this.selectScreen, this.scoreboard, this.netHub, this.netLobby];
+    this.pauseMenu = new PauseMenu(
+      overlay,
+      () => this.closePause(),
+      () => this.quitMatch(),
+    );
+    this.scoreOverlay = new ScoreOverlay(overlay);
+
+    this.screens = [
+      this.mainMenu,
+      this.mapSelect,
+      this.dmSetup,
+      this.selectScreen,
+      this.scoreboard,
+      this.netHub,
+      this.netLobby,
+      this.pauseMenu,
+    ];
 
     // Le clavier des menus va à l'écran affiché (un seul à la fois).
     window.addEventListener('keydown', (e) => {
@@ -186,6 +211,8 @@ export class Game {
   goTo(scene: Scene): void {
     this.scene = scene;
     for (const s of this.screens) s.hide();
+    this.scoreOverlay.hide();
+    this.scoresToggled = false;
     this.selectScreen.swap = null;
     switch (scene) {
       case 'menu':
@@ -263,6 +290,54 @@ export class Game {
     this.goTo('playing');
   }
 
+  // ------------------------------------------------------------ menu Échap
+
+  /** Échap en jeu : le menu s'ouvre ; en solo la partie se fige, en ligne elle continue. */
+  private openPause(): void {
+    const mode = this.mode;
+    if (!mode || this.pauseMenu.visible) return;
+    mode.uiOpen = true;
+    this.scoreOverlay.hide();
+    this.pauseMenu.open(mode instanceof NetMatch);
+  }
+
+  private closePause(): void {
+    this.pauseMenu.hide();
+    if (this.mode) this.mode.uiOpen = false;
+    this.input.endFrame(); // le clic qui a fermé le menu ne tire pas
+  }
+
+  /** « Quitter la partie » : retour au menu principal (en ligne : on quitte aussi le salon). */
+  private quitMatch(): void {
+    this.pauseMenu.hide();
+    if (this.mode instanceof NetMatch) {
+      void net.leaveRoom(); // la partie continue pour les autres
+      this.goTo('netHub');
+    } else {
+      this.goTo('menu');
+    }
+  }
+
+  /** Titre du tableau des scores : le mode, et la carte en Partie rapide. */
+  private scoresTitle(mode: GameMode): string {
+    if (mode.kind === 'deathmatch') return t('menu.deathmatch');
+    const kind = t(mode.kind === 'escort' ? 'mode.escort' : 'mode.control');
+    return `${kind} · ${t(mode.map.nameKey)}`;
+  }
+
+  /** Tableau des scores : Tab maintenu (ou bouton ★ sur téléphone), pas par-dessus un menu. */
+  private updateScores(mode: GameMode): void {
+    if (this.input.touch.active && this.input.wasPressed('Tab')) this.scoresToggled = !this.scoresToggled;
+    const wanted = (this.input.isDown('Tab') || this.scoresToggled) && !mode.uiOpen && !mode.finished;
+    const result = wanted ? mode.result() : null;
+    if (!result) {
+      this.scoreOverlay.hide();
+      return;
+    }
+    const online = mode instanceof NetMatch;
+    this.scoreOverlay.show({ title: this.scoresTitle(mode), result, online, ping: online ? net.ping : null });
+  }
+
   /** Modes en équipe : changement de héros dans le spawn (la partie continue derrière). */
   private openHeroSwap(mode: TeamMatchMode): void {
     mode.swapRequested = false;
@@ -324,18 +399,23 @@ export class Game {
   update(dt: number): void {
     const mode = this.mode;
     if (this.scene === 'playing' && mode) {
-      mode.update(dt);
+      // Menu Échap ouvert : en solo la partie est figée ; en ligne elle continue (sans commandes).
+      if (!this.pauseMenu.visible || mode instanceof NetMatch) mode.update(dt);
+      if (mode.pauseRequested) {
+        mode.pauseRequested = false;
+        this.openPause();
+      }
       if (mode.exitRequested) {
-        if (mode instanceof NetMatch) {
-          // En ligne : on quitte le salon (la partie continue pour les autres).
-          void net.leaveRoom();
-          this.goTo('netHub');
-          return;
-        }
-        // Champ de tir : retour à la sélection · autres modes : abandon, retour au menu.
-        this.goTo(mode.kind === 'practice' ? 'select' : 'menu');
+        this.quitMatch();
         return;
       }
+      if (mode.heroSelectRequested) {
+        // H au champ de tir : retour à la sélection du héros.
+        mode.heroSelectRequested = false;
+        this.goTo('select');
+        return;
+      }
+      this.updateScores(mode);
       if (mode.finished) {
         this.goTo('scoreboard'); // la partie se fige derrière les scores
       } else if (mode instanceof TeamMatchMode) {

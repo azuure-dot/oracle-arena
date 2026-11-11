@@ -12,6 +12,8 @@ export interface ScoreRow {
   deaths: number;
   /** Équipe (Contrôle). */
   team?: 'blue' | 'red';
+  /** Partie en ligne : ping du joueur (« 42 ms », « Bot », « — »), affiché par le tableau en jeu (Tab). */
+  ping?: string;
 }
 
 export type MatchResult =

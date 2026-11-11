@@ -1,9 +1,10 @@
-import { LANGS, t, type TKey } from '../../i18n';
-import { ART_IDS, ART_META, avatarSvg, bannerSvg, type ArtId } from '../lobby/art';
+import { t, type TKey } from '../../i18n';
+import { ART_META, avatarSvg, bannerSvg } from '../lobby/art';
 import { KITS } from '../lobby/kits';
 import { MODES, PARTY_SIZE, PLAYABLE, profile, type ModeId } from '../lobby/profile';
+import { CLOSE_ICON as CLOSE, bindSettingsInputs, escapeHtml, settingsAction, settingsModal } from '../lobby/settingsPanel';
 import { morph } from '../morph';
-import { THEMES, getTheme, onThemeChange, setTheme, type ThemeId } from '../theme';
+import { getTheme, onThemeChange } from '../theme';
 import { Screen, digitOf } from './Screen';
 
 /**
@@ -28,18 +29,10 @@ const MODE_KEYS: Record<ModeId, { name: TKey; desc: TKey; tag: TKey }> = {
   ranked: { name: 'lobby.ranked', desc: 'lobby.ranked.desc', tag: 'lobby.tag.ranked' },
 };
 
-const THEME_NAMES: Record<ThemeId, TKey> = {
-  greece: 'lobby.theme.greece',
-  night: 'lobby.theme.night',
-  myth: 'lobby.theme.myth',
-  esport: 'lobby.theme.esport',
-};
-
 const LOCK = '<svg class="lb-lock" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 10V7a5 5 0 0 1 10 0v3h1.5A1.5 1.5 0 0 1 20 11.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 20.5v-9A1.5 1.5 0 0 1 5.5 10H7Zm2 0h6V7a3 3 0 0 0-6 0v3Z"/></svg>';
 const GEAR =
   '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M19.4 13a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3h-4l-.3 2.9a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1c.5.4 1.1.7 1.7 1L11 21h4l.3-2.9c.6-.3 1.2-.6 1.7-1l2.5 1 2-3.5L19.4 13ZM13 15.5A3.5 3.5 0 1 1 13 8.5a3.5 3.5 0 0 1 0 7Z" transform="translate(-1 0)"/></svg>';
 const INFO = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 15h-2v-6h2v6Zm0-8h-2V7h2v2Z"/></svg>';
-const CLOSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12 19 17.6 17.6 19 12 13.4 6.4 19 5 17.6 10.6 12 5 6.4 6.4 5Z"/></svg>';
 
 export class MainMenu extends Screen {
   private settingsOpen = false;
@@ -62,10 +55,7 @@ export class MainMenu extends Screen {
       if (this.visible) this.render();
     });
     // Pseudo : enregistré à la validation du champ (pas à chaque touche : le menu se redessine).
-    this.root.addEventListener('change', (e) => {
-      const el = e.target as HTMLInputElement;
-      if (el.name === 'lb-name') profile.set({ name: el.value.trim().slice(0, 16) });
-    });
+    bindSettingsInputs(this.root);
     // Clic sur le fond de la modale ou du tiroir : fermeture.
     this.root.addEventListener('pointerdown', (e) => {
       const el = e.target as HTMLElement;
@@ -136,7 +126,7 @@ export class MainMenu extends Screen {
         </main>
         ${this.bottomBar()}
         ${this.drawerOpen ? this.drawer() : ''}
-        ${this.settingsOpen ? this.settings() : ''}
+        ${this.settingsOpen ? settingsModal() : ''}
       </div>`;
   }
 
@@ -268,65 +258,7 @@ export class MainMenu extends Screen {
   }
 
   // ------------------------------------------------------------------ paramètres
-
-  private settings(): string {
-    const s = profile.get();
-    const langs = LANGS.map(
-      (l) =>
-        `<button type="button" data-action="lang" data-lang-choice="${l}" data-key="lang-${l}" aria-pressed="${s.lang === l}">${l === 'fr' ? 'Français' : 'English'} <small>${l.toUpperCase()}</small></button>`,
-    ).join('');
-    const themes = THEMES.map(
-      (id) =>
-        `<button type="button" data-action="theme" data-theme-choice="${id}" data-key="theme-${id}" aria-pressed="${getTheme() === id}">${t(THEME_NAMES[id])}</button>`,
-    ).join('');
-    const avatars = ART_IDS.map(
-      (a) => `
-        <button type="button" class="lb-pick lb-pick--avatar" data-action="avatar" data-art="${a}" data-key="avatar-${a}" aria-pressed="${s.avatar === a}" aria-label="${ART_META[a].name}">
-          ${avatarSvg(a, `pick-${a}`)}<span>${ART_META[a].name}</span>
-        </button>`,
-    ).join('');
-    const banners = ART_IDS.map(
-      (a) => `
-        <button type="button" class="lb-pick lb-pick--banner" data-action="banner" data-art="${a}" data-key="banner-${a}" aria-pressed="${s.banner === a}" aria-label="${ART_META[a].name}">
-          ${bannerSvg(a, `pick-${a}`)}<span>${ART_META[a].name}</span>
-        </button>`,
-    ).join('');
-    return `
-      <div class="lb-scrim lb-scrim--modal"></div>
-      <section class="lb-modal" role="dialog" aria-modal="true" aria-labelledby="lb-settings-title">
-        <header class="lb-panel-head">
-          <h2 id="lb-settings-title">${t('lobby.settings')}</h2>
-          <button type="button" class="lb-close" data-action="close" data-key="close-settings" aria-label="${t('lobby.close')}">${CLOSE}</button>
-        </header>
-        <div class="lb-modal-body">
-          <section class="lb-set">
-            <h3>${t('lobby.lang')}</h3>
-            <div class="lb-seg" role="group" aria-label="${t('lobby.lang')}">${langs}</div>
-          </section>
-          <section class="lb-set">
-            ${
-              THEMES.length > 1
-                ? `<h3>${t('lobby.theme')}</h3>
-            <div class="lb-seg lb-seg--wrap" role="group" aria-label="${t('lobby.theme')}">${themes}</div>`
-                : ''
-            }
-            <label class="lb-field">
-              <span>${t('lobby.name')}</span>
-              <input name="lb-name" type="text" maxlength="16" autocomplete="nickname" spellcheck="false"
-                value="${escapeHtml(s.name)}" placeholder="${t('lobby.defaultName')}" data-key="name" data-autofocus>
-            </label>
-          </section>
-          <section class="lb-set">
-            <h3>${t('lobby.avatar')}</h3>
-            <div class="lb-picks lb-picks--avatar">${avatars}</div>
-          </section>
-          <section class="lb-set">
-            <h3>${t('lobby.banner')}</h3>
-            <div class="lb-picks lb-picks--banner">${banners}</div>
-          </section>
-        </div>
-      </section>`;
-  }
+  // Le panneau des paramètres est partagé avec le menu Échap en jeu : voir lobby/settingsPanel.ts.
 
   // ------------------------------------------------------------------ actions
 
@@ -381,18 +313,8 @@ export class MainMenu extends Screen {
       case 'slot':
         profile.toggleBot(Number(el.dataset.slot));
         return;
-      case 'lang':
-        profile.setLang(el.dataset.langChoice === 'en' ? 'en' : 'fr');
-        return;
-      case 'theme':
-        setTheme(el.dataset.themeChoice as ThemeId);
-        return;
-      case 'avatar':
-        profile.set({ avatar: el.dataset.art as ArtId });
-        return;
-      case 'banner':
-        profile.set({ banner: el.dataset.art as ArtId });
-        return;
+      default:
+        settingsAction(action, el);
     }
   }
 
@@ -420,8 +342,4 @@ export class MainMenu extends Screen {
     }
     return false;
   }
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 }

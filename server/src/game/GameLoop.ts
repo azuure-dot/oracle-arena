@@ -93,6 +93,8 @@ export class GameLoop {
   private shakes: GameTick['shakes'] = [];
   private hits: HitEvent[] = [];
   private readonly objectIds = new WeakMap<object, number>();
+  /** Dernier ping annoncé par chaque joueur (ms). */
+  private readonly pings: Record<string, number> = {};
   private readonly objectLast = new Map<number, Map<string, string>>();
   private nextObjectId = 1;
   private readonly refs: RefEncoder;
@@ -174,6 +176,10 @@ export class GameLoop {
     if (!ctl.apply(input) || this.countdown > 0 || this.over) return;
     const dt = ctl.consume(input.dt);
     if (dt > 0) slot.hero.predictMove(dt, ctl.move, this.world.arena);
+  }
+
+  setPing(playerId: string, ms: number): void {
+    if (this.byId.get(playerId)?.controls instanceof NetControls) this.pings[playerId] = ms;
   }
 
   /** Un joueur quitte la partie : son héros disparaît, ses points restent au classement. */
@@ -337,6 +343,7 @@ export class GameLoop {
       wet: this.wet,
       shakes: this.shakes,
       hits: this.hits,
+      pings: this.pings,
       match: { countdown: round(this.countdown), remaining: round(this.remaining), scores: this.scores() },
     });
     this.fx = [];

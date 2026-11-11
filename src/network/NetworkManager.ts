@@ -82,6 +82,9 @@ export class NetworkManager {
   you: string | null = null;
   /** Dernier état connu du salon (null : dans aucun salon). */
   room: RoomState | null = null;
+  /** Ping (aller-retour jusqu'au serveur, ms), lissé ; null tant qu'il n'est pas mesuré. */
+  ping: number | null = null;
+  private pingTimer = 0;
 
   readonly statusChanged = new Emitter<ConnectionStatus>();
   readonly roomUpdated = new Emitter<RoomState>();
@@ -127,9 +130,14 @@ export class NetworkManager {
   }
 
   private listen(socket: Socket): void {
-    socket.on('connect', () => this.setStatus('online'));
+    socket.on('connect', () => {
+      this.setStatus('online');
+      this.startPing(socket);
+    });
     socket.on('disconnect', () => {
       this.setStatus('offline');
+      window.clearInterval(this.pingTimer);
+      this.ping = null;
       // Le serveur nous a oubliés : le salon est perdu (pas de reprise dans cette version).
       if (this.room) {
         this.room = null;
@@ -148,6 +156,28 @@ export class NetworkManager {
     socket.on(EVENTS.GAME_STARTED, (g: GameStarted) => delayed(() => this.gameStarted.emit(g)));
     socket.on(EVENTS.GAME_TICK, (t: GameTick) => delayed(() => this.gameTick.emit(t)));
     socket.on(EVENTS.GAME_OVER, (r: GameOver) => delayed(() => this.gameOver.emit(r)));
+  }
+
+  /** Mesure du ping toutes les 2 s (le serveur répond aussitôt ; on lui annonce le dernier ping). */
+  private startPing(socket: Socket): void {
+    window.clearInterval(this.pingTimer);
+    const measure = () => {
+      const t0 = performance.now();
+      const send = () =>
+        socket.timeout(2500).emit(EVENTS.PING, this.ping === null ? null : Math.round(this.ping), (err: Error | null) => {
+          if (err) return; // serveur trop ancien ou réseau coupé : on garde la dernière valeur
+          const done = () => {
+            const rtt = performance.now() - t0;
+            this.ping = this.ping === null ? rtt : this.ping * 0.7 + rtt * 0.3;
+          };
+          if (this.lag) this.lag(done, 'in');
+          else done();
+        });
+      if (this.lag) this.lag(send, 'out');
+      else send();
+    };
+    measure();
+    this.pingTimer = window.setInterval(measure, 2000);
   }
 
   private setStatus(s: ConnectionStatus): void {

@@ -1,0 +1,265 @@
+/*
+ * INTERFACE EN JEU : menu Échap (PauseMenu) et tableau des scores (ScoreOverlay).
+ * Même style que le menu principal (marbre, liseré d'or, capitales Marcellus) : tout repose sur
+ * les couleurs du thème (--g-*), donc Jour et Nuit marchent tels quels. Aucun des deux ne cache
+ * la partie : le jeu continue d'être dessiné derrière.
+ */
+
+/* ------------------------------------------------------------------ menu Échap */
+
+.screen.pause-menu {
+  --screen-covers: 0; /* la partie reste dessinée derrière (voir Screen.covers) */
+  padding: 0 !important;
+  background: none !important;
+}
+.pause-menu .screen-inner {
+  position: static;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+}
+/* Partie assombrie mais visible (pas de flou) */
+.pause-menu .lb-scrim--modal {
+  backdrop-filter: none;
+  background: rgba(20, 14, 8, 0.45);
+}
+.lb-pause {
+  width: min(420px, calc(100% - 32px)) !important;
+  grid-template-rows: auto auto auto auto !important;
+  padding-bottom: 18px !important;
+}
+.lb-pause-actions {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 10px;
+  margin-top: 10px; /* sous le bandeau à méandre */
+}
+.lb-pause-btn {
+  min-height: 52px;
+  border: 0;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--g-white) 60%, transparent);
+  box-shadow: inset 0 0 0 1px var(--g-line-2);
+  color: var(--g-text);
+  font: 400 18px/1 var(--g-display);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition:
+    transform 150ms var(--g-ease),
+    background 150ms var(--g-ease),
+    box-shadow 150ms var(--g-ease),
+    color 150ms var(--g-ease);
+}
+.lb-pause-btn:hover,
+.lb-pause-btn:focus-visible {
+  background: var(--g-white);
+  color: var(--g-gold-deep);
+  box-shadow: inset 0 0 0 1px var(--g-gold);
+}
+.lb-pause-btn--quit:hover,
+.lb-pause-btn--quit:focus-visible {
+  color: #b23a3a;
+  box-shadow: inset 0 0 0 1px #b23a3a;
+}
+.lb-pause :is(button):focus-visible {
+  outline: 2px solid var(--g-blue);
+  outline-offset: 3px;
+}
+.lb-pause-btn:active,
+.lb-pause .lb-launch:active {
+  transform: translateY(1px) scale(0.985);
+}
+.lb-pause-note,
+.lb-pause-hint {
+  margin: 12px 0 0;
+  color: var(--g-muted);
+  font: italic 400 15px/1.35 var(--g-body);
+  text-align: center;
+}
+.lb-pause-note + .lb-pause-hint {
+  margin-top: 4px;
+}
+
+/* ------------------------------------------------------------------ tableau des scores (Tab) */
+
+.score-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9;
+  display: none;
+  align-items: flex-start;
+  justify-content: center;
+  /* En haut de l'écran : le héros (au centre) reste dégagé sur la plupart des écrans */
+  padding: max(16px, 5vh) 16px 16px;
+  box-sizing: border-box;
+  pointer-events: none; /* ne bloque ni la souris ni les commandes tactiles */
+}
+.score-overlay.visible {
+  display: flex;
+}
+.so-panel {
+  position: relative;
+  width: min(700px, 100%);
+  padding: 0 18px 14px;
+  box-sizing: border-box;
+  border-radius: 2px;
+  /* Marbre translucide : on distingue la partie (et son héros) au travers */
+  background: color-mix(in srgb, var(--g-marble-2) 74%, transparent);
+  box-shadow:
+    inset 0 0 0 2px color-mix(in srgb, var(--g-white) 70%, transparent),
+    inset 0 0 0 5px transparent,
+    inset 0 0 0 6px var(--g-gold),
+    0 24px 50px -24px rgba(0, 0, 0, 0.55);
+  color: var(--g-text);
+  font-family: var(--g-body);
+  animation: so-in 140ms var(--g-ease);
+}
+@keyframes so-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+}
+/* Bandeau blanc à méandre, comme les panneaux du menu principal */
+.so-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  height: 52px;
+  margin: 0 -18px 10px;
+  padding: 0 22px 10px;
+  box-sizing: border-box;
+  border-radius: 2px 2px 0 0;
+  background:
+    var(--g-meander) 0 calc(100% - 2px) / 16px 14px repeat-x,
+    color-mix(in srgb, var(--g-white) 82%, transparent);
+  box-shadow: 0 2px 0 var(--g-gold);
+}
+.so-head h2 {
+  margin: 0;
+  color: var(--g-gold-deep);
+  font: 400 19px/1 var(--g-display);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.so-head h2 small {
+  margin-left: 8px;
+  color: var(--g-muted);
+  font: italic 400 15px/1 var(--g-body);
+  letter-spacing: 0;
+  text-transform: none;
+}
+.so-ping {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px var(--g-line-2);
+  color: var(--g-text);
+  font: 400 13px/1 var(--g-display);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.so-ping i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--g-muted);
+}
+.so-ping.is-good i {
+  background: #3fa865;
+}
+.so-ping.is-ok i {
+  background: #d9a23a;
+}
+.so-ping.is-bad i {
+  background: #d24b4b;
+}
+.so-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+.so-table th {
+  padding: 6px 8px 8px;
+  color: var(--g-gold-deep);
+  font: 400 12px/1.2 var(--g-display);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  text-align: left;
+  border-bottom: 1px solid var(--g-gold);
+}
+.so-table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--g-line);
+  /* lisible même quand la partie défile derrière */
+  text-shadow: 0 0 6px color-mix(in srgb, var(--g-marble-2) 80%, transparent);
+}
+.so-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+.so-table .col-rank {
+  width: 44px;
+  color: var(--g-gold-deep);
+}
+.so-table .col-num {
+  width: 72px;
+  text-align: right;
+}
+.so-table .col-ping {
+  color: var(--g-muted);
+  font-size: 15px;
+}
+.so-table .col-hero {
+  color: var(--g-muted);
+}
+.so-table .hero-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--hero-color);
+  vertical-align: 1px;
+}
+.so-table tr.is-you td {
+  background: color-mix(in srgb, var(--g-gold) 20%, transparent);
+  color: var(--g-ink);
+  font-weight: 600;
+}
+.so-table tr.is-first .col-rank {
+  font-weight: 700;
+}
+.so-team td {
+  padding-top: 12px;
+  font: 400 12px/1 var(--g-display);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+.so-team--blue td {
+  color: #2b62a8;
+}
+.so-team--red td {
+  color: #b23a3a;
+}
+:root[data-theme='night'] .so-team--blue td {
+  color: #8fb4ee;
+}
+:root[data-theme='night'] .so-team--red td {
+  color: #f08a8a;
+}
+@media (max-width: 560px) {
+  .so-table .col-hero {
+    display: none;
+  }
+  .so-table {
+    font-size: 15px;
+  }
+}

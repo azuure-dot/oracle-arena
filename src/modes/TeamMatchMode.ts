@@ -65,14 +65,14 @@ export abstract class TeamMatchMode extends MatchMode {
     return true;
   }
 
-  /** Dans le spawn : bouton tactile de changement de héros (touche C). */
+  /** Dans le spawn : bouton tactile de changement de héros (touche H). */
   protected override touchMeta(): MetaButton[] {
     const base = super.touchMeta();
-    return this.player.safe && this.canSwap() ? [...base, { code: 'KeyC', label: '⇄' }] : base;
+    return this.player.safe && this.canSwap() ? [...base, { code: 'KeyH', label: '⇄' }] : base;
   }
 
   protected override handleKeys(): void {
-    if (this.input.wasPressed('KeyC') && this.player.safe && this.canSwap()) this.swapRequested = true;
+    if (this.input.wasPressed('KeyH') && this.player.safe && this.canSwap()) this.swapRequested = true;
   }
 
   protected nameColor(p: Participant): string {
